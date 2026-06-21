@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(./build.sh)",
+      "Bash(swiftc *)",
+      "Bash(swift tools/makeicon.swift *)",
+      "Bash(open build/m_capture.app)"
+    ]
+  },
+  "fallbackModel": [
+    "sonnet"
+  ]
+}
