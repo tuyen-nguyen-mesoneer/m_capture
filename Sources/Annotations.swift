@@ -12,9 +12,22 @@ protocol Annotation: AnyObject {
     func draw(in ctx: CGContext)
     func hit(_ p: CGPoint) -> Bool   // for the eraser
     func remap(_ f: (CGPoint) -> CGPoint)  // move every stored point through f (rotate/crop)
+    /// Tight bounding box in image space — drives the Select tool's outline + handle.
+    var bounds: CGRect { get }
+    /// Whether the Select tool offers a corner resize handle. Path-like marks
+    /// (lines, arrows, freehand, ruler) are move-only.
+    var resizable: Bool { get }
+    /// Uniformly scale the mark by `f` about `anchor` (Select-tool resize). The
+    /// default scales geometry via `remap`; marks with a size scalar (text,
+    /// counter, emoji) override to also scale that scalar.
+    func scale(by f: CGFloat, around anchor: CGPoint)
 }
 extension Annotation {
     func hit(_ p: CGPoint) -> Bool { false }
+    var resizable: Bool { true }
+    func scale(by f: CGFloat, around a: CGPoint) {
+        remap { CGPoint(x: a.x + ($0.x - a.x) * f, y: a.y + ($0.y - a.y) * f) }
+    }
 }
 
 private func contrasting(_ c: NSColor) -> NSColor {
@@ -32,6 +45,17 @@ class FreehandAnnotation: Annotation {
     func add(_ p: CGPoint) { points.append(p) }
     func remap(_ f: (CGPoint) -> CGPoint) { points = points.map(f) }
     var strokeWidth: CGFloat { style.lineWidth }
+    var resizable: Bool { false }   // a path; the Select tool only moves it
+    var bounds: CGRect {
+        guard let first = points.first else { return .zero }
+        var (minX, minY, maxX, maxY) = (first.x, first.y, first.x, first.y)
+        for p in points {
+            minX = min(minX, p.x); minY = min(minY, p.y)
+            maxX = max(maxX, p.x); maxY = max(maxY, p.y)
+        }
+        return CGRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
+            .insetBy(dx: -strokeWidth / 2, dy: -strokeWidth / 2)
+    }
 
     func draw(in ctx: CGContext) {
         guard points.count > 1 else { return }
@@ -79,9 +103,13 @@ class TwoPointAnnotation: Annotation {
     func draw(in ctx: CGContext) {}
     func hit(_ p: CGPoint) -> Bool { rect.insetBy(dx: -6, dy: -6).contains(p) }
     func remap(_ f: (CGPoint) -> CGPoint) { start = f(start); end = f(end) }
+    // A class property (not the protocol default) so LineAnnotation can override it.
+    var resizable: Bool { true }
+    var bounds: CGRect { rect }
 }
 
 final class LineAnnotation: TwoPointAnnotation {
+    override var resizable: Bool { false }   // a path; move-only, like the arrow
     override func draw(in ctx: CGContext) {
         ctx.setStrokeColor(style.color.cgColor); ctx.setLineWidth(style.lineWidth); ctx.setLineCap(.round)
         ctx.beginPath(); ctx.move(to: start); ctx.addLine(to: end); ctx.strokePath()
@@ -130,6 +158,16 @@ final class CurvedArrowAnnotation: Annotation {
         return false
     }
     func remap(_ f: (CGPoint) -> CGPoint) { start = f(start); end = f(end); control = f(control) }
+    var resizable: Bool { false }   // shaped by its apex handle; the Select tool only moves it
+    /// A quadratic curve stays within the hull of its three points, so their box
+    /// (padded for the line width / arrowhead) bounds the whole arrow.
+    var bounds: CGRect {
+        let xs = [start.x, end.x, control.x], ys = [start.y, end.y, control.y]
+        let pad = max(12, style.lineWidth * 4)
+        return CGRect(x: xs.min()!, y: ys.min()!,
+                      width: xs.max()! - xs.min()!, height: ys.max()! - ys.min()!)
+            .insetBy(dx: -pad, dy: -pad)
+    }
 }
 
 final class RectAnnotation: TwoPointAnnotation {
@@ -269,7 +307,7 @@ final class SpotlightAnnotation: TwoPointAnnotation {
 final class TextAnnotation: Annotation {
     let text: String
     var origin: CGPoint        // lower-left in image space
-    let fontSize: CGFloat
+    var fontSize: CGFloat
     let color: NSColor
     init(text: String, origin: CGPoint, fontSize: CGFloat, color: NSColor) {
         self.text = text; self.origin = origin; self.fontSize = fontSize; self.color = color
@@ -277,14 +315,18 @@ final class TextAnnotation: Annotation {
     private var attrs: [NSAttributedString.Key: Any] {
         [.font: Theme.font(fontSize, .semibold), .foregroundColor: color]
     }
+    var bounds: CGRect {
+        CGRect(origin: origin, size: NSAttributedString(string: text, attributes: attrs).size())
+    }
     func draw(in ctx: CGContext) {
         NSAttributedString(string: text, attributes: attrs).draw(at: origin)
     }
-    func hit(_ p: CGPoint) -> Bool {
-        let sz = NSAttributedString(string: text, attributes: attrs).size()
-        return CGRect(origin: origin, size: sz).insetBy(dx: -6, dy: -6).contains(p)
-    }
+    func hit(_ p: CGPoint) -> Bool { bounds.insetBy(dx: -6, dy: -6).contains(p) }
     func remap(_ f: (CGPoint) -> CGPoint) { origin = f(origin) }
+    func scale(by f: CGFloat, around a: CGPoint) {
+        origin = CGPoint(x: a.x + (origin.x - a.x) * f, y: a.y + (origin.y - a.y) * f)
+        fontSize *= f
+    }
 }
 
 /// How a counter badge labels its sequence position.
@@ -314,7 +356,7 @@ final class CounterAnnotation: Annotation {
     var center: CGPoint
     let label: String
     let color: NSColor
-    let radius: CGFloat
+    var radius: CGFloat
     init(center: CGPoint, label: String, color: NSColor, radius: CGFloat) {
         self.center = center; self.label = label; self.color = color; self.radius = radius
     }
@@ -339,6 +381,11 @@ final class CounterAnnotation: Annotation {
     }
     func hit(_ p: CGPoint) -> Bool { box.contains(p) }
     func remap(_ f: (CGPoint) -> CGPoint) { center = f(center) }
+    var bounds: CGRect { box }
+    func scale(by f: CGFloat, around a: CGPoint) {
+        center = CGPoint(x: a.x + (center.x - a.x) * f, y: a.y + (center.y - a.y) * f)
+        radius *= f
+    }
 }
 
 /// An emoji stamp placed on the capture. Drag while placing to size it.
@@ -367,6 +414,11 @@ final class EmojiAnnotation: Annotation {
     }
     func hit(_ p: CGPoint) -> Bool { box.contains(p) }
     func remap(_ f: (CGPoint) -> CGPoint) { center = f(center) }
+    var bounds: CGRect { box }
+    func scale(by f: CGFloat, around a: CGPoint) {
+        center = CGPoint(x: a.x + (center.x - a.x) * f, y: a.y + (center.y - a.y) * f)
+        size *= f
+    }
 }
 
 // MARK: - Measurement (ruler)
@@ -422,6 +474,11 @@ final class MeasureAnnotation: Annotation {
         return hypot(p.x - proj.x, p.y - proj.y) < max(8, style.lineWidth)
     }
     func remap(_ f: (CGPoint) -> CGPoint) { start = f(start); end = f(end) }
+    var resizable: Bool { false }   // resizing would change the measured length; move-only
+    var bounds: CGRect {
+        CGRect(x: min(start.x, end.x), y: min(start.y, end.y),
+               width: abs(end.x - start.x), height: abs(end.y - start.y)).insetBy(dx: -8, dy: -8)
+    }
 }
 
 // MARK: - Overlay image
@@ -450,6 +507,7 @@ final class ImageOverlayAnnotation: Annotation {
         let a = f(CGPoint(x: rect.minX, y: rect.minY)), b = f(CGPoint(x: rect.maxX, y: rect.maxY))
         rect = CGRect(x: min(a.x, b.x), y: min(a.y, b.y), width: abs(a.x - b.x), height: abs(a.y - b.y))
     }
+    var bounds: CGRect { rect }   // default uniform scale keeps the aspect locked
 }
 
 // MARK: - Zoom callout
@@ -500,4 +558,5 @@ final class ZoomAnnotation: Annotation {
         }
         source = mapRect(source); dest = mapRect(dest)
     }
+    var bounds: CGRect { dest.union(source) }   // the whole callout: bubble + framed region
 }

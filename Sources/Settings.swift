@@ -105,7 +105,7 @@ enum ShortcutAction: String, CaseIterable {
 /// the baked export, and the Pin window all stay in sync.
 enum PaddingSize: String, CaseIterable {
     case small, medium, large
-    var scale: CGFloat { self == .small ? 0.03 : self == .medium ? 0.04 : 0.06 }
+    var scale: CGFloat { self == .small ? 0.02 : self == .medium ? 0.03 : 0.045 }
     var label: String { rawValue.capitalized }
 }
 
