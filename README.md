@@ -40,6 +40,7 @@ on-device, with no subscriptions, cloud services, or accounts.
 - **Focus & redaction** — **blur** to obscure sensitive information, **spotlight** to dim the surroundings, and **zoom** callouts to magnify detail.
 - **Measure & compose** — an on-screen **ruler**, image overlays, and an **eyedropper** for color matching.
 - **Color** — a 10-color palette with a custom hue and brightness picker.
+- **Select & move** — grab any placed mark with the **Select** tool (`V`) to drag it elsewhere, resize it from a corner knob, or delete it — no need to undo and redraw.
 - **Transform** — crop, rotate, flip, and aspect-locked resize, all baked into the export.
 
 **🚀 Share**
@@ -53,12 +54,20 @@ on-device, with no subscriptions, cloud services, or accounts.
 
 ## Install
 
-1. Download the latest **`m_capture.dmg`** from [**Releases**](https://github.com/tuyen-nguyen-mesoneer/m_capture/releases).
-2. Open the DMG and drag **m_capture.app** into **Applications**.
-3. Because the app is not notarized, the first launch is blocked. Open it once, then
-   go to **System Settings → Privacy & Security**, locate the *"m_capture was blocked"*
-   notice near the bottom, and click **Open Anyway → Open**. (On macOS 14 and earlier,
-   **right-click → Open** also works.)
+1. Download the latest **`m_capture.dmg`** from [**Releases**](https://github.com/tuyen-nguyen-mesoneer/m_capture/releases) and open it.
+2. Drag **m_capture.app** into your home **Applications** folder (`~/Applications`) —
+   not the system `/Applications`, which can trigger app-blocking admin prompts. Create
+   it if needed.
+3. Because the app is not notarized, clear the quarantine flag before the first
+   launch — run this in Terminal, then open the app normally:
+
+   ```sh
+   cd ~/Applications && xattr -dr com.apple.quarantine m_capture.app
+   ```
+
+   Prefer not to use Terminal? Open the app once, then go to **System Settings →
+   Privacy & Security**, find the *"m_capture was blocked"* notice near the bottom,
+   and click **Open Anyway → Open** (macOS 14 and earlier: **Right-click → Open**).
 4. Grant **Screen Recording** permission when prompted (see [Permissions](#permissions)).
 
 To build it yourself instead, see [Build from source](#build-from-source).

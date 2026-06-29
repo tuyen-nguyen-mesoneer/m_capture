@@ -13,18 +13,22 @@ brand site changes.
   `docs/assets/fonts/open-sans-latin.woff2`.
 
 ## Color palette
-| Token                 | Hex                                                                | Use                          |
-|-----------------------|--------------------------------------------------------------------|------------------------------|
-| Surface base / dark   | `#191528`                                                          | hero, nav, footer background |
-| Deep                  | `#120d20`                                                          | gradient bottom              |
-| Raised                | `#302355`                                                          | raised containers            |
-| Purple (solid accent) | `#432a84`                                                          | solid fills/borders, glow    |
-| Purple-light          | `#533aa3`                                                          | lighter glow                 |
-| Lavender              | `#d5baff`                                                          | eyebrows, accents            |
-| Logo tile gradient    | `#412880` (bright, top-right) → `#2a2048` (dark, bottom-left), 45° | the `m.` mark                |
-| Text on dark          | `#fff`                                                             | headings/body                |
-| Muted on dark         | `rgba(255,255,255,.6)`                                             | footer links, secondary      |
-| Body on white         | `#121212`                                                          | (light sections, n/a here)   |
+| Token                 | Hex                                                                | Use                                            |
+|-----------------------|--------------------------------------------------------------------|------------------------------------------------|
+| Surface base / dark   | `#191528`                                                          | hero, nav, footer background                   |
+| Deep                  | `#120d20`                                                          | gradient bottom                                |
+| Raised                | `#302355`                                                          | raised containers                              |
+| Purple (solid accent) | `#432a84`                                                          | solid fills/borders, glow                      |
+| Purple-light          | `#533aa3`                                                          | lighter glow                                   |
+| Lavender              | `#d5baff`                                                          | eyebrows, accents                              |
+| Logo tile gradient    | `#412880` (bright, top-right) → `#2a2048` (dark, bottom-left), 45° | the `m.` mark                                  |
+| Text on dark          | `#fff`                                                             | headings/body                                  |
+| Muted on dark         | `rgba(255,255,255,.6)`                                             | footer links, secondary                        |
+| Body on white         | `#121212`                                                          | deepest text (unused; see below)               |
+| Surface light         | `#eceaf3`                                                          | light section bg (features, install, feedback) |
+| Heading on light      | `#1b1430`                                                          | headings on light sections                     |
+| Body on light         | `#5b556a`                                                          | body text on light sections                    |
+| Eyebrow on light      | `#6e6781`                                                          | eyebrows on light sections                     |
 
 ## Typography scale (Open Sans)
 | Role                                    | Size | Weight  | Letter-spacing     | Line-height |

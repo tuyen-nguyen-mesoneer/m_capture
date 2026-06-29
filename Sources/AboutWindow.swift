@@ -81,7 +81,7 @@ final class AboutWindowController {
         // Footer: a centered row of clickable links separated by a middot —
         // [MIT License] · [© 2026 mesoneer AG] — sitting `bottom` px off the edge.
         let footerFont = Theme.font(11)
-        let licenseLink = LinkButton("MIT License", url: "https://github.com/tuyen-nguyen-mesoneer/m_capture/blob/main/LICENSE", font: footerFont)
+        let licenseLink = LinkButton("MIT License", url: "https://github.com/tuyen-nguyen-mesoneer/m_capture/blob/trunk/LICENSE", font: footerFont)
         let dot = label("·", font: footerFont, color: Theme.textMuted)
         let mesoneerLink = LinkButton("© 2026 mesoneer AG", url: "https://www.mesoneer.io/?r=0", font: footerFont)
 

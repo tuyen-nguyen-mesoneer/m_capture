@@ -104,10 +104,11 @@ the clusters gather into one draggable panel so they never cover the image.
 
 ### Transform & actions
 
+- **Select / move** (`V`) — click any placed mark to select it, then **drag** to reposition, **drag the corner knob** to resize (shapes, text, emoji, counters, blur, spotlight, overlays, zoom callouts), or press `⌫` to delete it. Lines, arrows, freehand strokes and the ruler are move-only. Lets you reposition or remove a mark without undoing and redrawing it.
 - **Crop** — drag a region, then `↵` (or **✓**) to apply.
-- **Rotate** — 90° left (counter-clockwise) or right (clockwise).
+- **Rotate** — 90° right (clockwise).
 - **Flip horizontal** — mirror the image left↔right.
-- **Resize** — drag the bottom-right knob to resample (aspect-locked); export comes out at the new size.
+- **Resize the capture** — drag the bottom-right knob to resample the whole image (aspect-locked); export comes out at the new size.
 - **Pin to screen** (`⌘P`) — float the capture always-on-top across Spaces. Drag to move, corner-drag to scale, right-click for **Copy / Save / Reset size / Close** (`Esc` / `⌘W` close). Pin several at once.
 - **Before/After GIF** — export a two-frame looping GIF that toggles the annotations on and off, useful for highlighting before-and-after differences.
 - **Undo / Redo / Copy / Save / Save As / Cancel** — see the shortcut table below.
@@ -139,8 +140,9 @@ Save and Pin (OCR always uses the un-framed image).
 | `⌘T`              | Copy text / QR (OCR) — then drag over text or a code |
 | `⌘P`              | Pin to screen & close                                |
 | `↵`               | Apply a pending crop                                 |
+| `⌫` / `⌦`         | Delete the selected mark (Select tool)               |
 | `Esc`             | Cancel & close                                       |
-| `P` `H` `E` `T` … | Select a tool — single key (see tables above)        |
+| `P` `H` `V` `T` … | Select a tool — single key (see tables above)        |
 
 > Single-key tool shortcuts are ignored while typing into a text annotation.
 
@@ -178,10 +180,10 @@ pinned-window **Save**, and **Library**. Files are named
 under **System Settings → Privacy & Security → Screen Recording**, then relaunch.
 Hotkeys use Carbon and need no extra permission.
 
-| Symptom                               | Fix                                                                                                                |
-|---------------------------------------|--------------------------------------------------------------------------------------------------------------------|
-| Capture is blank / fails              | Grant **Screen Recording**, then relaunch (see above).                                                             |
-| Hotkeys do nothing                    | Another app may own them, or `m_capture` isn't running — relaunch it.                                                |
-| "App can't be opened" on first launch | Not notarized — **System Settings → Privacy & Security → Open Anyway** (macOS 14 and earlier: right-click → Open). |
-| No menu-bar icon                      | The app isn't running; launch `m_capture.app` again (no Dock icon).                                                |
-| Can't find a saved screenshot         | Use **Library** to open the save folder.                                                                           |
+| Symptom                               | Fix                                                                                                                                                                                                                                                                            |
+|---------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Capture is blank / fails              | Grant **Screen Recording**, then relaunch (see above).                                                                                                                                                                                                                         |
+| Hotkeys do nothing                    | Another app may own them, or `m_capture` isn't running — relaunch it.                                                                                                                                                                                                          |
+| "App can't be opened" on first launch | Not notarized. Install to `~/Applications` (avoids permission issues), then run `cd ~/Applications && xattr -dr com.apple.quarantine m_capture.app` before opening — or use **System Settings → Privacy & Security → Open Anyway** (macOS 14 and earlier: Right-click → Open). |
+| No menu-bar icon                      | The app isn't running; launch `m_capture.app` again (no Dock icon).                                                                                                                                                                                                            |
+| Can't find a saved screenshot         | Use **Library** to open the save folder.                                                                                                                                                                                                                                       |

@@ -56,17 +56,22 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
   Region ↔ Screen mode; draws the cutout, size readout, and mode hint.
 - `EditorWindow.swift` — the in-place annotation editor: tool tiles in five groups
   (Markup, Shapes, Color, Actions, Background) as scattered cards or one draggable
-  panel. Actions owns crop/rotate/flip, undo/redo, Pin (⌘P), Before/After GIF, Copy
-  (⌘C), Save (⌘S), Save As (⇧⌘S), Cancel. Owns tooltips, selection state, the
-  pickers, and the live background preview (`BackgroundView`).
+  panel. Actions owns the Select tool (move/resize/delete a placed mark; **V**),
+  crop, rotate-right, flip, undo/redo, Pin (⌘P), Before/After GIF, Copy (⌘C), Save
+  (⌘S), Save As (⇧⌘S), Cancel. Owns tooltips, selection state, the pickers, and the
+  live background preview (`BackgroundView`).
 - `CanvasView.swift` — the annotation canvas: `Tool` enum, undo/redo, Gaussian blur,
   crop/rotate/flip/resample transforms (`bakeResample` bakes annotations on
-  corner-drag resize), and live edit state (bendable-arrow apex, zoom callout,
-  overlay image, ruler, `counterFormat`/`currentEmoji`). Coordinates stay in
-  full-res image space so exports stay sharp.
+  corner-drag resize), and live edit state (the Select tool's move/resize of a
+  placed mark — drag reuses `remap`, the corner knob reuses `scale(by:around:)`;
+  bendable-arrow apex; zoom callout; overlay image; ruler;
+  `counterFormat`/`currentEmoji`). Coordinates stay in full-res image space so
+  exports stay sharp.
 - `Annotations.swift` — annotation model (pencil, marker, line, curved arrow,
   shapes, text, blur, counter, spotlight, emoji, zoom callout, ruler, image
-  overlay). Crop/rotate/flip are transforms, not stored marks.
+  overlay). Each mark exposes `bounds` / `resizable` / `scale(by:around:)` so the
+  Select tool can move, resize, and delete it (path-like marks are move-only).
+  Crop/rotate/flip are transforms, not stored marks.
 - `ToolButton.swift` — the rounded tool tile (custom-drawn glyphs / SF Symbols);
   swatches draw a colour chip.
 - `ColorPicker.swift` — brand custom-color picker (hue strip + S/B square), shown

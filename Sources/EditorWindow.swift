@@ -322,11 +322,11 @@ final class EditorWindowController: NSObject {
         colorTiles.append(plus)
         let color = makeCluster("Color", colorTiles, perRow: 4, radius: colorR)
 
-        // ACTIONS — ordered by row: transform (row 1), history + non-closing
+        // ACTIONS — ordered by row: select + transform (row 1), history + non-closing
         // outputs (row 2), then the four ways to finish (row 3, exits last).
         let actions = makeCluster("Action", [
+            toolButton(.select, "cursorarrow", "Move — drag an object to reposition, drag its corner to resize, ⌫ to delete  (V)"),
             toolButton(.crop, "crop", "Crop — drag a region, then ↵ or ✓"),
-            actionButton("rotate.left", "Rotate left 90°", key: "", mods: [], #selector(rotateLeftPressed)),
             actionButton("rotate.right", "Rotate right 90°", key: "", mods: [], #selector(rotateRightPressed)),
             actionButton("arrow.left.and.right.righttriangle.left.righttriangle.right", "Flip horizontal", key: "", mods: [], #selector(flipHorizontalPressed)),
             actionButton("arrow.uturn.backward", "Undo  (⌘Z)", key: "z", mods: [.command], #selector(undoPressed)),
@@ -768,7 +768,7 @@ final class EditorWindowController: NSObject {
         "g": .triangle, "d": .diamond, "y": .star, "u": .roundedRect, "k": .checkmark,
         "5": .pentagon, "6": .hexagon, "8": .octagon,
         "t": .text, "c": .counter, "b": .blur, "s": .spotlight, "i": .eyedropper, "e": .eraser,
-        "z": .zoom,
+        "z": .zoom, "v": .select,
     ]
     private func handleShortcut(_ key: String) {
         if let t = EditorWindowController.shortcutMap[key] { selectTool(t) }
@@ -1067,7 +1067,6 @@ final class EditorWindowController: NSObject {
 
     // MARK: Transforms (rotate / crop)
 
-    @objc private func rotateLeftPressed() { rotate(left: true) }
     @objc private func rotateRightPressed() { rotate(left: false) }
 
     private func rotate(left: Bool) {

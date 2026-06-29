@@ -7,7 +7,7 @@ enum Tool {
     case pencil, marker, line, arrow, rect, ellipse
     case triangle, diamond, star, roundedRect, checkmark, pentagon, hexagon, octagon
     case text, blur, counter, spotlight, eyedropper, eraser, crop, ocr, zoom, emoji
-    case overlay, ruler
+    case overlay, ruler, select
 }
 
 /// Displays the captured image (scaled to fit) and the annotations on top.
@@ -22,6 +22,7 @@ final class CanvasView: NSView, NSTextFieldDelegate {
             if tool != .zoom { editingZoom = nil }
             if tool != .overlay, editingOverlay != nil { editingOverlay = nil; onOverlaySelected?(nil) }
             if tool != .ruler { measureAxis = .none; measureAnchor = nil }
+            if tool != .select { selected = nil; selectDrag = .none }
             needsDisplay = true
         }
     }
@@ -84,6 +85,15 @@ final class CanvasView: NSView, NSTextFieldDelegate {
     private func measureEnd(at p: CGPoint, from a: CGPoint) -> CGPoint {
         measureAxis == .vertical ? CGPoint(x: a.x, y: p.y) : CGPoint(x: p.x, y: a.y)
     }
+
+    // Select tool: the currently-grabbed mark, plus whether a drag is moving the
+    // whole mark or resizing it from the bottom-right knob (top-left pinned). Move
+    // reuses `remap`; resize reuses `scale(by:around:)`.
+    private var selected: Annotation?
+    private enum SelectDrag { case none, move, resize }
+    private var selectDrag: SelectDrag = .none
+    private var dragAnchor: CGPoint = .zero    // pinned corner during a resize
+    private var lastDragPoint: CGPoint = .zero // previous cursor sample (move delta / resize ratio)
 
     private var annotations: [Annotation] = []
     private var redoStack: [Annotation] = []
@@ -220,6 +230,14 @@ final class CanvasView: NSView, NSTextFieldDelegate {
                 NSCursor.openHand.set(); return
             }
         }
+        if tool == .select {
+            let p = imagePoint(event), hr = 12 / displayScale
+            if let s = selected, s.resizable, hypot(s.bounds.maxX - p.x, s.bounds.minY - p.y) < hr {
+                NSCursor.openHand.set(); return   // over the resize knob
+            }
+            (annotations.contains { $0.hit(p) } ? NSCursor.openHand : NSCursor.arrow).set()
+            return
+        }
         NSCursor.crosshair.set()
     }
 
@@ -241,6 +259,12 @@ final class CanvasView: NSView, NSTextFieldDelegate {
         if event.keyCode == 53 { onCancel?(); return } // Esc cancels the capture
         if pendingCrop != nil, event.keyCode == 36 || event.keyCode == 76 { // ↵ / ⌤ applies a crop
             onCropConfirm?(); return
+        }
+        // ⌫ / ⌦ deletes the mark grabbed by the Select tool.
+        if tool == .select, let s = selected, event.keyCode == 51 || event.keyCode == 117 {
+            if let idx = annotations.firstIndex(where: { $0 === s }) { annotations.remove(at: idx) }
+            selected = nil; selectDrag = .none; redoStack.removeAll(); onChange?(); needsDisplay = true
+            return
         }
         let mods = event.modifierFlags.intersection([.command, .control, .option])
         if mods.isEmpty, let c = event.charactersIgnoringModifiers?.lowercased(), !c.isEmpty {
@@ -338,6 +362,23 @@ final class CanvasView: NSView, NSTextFieldDelegate {
                 editingOverlay = hit as? ImageOverlayAnnotation
                 onOverlaySelected?(editingOverlay)
             }
+        case .select:
+            let hr = 12 / displayScale
+            if let s = selected, s.resizable,
+               hypot(s.bounds.maxX - p.x, s.bounds.minY - p.y) < hr {   // bottom-right knob
+                selectDrag = .resize
+                dragAnchor = CGPoint(x: s.bounds.minX, y: s.bounds.maxY)  // pin the top-left corner
+                lastDragPoint = p
+                NSCursor.closedHand.push()
+            } else if let hit = annotations.reversed().first(where: { $0.hit(p) }) {
+                selected = hit
+                selectDrag = .move
+                lastDragPoint = p
+                NSCursor.closedHand.push()
+            } else {
+                selected = nil
+                selectDrag = .none
+            }
         case .ruler:
             // Imprint the live measurement (if any), then re-anchor here for chaining.
             if measureAxis != .none, let a = measureAnchor {
@@ -384,6 +425,26 @@ final class CanvasView: NSView, NSTextFieldDelegate {
             eo.rect = CGRect(x: anchorX, y: top - newH, width: newW, height: newH)
             needsDisplay = true; return
         }
+        if selectDrag == .move, let s = selected {
+            let dx = p.x - lastDragPoint.x, dy = p.y - lastDragPoint.y
+            s.remap { CGPoint(x: $0.x + dx, y: $0.y + dy) }
+            lastDragPoint = p; needsDisplay = true; return
+        }
+        if selectDrag == .resize, let s = selected {
+            // Uniform scale from the change in cursor distance to the pinned corner.
+            let prev = hypot(lastDragPoint.x - dragAnchor.x, lastDragPoint.y - dragAnchor.y)
+            let cur = hypot(p.x - dragAnchor.x, p.y - dragAnchor.y)
+            if prev > 0.5 {
+                let f = cur / prev
+                let b = s.bounds
+                let minSide = 8 / displayScale
+                if f >= 1 || (b.width * f >= minSide && b.height * f >= minSide) {
+                    s.scale(by: f, around: dragAnchor)
+                    lastDragPoint = p
+                }
+            }
+            needsDisplay = true; return
+        }
         if tool == .zoom, let s = zoomStart {
             zoomRect = CGRect(x: min(s.x, p.x), y: min(s.y, p.y),
                               width: abs(s.x - p.x), height: abs(s.y - p.y))
@@ -422,6 +483,13 @@ final class CanvasView: NSView, NSTextFieldDelegate {
         if overlayDrag != .none {
             overlayDrag = .none; NSCursor.pop()
             onOverlaySelected?(editingOverlay)   // reposition the opacity slider after a move/resize
+            onChange?(); needsDisplay = true; return
+        }
+        if selectDrag != .none {
+            // Blur / zoom cache pixels from where they sat — re-sample at the new spot.
+            if let b = selected as? BlurAnnotation { b.patch = gaussianBlur(b.rect) }
+            if let z = selected as? ZoomAnnotation { z.patch = croppedCGImage(rect: z.source) }
+            selectDrag = .none; NSCursor.pop()
             onChange?(); needsDisplay = true; return
         }
         if tool == .zoom {
@@ -564,7 +632,7 @@ final class CanvasView: NSView, NSTextFieldDelegate {
     func redo() { clearSelections(); if let a = redoStack.popLast() { annotations.append(a); onChange?(); needsDisplay = true } }
 
     private func clearSelections() {
-        editingArrow = nil; editingZoom = nil
+        editingArrow = nil; editingZoom = nil; selected = nil; selectDrag = .none
         if editingOverlay != nil { editingOverlay = nil; onOverlaySelected?(nil) }
     }
 
@@ -603,6 +671,17 @@ final class CanvasView: NSView, NSTextFieldDelegate {
             let knob = CGRect(x: eo.rect.maxX - r, y: eo.rect.minY - r, width: r * 2, height: r * 2)
             ctx.setFillColor(NSColor(white: 1, alpha: 0.95).cgColor); ctx.fillEllipse(in: knob)
             ctx.setStrokeColor(Theme.lavender.cgColor); ctx.setLineWidth(1.5 / displayScale); ctx.strokeEllipse(in: knob)
+        }
+        if tool == .select, let s = selected {                // selection outline + (sized marks) resize knob
+            let b = s.bounds
+            ctx.setStrokeColor(Theme.lavender.cgColor); ctx.setLineWidth(1.5 / displayScale)
+            ctx.stroke(b)
+            if s.resizable {
+                let r = 6 / displayScale
+                let knob = CGRect(x: b.maxX - r, y: b.minY - r, width: r * 2, height: r * 2)
+                ctx.setFillColor(NSColor(white: 1, alpha: 0.95).cgColor); ctx.fillEllipse(in: knob)
+                ctx.setStrokeColor(Theme.lavender.cgColor); ctx.setLineWidth(1.5 / displayScale); ctx.strokeEllipse(in: knob)
+            }
         }
         if tool == .ruler, measureAxis != .none, let a = measureAnchor {   // live dimension line
             MeasureAnnotation(start: a, end: measureEnd(at: lastMousePoint, from: a),
@@ -648,6 +727,7 @@ final class CanvasView: NSView, NSTextFieldDelegate {
         live = nil
         editingArrow = nil
         editingZoom = nil
+        selected = nil; selectDrag = .none
         if editingOverlay != nil { editingOverlay = nil; onOverlaySelected?(nil) }
         measureAxis = .none; measureAnchor = nil
         pendingCrop = nil
@@ -721,28 +801,55 @@ final class CanvasView: NSView, NSTextFieldDelegate {
         return img
     }
 
-    /// Resample the whole capture to `scale`× its current size. Bakes the
+    // Non-destructive resize: the pristine, full-resolution image captured before
+    // the current run of resizes, plus how far we've scaled from it. Every resample
+    // derives from this rep — never from an already-resampled (and so degraded)
+    // image — so shrinking then enlarging returns to full sharpness instead of
+    // upsampling blur. Re-captured whenever the image changed underneath us (a
+    // crop/rotate, detected by identity) or new annotations need baking (a non-empty
+    // list), which keeps the invalidation self-contained here.
+    private var resampleSource: NSBitmapImageRep?
+    private var resampleSourceImage: NSImage?
+    private var resampleCumulative: CGFloat = 1
+
+    /// Resample the whole capture to `scale`× its current on-screen size. Bakes the
     /// current annotations into the new base image (they're no longer separately
-    /// editable, like crop/rotate produce a fresh image). The caller relays out.
+    /// editable, like crop/rotate produce a fresh image). Across a run of drags the
+    /// resample is non-destructive: it always comes from the pristine pre-resize
+    /// image (see `resampleSource`), so shrink-then-grow doesn't accumulate blur.
+    /// The caller relays out.
     func bakeResample(scale: CGFloat) {
-        guard scale > 0, abs(scale - 1) > 0.001, let flat = flatten() else { return }
-        let newW = max(1, Int((CGFloat(flat.pixelsWide) * scale).rounded()))
-        let newH = max(1, Int((CGFloat(flat.pixelsHigh) * scale).rounded()))
-        let newPointSize = NSSize(width: image.size.width * scale, height: image.size.height * scale)
+        guard scale > 0, abs(scale - 1) > 0.001 else { return }
+        // Reuse the retained source only while it still matches the live state.
+        if resampleSource == nil || resampleSourceImage !== image || !annotations.isEmpty {
+            guard let flat = flatten() else { return }
+            resampleSource = flat
+            resampleCumulative = 1
+        }
+        guard let src = resampleSource else { return }
+        let cumulative = resampleCumulative * scale
+        let newW = max(1, Int((CGFloat(src.pixelsWide) * cumulative).rounded()))
+        let newH = max(1, Int((CGFloat(src.pixelsHigh) * cumulative).rounded()))
+        let newPointSize = NSSize(width: src.size.width * cumulative, height: src.size.height * cumulative)
         guard let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: newW, pixelsHigh: newH,
                                          bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true,
                                          isPlanar: false, colorSpaceName: .deviceRGB,
-                                         bytesPerRow: 0, bitsPerPixel: 0),
-              let gctx = NSGraphicsContext(bitmapImageRep: rep) else { return }
+                                         bytesPerRow: 0, bitsPerPixel: 0) else { return }
         rep.size = newPointSize
+        guard let gctx = NSGraphicsContext(bitmapImageRep: rep) else { return }
         NSGraphicsContext.saveGraphicsState(); NSGraphicsContext.current = gctx
         gctx.cgContext.interpolationQuality = .high
-        flat.draw(in: CGRect(x: 0, y: 0, width: CGFloat(newW), height: CGFloat(newH)))
+        // Draw in point space (the rep scales it up to `newW`×`newH` pixels), so the
+        // full-resolution source resamples without first collapsing to 1×.
+        src.draw(in: CGRect(x: 0, y: 0, width: newPointSize.width, height: newPointSize.height))
         NSGraphicsContext.restoreGraphicsState()
 
         let img = NSImage(size: newPointSize); img.addRepresentation(rep)
         image = img
+        resampleSourceImage = img
+        resampleCumulative = cumulative
         annotations.removeAll(); redoStack.removeAll(); live = nil; editingArrow = nil; editingZoom = nil
+        selected = nil; selectDrag = .none
         if editingOverlay != nil { editingOverlay = nil; onOverlaySelected?(nil) }
         measureAxis = .none; measureAnchor = nil
         rebuildBitmap()
@@ -763,20 +870,28 @@ final class CanvasView: NSView, NSTextFieldDelegate {
         return cg.cropping(to: pr)
     }
 
-    /// Render the capture + annotations to a bitmap. `includingOverlays: false`
-    /// skips overlay images — used for the "before" frame of the GIF export.
+    /// Render the capture + annotations to a bitmap at the capture's native pixel
+    /// density — not its logical point size. A Retina grab has `pixelsPerPoint` 2,
+    /// so a point-sized bitmap would halve the resolution of every export
+    /// (Copy/Save/Pin) and collapse a resize to 1×. The rep keeps the point size,
+    /// so drawing happens in image-point space and scales up to full pixels (same
+    /// trick as `rotatedImage`). `includingOverlays: false` skips overlay images —
+    /// used for the "before" frame of the GIF export.
     func flatten(includingOverlays: Bool = true) -> NSBitmapImageRep? {
         commitText()
-        let w = Int(image.size.width.rounded()), h = Int(image.size.height.rounded())
-        guard w > 0, h > 0,
-              let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: w, pixelsHigh: h,
+        let ppp = pixelsPerPoint
+        let pw = Int((image.size.width * ppp).rounded()), ph = Int((image.size.height * ppp).rounded())
+        guard pw > 0, ph > 0,
+              let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: pw, pixelsHigh: ph,
                                          bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true,
                                          isPlanar: false, colorSpaceName: .deviceRGB,
-                                         bytesPerRow: 0, bitsPerPixel: 0),
-              let gctx = NSGraphicsContext(bitmapImageRep: rep) else { return nil }
+                                         bytesPerRow: 0, bitsPerPixel: 0) else { return nil }
+        rep.size = image.size
+        guard let gctx = NSGraphicsContext(bitmapImageRep: rep) else { return nil }
         NSGraphicsContext.saveGraphicsState()
         NSGraphicsContext.current = gctx
-        image.draw(in: CGRect(x: 0, y: 0, width: w, height: h))
+        gctx.cgContext.interpolationQuality = .high
+        image.draw(in: CGRect(x: 0, y: 0, width: image.size.width, height: image.size.height))
         for a in annotations {
             if !includingOverlays, a is ImageOverlayAnnotation { continue }
             a.draw(in: gctx.cgContext)
