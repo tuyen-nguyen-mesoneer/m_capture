@@ -49,8 +49,10 @@ Full source map in **[`CLAUDE.md`](CLAUDE.md)**. Quick index:
 
 - **Menu item / hotkey** → `AppDelegate.swift` (+ `HotKey.swift` for Carbon).
 - **Selection overlay** → `ScreenshotController.swift` / `SelectionOverlay.swift`.
-- **New annotation tool** → `Tool` case + drawing in `Annotations.swift`, input in
-  `CanvasView.swift`, tile + shortcut in `EditorWindow.swift`.
+- **New annotation tool** → `Tool` case + drawing in `Annotations.swift` (also give
+  the mark `bounds` and, if it has a size scalar, a `scale(by:around:)` override so
+  the Select tool can move/resize it), input in `CanvasView.swift`, tile + shortcut
+  in `EditorWindow.swift`.
 - **Background** → `Background.swift`; **setting/preference** → `Settings.swift` +
   `SettingsWindow.swift`.
 - **Colors, fonts, spacing** → `Theme.swift`.
@@ -77,7 +79,7 @@ touches, plus a baseline pass:
 
 - **Hotkeys** `⌃⇧X` / `⌃⇧R` (and any you rebound) fire.
 - **Capture** — a region drag shows the overlay + size label; **Space** grabs the whole screen.
-- **Editor** — tools draw correctly; undo/redo, crop, rotate, flip and corner-drag resize work.
+- **Editor** — tools draw correctly; undo/redo, crop, rotate, flip and corner-drag resize work; the **Select** tool (`V`) moves / resizes / deletes a placed mark.
 - **Output** — `⌘C` copy, `⌘S` save, `⇧⌘S` Save As, `Esc` cancel; plus Pin (`⌘P`), OCR, the Before/After GIF, and backgrounds.
 - **Settings** persist across relaunch; check **multi-monitor** geometry if you touched capture.
 

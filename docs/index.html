@@ -52,7 +52,7 @@
   }
   nav .wrap{display:flex;align-items:center;justify-content:space-between;height:73px}
   .brand{display:flex;align-items:center;gap:12px;font-weight:700;letter-spacing:-.01em}
-  .nav-menu{flex:1;display:flex;justify-content:center;gap:34px}
+  .nav-menu{flex:1;display:flex;justify-content:center;gap:28px}
   .nav-right{display:flex;align-items:center;gap:24px}
   .logo{
     width:34px;height:34px;border-radius:0;flex:none;color:#fff;
@@ -95,7 +95,7 @@
   .btn-ghost:hover{background:rgba(255,255,255,.14)}
 
   /* ---------- hero ---------- */
-  .hero{position:relative;padding:64px 0 72px;text-align:center;overflow:hidden}
+  .hero{position:relative;padding:64px 0 80px;text-align:center;overflow:hidden}
   .hero .eyebrow{margin-bottom:32px}
   /* matches mesoneer.io's hero: a flat base with a single soft purple glow on
      the upper-right (brand peak ≈#432a84 at ~90%/32%), deepening toward the
@@ -127,18 +127,13 @@
     border:1px solid var(--border);border-radius:0;padding:6px 14px;
   }
 
-  /* ---------- showcase ---------- */
-  .showcase{padding:24px 0 8px;position:relative}
-  .frame{
-    position:relative;border-radius:0;overflow:hidden;border:1px solid var(--hairline);
-    box-shadow:0 50px 110px -40px rgba(0,0,0,.85),0 0 0 1px rgba(0,0,0,.4);background:var(--base2);
+  /* ---------- hero product shot (anchored in the hero, mesoneer-style) ---------- */
+  .hero-shot{
+    position:relative;margin:56px auto 0;overflow:hidden;
+    border:1px solid var(--hairline);background:var(--base2);
+    box-shadow:0 30px 80px -24px rgba(0,0,0,.8), 0 0 110px -16px rgba(123,82,205,.32);
   }
-  .frame img{width:100%}
-  .showcase .glow{
-    position:absolute;left:50%;top:38%;transform:translate(-50%,-50%);
-    width:74%;height:64%;background:radial-gradient(closest-side,rgba(213,186,255,.26),transparent);
-    filter:blur(46px);z-index:-1;
-  }
+  .hero-shot img{width:100%;display:block}
 
   /* ---------- sections ---------- */
   section{padding:92px 0;position:relative}
@@ -146,39 +141,55 @@
   .glow-r::before,.glow-l::before{content:"";position:absolute;inset:0;z-index:-1;pointer-events:none}
   .glow-r::before{background:radial-gradient(560px 420px at 88% 16%,rgba(83,58,163,.34),transparent 60%)}
   .glow-l::before{background:radial-gradient(560px 420px at 12% 16%,rgba(67,42,132,.3),transparent 60%)}
+  /* alternating light sections (pale mesoneer panels) between the purple ones, so the
+     page reads as light / purple / light / purple, separated by strong contrast */
+  .light{background:#eceaf3;color:#1b1430}
+  .light .eyebrow{color:#6e6781}
+  .light .sec-head p{color:#5b556a}
+  /* install steps: dark text + purple number badges; the command block stays dark */
+  .light .istep p{color:#5b556a}
+  .light .istep .n{background:linear-gradient(145deg,rgba(67,42,132,.12),rgba(67,42,132,.03));border-color:rgba(67,42,132,.22);color:#432a84}
+  .light .istep a{color:#432a84}
+  .light .istep strong{color:#1b1430}
+  .light .istep p code{color:#432a84;background:rgba(67,42,132,.08);border-color:rgba(67,42,132,.18)}
   .sec-head{text-align:center;max-width:660px;margin:0 auto 58px}
   .sec-head h2{font-size:clamp(30px,4.4vw,46px);line-height:1.2;margin-bottom:16px}
   .sec-head p{color:var(--ink-dim);font-size:18px}
 
   /* features */
-  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:24px}
   @media(max-width:860px){.grid{grid-template-columns:repeat(2,1fr)}}
   @media(max-width:560px){.grid{grid-template-columns:1fr}}
   .card{
     position:relative;overflow:hidden;
     background:linear-gradient(180deg,rgba(48,35,85,.5),rgba(25,21,40,.35));
-    border:1px solid var(--border);border-radius:0;padding:34px 30px;
+    border:1px solid var(--border);border-radius:0;padding:36px 32px;
     transition:transform .18s,border-color .18s,box-shadow .18s,background .18s;
   }
   /* lavender accent rule that wipes in on hover (corners stay square) */
-  .card::before{content:"";position:absolute;left:0;right:0;top:0;height:2px;
+  .card::before{content:"";position:absolute;left:0;right:0;top:0;height:3px;
     background:linear-gradient(90deg,var(--lavender),var(--purple));
     transform:scaleX(0);transform-origin:left;transition:transform .25s ease}
   .card:hover{transform:translateY(-4px);border-color:rgba(213,186,255,.45);
     background:linear-gradient(180deg,rgba(58,42,103,.55),rgba(25,21,40,.4));
     box-shadow:0 24px 50px -28px rgba(0,0,0,.7)}
   .card:hover::before{transform:scaleX(1)}
+  /* glowing circular node, matching the How-it-works steps and mesoneer's OFFERING */
   .ic{
-    width:52px;height:52px;border-radius:0;display:grid;place-items:center;margin-bottom:22px;
-    background:linear-gradient(145deg,rgba(213,186,255,.16),rgba(213,186,255,.04));
-    border:1px solid rgba(213,186,255,.32);color:var(--lavender);
+    width:60px;height:60px;border-radius:50%;display:grid;place-items:center;margin-bottom:24px;color:var(--lavender);
+    background:radial-gradient(circle at 50% 38%,#2a2048,#120d20);
+    border:1px solid rgba(213,186,255,.4);
+    box-shadow:0 0 30px rgba(213,186,255,.22),inset 0 0 16px rgba(213,186,255,.12);
     transition:background .18s,border-color .18s,box-shadow .18s;
   }
-  .card:hover .ic{border-color:rgba(213,186,255,.55);box-shadow:0 0 26px rgba(213,186,255,.22);
-    background:linear-gradient(145deg,rgba(213,186,255,.28),rgba(213,186,255,.08))}
-  .ic svg{width:26px;height:26px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+  .card:hover .ic{border-color:rgba(213,186,255,.6);box-shadow:0 0 42px rgba(213,186,255,.4),inset 0 0 16px rgba(213,186,255,.18);
+    background:radial-gradient(circle at 50% 38%,#33265f,#15102a)}
+  .ic svg{width:28px;height:28px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
   .card h3{font-size:18px;margin-bottom:10px;letter-spacing:-.01em}
-  .card p{color:var(--ink-mute);font-size:15px;line-height:1.62}
+  .card p{color:var(--ink-dim);font-size:15px;line-height:1.62}
+  /* "What's inside" header: larger heading + more breathing room (lavender eyebrow from base) */
+  #features .sec-head{margin-bottom:64px}
+  #features .sec-head h2{font-size:clamp(32px,4.8vw,50px)}
   @media(prefers-reduced-motion:reduce){.card,.card::before,.ic{transition:none}.card:hover{transform:none}}
 
   /* how it works — vertical journey with a curved glowing connector (mesoneer.io offering style) */
@@ -212,8 +223,105 @@
     background:rgba(213,186,255,.1);border:1px solid rgba(213,186,255,.3);border-radius:2px;padding:2px 7px;white-space:nowrap;
   }
 
-  /* requirements note under the hero CTA */
-  .req{margin-bottom:32px;font-size:13.5px;color:var(--ink-mute)}
+  /* install — numbered setup steps with a copyable Terminal command */
+  .install-steps{max-width:760px;margin:0 auto;display:flex;flex-direction:column;gap:30px}
+  .istep{display:grid;grid-template-columns:48px minmax(0,1fr);gap:22px;align-items:start}
+  .istep .n{
+    width:48px;height:48px;border-radius:0;display:grid;place-items:center;flex:none;
+    font-weight:700;font-size:18px;color:var(--lavender);
+    background:linear-gradient(145deg,rgba(213,186,255,.16),rgba(213,186,255,.04));
+    border:1px solid rgba(213,186,255,.32);
+  }
+  .istep h3{font-size:17px;margin-bottom:9px;letter-spacing:-.01em}
+  .istep p{color:var(--ink-dim);font-size:15px;line-height:1.62}
+  .istep p+p{margin-top:12px}
+  .istep a{color:var(--lavender)} .istep a:hover{color:#fff}
+  .istep strong{color:var(--ink);font-weight:600}
+  .istep p code{
+    font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.88em;color:var(--lavender);
+    background:rgba(213,186,255,.1);border:1px solid rgba(213,186,255,.22);border-radius:2px;padding:1px 6px;white-space:nowrap;
+  }
+  .cmd{display:flex;align-items:center;gap:12px;margin-top:14px;background:#0d0a18;border:1px solid var(--hairline);padding:11px 12px 11px 16px}
+  .cmd code{
+    flex:1;min-width:0;overflow-x:auto;white-space:nowrap;
+    font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;color:#e8e2f5;
+  }
+  .cmd button{
+    flex:none;cursor:pointer;font:inherit;font-size:12.5px;font-weight:600;letter-spacing:.01em;
+    color:var(--lavender);background:rgba(213,186,255,.1);border:1px solid rgba(213,186,255,.3);border-radius:0;padding:6px 13px;
+    transition:background .15s,color .15s;
+  }
+  .cmd button:hover{background:rgba(213,186,255,.2);color:#fff}
+  .cmd+p{margin-top:14px}
+  @media(max-width:560px){.istep{grid-template-columns:38px minmax(0,1fr);gap:14px}.istep .n{width:38px;height:38px;font-size:16px}}
+
+  /* releases / changelog */
+  .releases{max-width:900px;margin:0 auto}
+  .release{
+    display:grid;grid-template-columns:150px 86px minmax(0,1fr);gap:28px;align-items:baseline;
+    padding:28px 0;border-top:1px solid var(--border);
+  }
+  .release:first-child{border-top:0;padding-top:0}
+  .release .date{color:var(--ink-mute);font-size:15px;font-weight:600;white-space:nowrap}
+  .release .ver{color:var(--lavender);font-size:15px;font-weight:700;letter-spacing:-.01em}
+  .release .note{color:var(--ink-dim);font-size:16px;line-height:1.55}
+  .release .changelog{
+    display:inline-flex;align-items:center;gap:6px;margin-top:9px;
+    color:var(--lavender);font-size:14px;font-weight:600;transition:color .15s;
+  }
+  .release .changelog:hover{color:#fff}
+  .release .changelog svg{width:14px;height:14px;flex:none}
+  .releases-more{text-align:center;margin-top:48px}
+  @media(max-width:640px){
+    .release{grid-template-columns:1fr;gap:4px;padding:22px 0}
+    .release .ver{order:1}
+    .release .date{order:2;font-size:13.5px}
+    .release .note,.release div{order:3}
+  }
+
+  /* feedback — light CTA panel (mesoneer.io "Join us" style): a pale lavender
+     band with left-aligned copy and a code-drawn idea mark on the right, sitting
+     between the dark releases section and the dark footer for the same rhythm */
+  .feedback{padding:0;background:#eceaf3;color:#1b1430}
+  .feedback .wrap{
+    display:grid;grid-template-columns:1fr 1fr;gap:56px;align-items:center;
+    max-width:1080px;padding-top:100px;padding-bottom:100px;
+  }
+  .feedback .fb-copy{max-width:440px;justify-self:end}
+  .feedback .eyebrow{color:#6e6781;margin-bottom:16px}
+  .feedback h2{font-size:clamp(28px,3.4vw,40px);line-height:1.18;letter-spacing:-.02em;color:#1b1430;margin-bottom:18px}
+  .feedback p{color:#5b556a;font-size:16px;line-height:1.6;margin-bottom:28px}
+  .btn-dark{
+    display:inline-flex;align-items:center;gap:8px;padding:12px 22px;border-radius:0;
+    background:linear-gradient(45deg,#2a2048,#412880);color:#fff;
+    border:1px solid rgba(255,255,255,.14);font-weight:600;font-size:16px;letter-spacing:-.01em;line-height:20px;
+    box-shadow:0 12px 26px -12px rgba(42,32,72,.65);transition:filter .15s;
+  }
+  .btn-dark:hover{filter:brightness(1.14)}
+  .fb-art{justify-self:center;width:100%;max-width:300px}
+  .fb-art svg{width:100%;height:auto;display:block}
+  @media(max-width:760px){
+    .feedback .wrap{grid-template-columns:1fr;gap:36px;text-align:center;padding-top:64px;padding-bottom:64px}
+    .feedback .fb-copy{justify-self:center;max-width:520px}
+    .fb-art{order:-1;max-width:220px}
+  }
+
+  /* FAQ — native <details> accordion on the light panel, purple +/− toggle */
+  .faq-list{max-width:760px;margin:0 auto;border-top:1px solid rgba(67,42,132,.14)}
+  .faq-list details{border-bottom:1px solid rgba(67,42,132,.14)}
+  .faq-list summary{
+    list-style:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:24px;
+    padding:22px 2px;font-size:17px;font-weight:600;color:#1b1430;letter-spacing:-.01em;
+  }
+  .faq-list summary::-webkit-details-marker{display:none}
+  .faq-list summary .pm{flex:none;position:relative;width:18px;height:18px;margin-top:3px}
+  .faq-list summary .pm::before,.faq-list summary .pm::after{content:"";position:absolute;background:#432a84;transition:transform .2s,opacity .2s}
+  .faq-list summary .pm::before{left:0;right:0;top:8px;height:2px}
+  .faq-list summary .pm::after{top:0;bottom:0;left:8px;width:2px}
+  .faq-list details[open] summary .pm::after{transform:scaleY(0);opacity:0}
+  .faq-list p{color:#5b556a;font-size:15px;line-height:1.62;padding:0 2px 24px;max-width:660px}
+  .faq-list a{color:#432a84;font-weight:600}
+  @media(prefers-reduced-motion:reduce){.faq-list summary .pm::before,.faq-list summary .pm::after{transition:none}}
 
   /* footer */
   footer{position:relative;overflow:hidden;border-top:1px solid var(--border);padding:80px 0 80px;background:var(--base)}
@@ -243,7 +351,11 @@
     <a class="brand" href="#top"><span class="logo">m.</span> <span class="brand-name">m_capture</span></a>
     <div class="nav-menu">
       <a href="#features" data-i18n="nav.features">Features</a>
+      <a href="#install" data-i18n="nav.install">Install</a>
       <a href="#how" data-i18n="nav.how">How it works</a>
+      <a href="#feedback" data-i18n="nav.feedback">Feedback</a>
+      <a href="#releases" data-i18n="nav.releases">Releases</a>
+      <a href="#faq" data-i18n="nav.faq">FAQ</a>
       <a href="https://github.com/tuyen-nguyen-mesoneer/m_capture">GitHub</a>
     </div>
     <div class="nav-right">
@@ -276,7 +388,6 @@
         <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
       </a>
     </div>
-    <p class="req" data-i18n="dl.req">Requires macOS 13 or later and Screen Recording permission<br>(System Settings → Privacy &amp; Security → Screen Recording).</p>
     <div class="badges">
       <span class="badge" data-i18n="badge.os">macOS 13+</span>
       <span class="badge" data-i18n="badge.swift">Swift + AppKit</span>
@@ -284,17 +395,11 @@
       <span class="badge" data-i18n="badge.local">100% local</span>
       <span class="badge" data-i18n="badge.mit">MIT licensed</span>
     </div>
-  </div>
-</header>
-
-<div class="showcase">
-  <div class="wrap">
-    <figure class="frame">
-      <span class="glow"></span>
+    <figure class="hero-shot">
       <img src="assets/editor.png" alt="The m_capture in-place annotation editor over a captured screenshot" width="1600">
     </figure>
   </div>
-</div>
+</header>
 
 <section id="features" class="glow-r">
   <div class="wrap">
@@ -381,7 +486,57 @@
   </div>
 </section>
 
-<section id="how" class="glow-l" style="padding-top:0">
+<section id="install" class="light">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="eyebrow" data-i18n="install.eyebrow">Get started</span>
+      <h2 data-i18n="install.h2">Installing m_capture</h2>
+      <p data-i18n="install.p">m_capture isn't notarized by Apple yet, so the first launch takes a couple of one-time steps.</p>
+    </div>
+    <div class="install-steps">
+
+      <div class="istep">
+        <div class="n">1</div>
+        <div>
+          <h3 data-i18n="install.1.h">Download the DMG</h3>
+          <p data-i18n="install.1.p">Download the latest <a href="https://github.com/tuyen-nguyen-mesoneer/m_capture/releases/latest/download/m_capture.dmg">m_capture.dmg</a> from <a href="https://github.com/tuyen-nguyen-mesoneer/m_capture/releases">Releases</a> and open it.</p>
+        </div>
+      </div>
+
+      <div class="istep">
+        <div class="n">2</div>
+        <div>
+          <h3 data-i18n="install.2.h">Drag it to your Applications</h3>
+          <p data-i18n="install.2.p">Drag <strong>m_capture.app</strong> into your home <strong>Applications</strong> folder (<code>~/Applications</code>) — not the system <code>/Applications</code>, which can trigger app-blocking admin prompts. Create it if needed.</p>
+        </div>
+      </div>
+
+      <div class="istep">
+        <div class="n">3</div>
+        <div>
+          <h3 data-i18n="install.3.h">Clear the quarantine flag</h3>
+          <p data-i18n="install.3.p">The app isn't notarized, so clear its quarantine flag before the first launch, then open it normally:</p>
+          <div class="cmd">
+            <code>cd ~/Applications &amp;&amp; xattr -dr com.apple.quarantine m_capture.app</code>
+            <button type="button" data-copy data-i18n="install.copy">Copy</button>
+          </div>
+          <p data-i18n="install.3.alt">No Terminal? Open the app once, then in <strong>System Settings → Privacy &amp; Security</strong> click <strong>Open Anyway → Open</strong> (macOS 14 and earlier: <strong>Right-click → Open</strong>).</p>
+        </div>
+      </div>
+
+      <div class="istep">
+        <div class="n">4</div>
+        <div>
+          <h3 data-i18n="install.4.h">Grant Screen Recording</h3>
+          <p data-i18n="install.4.p">On first capture, macOS asks for <strong>Screen Recording</strong> permission. Approve m_capture under <strong>System Settings → Privacy &amp; Security → Screen Recording</strong> and relaunch.</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<section id="how" class="glow-l">
   <div class="wrap">
     <div class="sec-head">
       <span class="eyebrow" data-i18n="how.eyebrow">How it works</span>
@@ -407,7 +562,7 @@
           <div class="step-body">
             <span class="num">01</span>
             <h3 data-i18n="how.1.h">Press a hotkey</h3>
-            <p data-i18n="how.1.p">Hit <kbd>⌃⇧X</kbd> for a screenshot or <kbd>⌃⇧R</kbd> to record, and a dim selection overlay slides in instantly — ready for you to frame the shot, with no app to launch and no window to hunt down.</p>
+            <p data-i18n="how.1.p">Hit <kbd>⌃⇧X</kbd> for a screenshot or <kbd>⌃⇧R</kbd> to record — a dim selection overlay slides in instantly, no app to launch.</p>
           </div>
         </div>
         <div class="step">
@@ -417,7 +572,7 @@
           <div class="step-body">
             <span class="num">02</span>
             <h3 data-i18n="how.2.h">Drag a region</h3>
-            <p data-i18n="how.2.p">Drag out any region with a live size readout following your cursor, or tap <kbd>Space</kbd> to switch to whole-screen mode and click. It stays fully multi-monitor aware across every display.</p>
+            <p data-i18n="how.2.p">Drag out any region with a live size readout, or tap <kbd>Space</kbd> for whole-screen mode. Fully multi-monitor aware.</p>
           </div>
         </div>
         <div class="step">
@@ -427,10 +582,117 @@
           <div class="step-body">
             <span class="num">03</span>
             <h3 data-i18n="how.3.h">Annotate &amp; deliver</h3>
-            <p data-i18n="how.3.p">The in-place editor opens right over your capture for arrows, text, shapes, blur and more. When it looks right, hit <kbd>⌘C</kbd> to copy to the clipboard or <kbd>⌘S</kbd> to save a file — your call.</p>
+            <p data-i18n="how.3.p">The in-place editor opens right over your capture. Hit <kbd>⌘C</kbd> to copy or <kbd>⌘S</kbd> to save — your call.</p>
           </div>
         </div>
       </div>
+    </div>
+  </div>
+</section>
+
+<section id="feedback" class="feedback">
+  <div class="wrap">
+    <div class="fb-copy">
+      <span class="eyebrow" data-i18n="idea.eyebrow">Feedback</span>
+      <h2 data-i18n="idea.h2">Got an idea for m_capture?</h2>
+      <p data-i18n="idea.p">Missing a tool, a shortcut, an export format? Send it our way — every suggestion is read.</p>
+      <a class="btn-dark" href="mailto:tuyen.nguyen@mesoneer.io?subject=m_capture%20%E2%80%94%20Feature%20request">
+        <span data-i18n="idea.btn">Request a feature</span>
+        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
+      </a>
+    </div>
+    <div class="fb-art" aria-hidden="true">
+      <svg viewBox="0 -18 240 240" fill="none">
+        <circle cx="120" cy="102" r="88" fill="#432a84" fill-opacity=".06"/>
+        <g stroke="#9b7fd4" stroke-width="3.4" stroke-linecap="round">
+          <path d="M120 14v16"/>
+          <path d="M188 42l-11 11"/>
+          <path d="M52 42l11 11"/>
+          <path d="M206 102h-16"/>
+          <path d="M34 102h16"/>
+        </g>
+        <circle cx="120" cy="102" r="46" fill="#fff" stroke="#432a84" stroke-width="5"/>
+        <path d="M108 114l12-18 12 18" stroke="#7a5cc0" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M106 150h28v16a6 6 0 0 1-6 6h-16a6 6 0 0 1-6-6z" fill="#fff" stroke="#432a84" stroke-width="5" stroke-linejoin="round"/>
+        <path d="M110 160h20M112 168h16" stroke="#432a84" stroke-width="3.6" stroke-linecap="round"/>
+      </svg>
+    </div>
+  </div>
+</section>
+
+<section id="releases" class="glow-l">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="eyebrow" data-i18n="rel.eyebrow">Changelog</span>
+      <h2 data-i18n="rel.h2">Release notes</h2>
+    </div>
+    <div class="releases">
+
+      <div class="release">
+        <span class="date" data-i18n="rel.2.date">Jun 29, 2026</span>
+        <span class="ver">v1.0.1</span>
+        <div>
+          <p class="note" data-i18n="rel.2.note">Maintenance update — fixes a handful of minor bugs and rough edges across capture and the editor.</p>
+          <a class="changelog" href="https://github.com/tuyen-nguyen-mesoneer/m_capture/releases/tag/1.0.1">
+            <span data-i18n="rel.changelog">See full changelog</span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+          </a>
+        </div>
+      </div>
+
+      <div class="release">
+        <span class="date" data-i18n="rel.1.date">Jun 29, 2026</span>
+        <span class="ver">v1.0.0</span>
+        <div>
+          <p class="note" data-i18n="rel.1.note">First public release — region &amp; full-screen capture plus in-place annotation, OCR text &amp; QR, Pin to screen, share-ready backgrounds, and before/after GIF export.</p>
+          <a class="changelog" href="https://github.com/tuyen-nguyen-mesoneer/m_capture/releases/tag/1.0.0">
+            <span data-i18n="rel.changelog">See full changelog</span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+          </a>
+        </div>
+      </div>
+
+    </div>
+    <div class="releases-more">
+      <a class="btn btn-ghost" href="https://github.com/tuyen-nguyen-mesoneer/m_capture/releases">
+        <span data-i18n="cta.releases">All releases</span>
+        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
+      </a>
+    </div>
+  </div>
+</section>
+
+<section id="faq" class="light">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="eyebrow" data-i18n="faq.eyebrow">FAQ</span>
+      <h2 data-i18n="faq.h2">Frequently asked questions</h2>
+    </div>
+    <div class="faq-list">
+      <details>
+        <summary><span data-i18n="faq.1.q">Is m_capture free?</span><span class="pm" aria-hidden="true"></span></summary>
+        <p data-i18n="faq.1.a">Yes — m_capture is open source and MIT-licensed, free for anyone to use.</p>
+      </details>
+      <details>
+        <summary><span data-i18n="faq.2.q">Which macOS versions are supported?</span><span class="pm" aria-hidden="true"></span></summary>
+        <p data-i18n="faq.2.a">macOS 13 (Ventura) and later. It runs quietly in the menu bar with no Dock icon.</p>
+      </details>
+      <details>
+        <summary><span data-i18n="faq.3.q">Why does macOS block it on first launch?</span><span class="pm" aria-hidden="true"></span></summary>
+        <p data-i18n="faq.3.a">It isn't notarized by Apple yet. Clear the quarantine flag or use <strong>Open Anyway</strong> — see <a href="#install">Get started</a> above.</p>
+      </details>
+      <details>
+        <summary><span data-i18n="faq.4.q">Where are my captures saved?</span><span class="pm" aria-hidden="true"></span></summary>
+        <p data-i18n="faq.4.a">To your chosen folder (the Desktop by default) and the clipboard. Set the format and location in Settings.</p>
+      </details>
+      <details>
+        <summary><span data-i18n="faq.5.q">Does it send my screenshots anywhere?</span><span class="pm" aria-hidden="true"></span></summary>
+        <p data-i18n="faq.5.a">No. Everything stays on your Mac — no accounts, no cloud, no telemetry.</p>
+      </details>
+      <details>
+        <summary><span data-i18n="faq.6.q">Can I change the keyboard shortcuts?</span><span class="pm" aria-hidden="true"></span></summary>
+        <p data-i18n="faq.6.a">Yes — rebind the screenshot and record hotkeys under Settings → Shortcuts.</p>
+      </details>
     </div>
   </div>
 </section>
@@ -443,6 +705,7 @@
         <a href="https://github.com/tuyen-nguyen-mesoneer/m_capture">GitHub</a>
         <a href="https://github.com/tuyen-nguyen-mesoneer/m_capture/releases" data-i18n="foot.releases">Releases</a>
         <a href="https://github.com/tuyen-nguyen-mesoneer/m_capture/issues" data-i18n="foot.bug">Report a bug</a>
+        <a href="mailto:tuyen.nguyen@mesoneer.io?subject=m_capture%20%E2%80%94%20Feature%20request" data-i18n="foot.feature">Request a feature</a>
       </div>
       <div class="foot-col">
         <h4>mesoneer</h4>
@@ -475,6 +738,9 @@
       "meta.desc": "A lightweight macOS menu-bar tool for screenshots and screen recording. Capture a region, annotate it in place, and copy or save — built in Swift with zero dependencies. By mesoneer AG.",
       "nav.features": "Features",
       "nav.how": "How it works",
+      "nav.install": "Install",
+      "nav.releases": "Releases",
+      "nav.feedback": "Feedback",
       "nav.download": "Download",
       "hero.eyebrow": "A native macOS capture tool by <span class='lc'>mesoneer</span>",
       "hero.h1": 'Capture, annotate,<br><span class="accent">share.</span>',
@@ -516,23 +782,65 @@
       "how.eyebrow": "How it works",
       "how.h2": "From a hotkey to your<br>clipboard in a few seconds",
       "how.1.h": "Press a hotkey",
-      "how.1.p": 'Hit <kbd>⌃⇧X</kbd> for a screenshot or <kbd>⌃⇧R</kbd> to record, and a dim selection overlay slides in instantly — ready for you to frame the shot, with no app to launch and no window to hunt down.',
+      "how.1.p": 'Hit <kbd>⌃⇧X</kbd> for a screenshot or <kbd>⌃⇧R</kbd> to record — a dim selection overlay slides in instantly, no app to launch.',
       "how.2.h": "Drag a region",
-      "how.2.p": 'Drag out any region with a live size readout following your cursor, or tap <kbd>Space</kbd> to switch to whole-screen mode and click. It stays fully multi-monitor aware across every display.',
+      "how.2.p": 'Drag out any region with a live size readout, or tap <kbd>Space</kbd> for whole-screen mode. Fully multi-monitor aware.',
       "how.3.h": "Annotate & deliver",
-      "how.3.p": 'The in-place editor opens right over your capture for arrows, text, shapes, blur and more. When it looks right, hit <kbd>⌘C</kbd> to copy to the clipboard or <kbd>⌘S</kbd> to save a file — your call.',
-      "dl.req": "Requires macOS 13 or later and Screen Recording permission<br>(System Settings → Privacy & Security → Screen Recording).",
+      "how.3.p": 'The in-place editor opens right over your capture. Hit <kbd>⌘C</kbd> to copy or <kbd>⌘S</kbd> to save — your call.',
+      "install.eyebrow": "Get started",
+      "install.h2": "Installing m_capture",
+      "install.p": "m_capture isn't notarized by Apple yet, so the first launch takes a couple of one-time steps.",
+      "install.1.h": "Download the DMG",
+      "install.1.p": "Download the latest <a href='https://github.com/tuyen-nguyen-mesoneer/m_capture/releases/latest/download/m_capture.dmg'>m_capture.dmg</a> from <a href='https://github.com/tuyen-nguyen-mesoneer/m_capture/releases'>Releases</a> and open it.",
+      "install.2.h": "Drag it to your Applications",
+      "install.2.p": "Drag <strong>m_capture.app</strong> into your home <strong>Applications</strong> folder (<code>~/Applications</code>) — not the system <code>/Applications</code>, which can trigger app-blocking admin prompts. Create it if needed.",
+      "install.3.h": "Clear the quarantine flag",
+      "install.3.p": "The app isn't notarized, so clear its quarantine flag before the first launch, then open it normally:",
+      "install.3.alt": "No Terminal? Open the app once, then in <strong>System Settings → Privacy & Security</strong> click <strong>Open Anyway → Open</strong> (macOS 14 and earlier: <strong>Right-click → Open</strong>).",
+      "install.4.h": "Grant Screen Recording",
+      "install.4.p": "On first capture, macOS asks for <strong>Screen Recording</strong> permission. Approve m_capture under <strong>System Settings → Privacy & Security → Screen Recording</strong> and relaunch.",
+      "install.copy": "Copy",
+      "rel.eyebrow": "Changelog",
+      "rel.h2": "Release notes",
+      "rel.changelog": "See full changelog",
+      "rel.1.date": "Jun 29, 2026",
+      "rel.1.note": "First public release — region & full-screen capture plus in-place annotation, OCR text & QR, Pin to screen, share-ready backgrounds, and before/after GIF export.",
+      "rel.2.date": "Jun 29, 2026",
+      "rel.2.note": "Maintenance update — fixes a handful of minor bugs and rough edges across capture and the editor.",
+      "idea.eyebrow": "Feedback",
+      "idea.h2": "Got an idea for m_capture?",
+      "idea.p": "Missing a tool, a shortcut, an export format? Send it our way — every suggestion is read.",
+      "idea.btn": "Request a feature",
       "foot.col.project": "Project",
       "foot.releases": "Releases",
       "foot.bug": "Report a bug",
+      "foot.feature": "Request a feature",
       "foot.website": "Website",
-      "foot.about": "About us"
+      "foot.about": "About us",
+      "nav.faq": "FAQ",
+      "faq.eyebrow": "FAQ",
+      "faq.h2": "Frequently asked questions",
+      "faq.1.q": "Is m_capture free?",
+      "faq.1.a": "Yes — m_capture is open source and MIT-licensed, free for anyone to use.",
+      "faq.2.q": "Which macOS versions are supported?",
+      "faq.2.a": "macOS 13 (Ventura) and later. It runs quietly in the menu bar with no Dock icon.",
+      "faq.3.q": "Why does macOS block it on first launch?",
+      "faq.3.a": "It isn't notarized by Apple yet. Clear the quarantine flag or use <strong>Open Anyway</strong> — see <a href='#install'>Get started</a> above.",
+      "faq.4.q": "Where are my captures saved?",
+      "faq.4.a": "To your chosen folder (the Desktop by default) and the clipboard. Set the format and location in Settings.",
+      "faq.5.q": "Does it send my screenshots anywhere?",
+      "faq.5.a": "No. Everything stays on your Mac — no accounts, no cloud, no telemetry.",
+      "faq.6.q": "Can I change the keyboard shortcuts?",
+      "faq.6.a": "Yes — rebind the screenshot and record hotkeys under Settings → Shortcuts."
     },
     de: {
       "meta.title": "m_capture | mesoneer Bildschirm erfassen",
       "meta.desc": "Ein schlankes macOS-Menüleisten-Tool für Screenshots und Bildschirmaufnahmen. Bereich aufnehmen, direkt annotieren und kopieren oder speichern — in Swift gebaut, ohne Abhängigkeiten. Von mesoneer AG.",
       "nav.features": "Funktionen",
       "nav.how": "So funktioniert's",
+      "nav.install": "Installation",
+      "nav.releases": "Releases",
+      "nav.feedback": "Feedback",
       "nav.download": "Download",
       "hero.eyebrow": "Ein natives <span class='lc'>macOS</span>-Capture-Tool von <span class='lc'>mesoneer</span>",
       "hero.h1": 'Aufnehmen, annotieren,<br><span class="accent">teilen.</span>',
@@ -548,19 +856,19 @@
       "feat.h2": "Alles, was du brauchst — und nichts, was du nicht brauchst",
       "feat.p": "Ein komplettes Annotations-Toolkit und teilbare Ergebnisse — alles läuft lokal auf deinem Mac, ohne Konto, ohne Cloud, und nichts verlässt dein Gerät.",
       "feat.1.h": "Direkt annotieren",
-      "feat.1.p": "Der Editor öffnet sich direkt über deiner Aufnahme. Stift, Marker, Pfeile, Formen, Text, nummerierte Schritte, Weichzeichnen, Spotlight und Emoji-Stempel.",
+      "feat.1.p": "Der Editor öffnet sich direkt über deiner Aufnahme — Stift, Marker, Pfeile, Formen, Text, Weichzeichnen, Spotlight und Emoji.",
       "feat.10.h": "Größe ändern & zuschneiden",
-      "feat.10.p": "Zieh an den Ecken, um beliebig zu skalieren, oder schneide zu, drehe und spiegle — deine Annotationen werden eingebacken, jeder Export bleibt scharf.",
+      "feat.10.p": "Zieh an den Ecken zum Skalieren, oder schneide zu, drehe und spiegle — Annotationen werden eingebacken, jeder Export bleibt scharf.",
       "feat.11.h": "Bildschirm-Lineal",
       "feat.11.p": "Leg ein Pixel-Lineal über deine Aufnahme — mit den Pfeiltasten dimensionieren, zum Messen bewegen, per Klick die Maßangabe einprägen.",
       "feat.12.h": "Bis auf die Pixel zoomen",
       "feat.12.p": "Vergrößere jeden Bereich in ein scharfes Callout. Alles bleibt in voller Auflösung — der Ausschnitt und dein Export werden nie unscharf.",
       "feat.2.h": "Am Bildschirm anheften",
-      "feat.2.p": "Heft jede Aufnahme über allen Apps und über Spaces hinweg an. Zum Verschieben ziehen, an den Ecken skalieren — ideal als Referenz beim Arbeiten.",
+      "feat.2.p": "Heft jede Aufnahme über allen Apps und Spaces an. Ziehen zum Verschieben, an den Ecken skalieren — ideal als Referenz.",
       "feat.3.h": "Text & QR kopieren",
       "feat.3.p": "Hol auswählbaren Text heraus oder decodiere einen QR-Code direkt aus jedem Screenshot — mit On-Device-OCR auf Basis von Apple Vision.",
       "feat.4.h": "Teilbare Hintergründe",
-      "feat.4.p": "Setz deine Aufnahme auf einen edlen Rahmen mit Polsterung, Schatten und runden Ecken — zehn Vorlagen oder deine eigene Farbe, in voller Auflösung gerendert.",
+      "feat.4.p": "Setz deine Aufnahme auf einen edlen Rahmen mit Schatten und runden Ecken — zehn Vorlagen oder deine eigene Farbe, voll aufgelöst.",
       "feat.5.h": "Vorher-/Nachher-GIF",
       "feat.5.p": "Mach aus Original und bearbeiteter Aufnahme mit einem Klick ein animiertes Vorher-Nachher-GIF — mit ImageIO, ohne Zusatztools.",
       "feat.6.h": "Frei belegbare Hotkeys",
@@ -570,21 +878,60 @@
       "feat.8.h": "Bildschirmaufnahme",
       "feat.8.p": "Ein Hotkey übergibt an die native macOS-Bildschirmaufnahme (⇧⌘5) — sie öffnet sich im zuletzt genutzten Modus.",
       "feat.9.h": "Privat & schlank",
-      "feat.9.p": "Kein Konto, keine Cloud, keine Telemetrie — jede Aufnahme bleibt auf deinem Mac. In Swift gebaut, ohne Abhängigkeiten, dezent in der Menüleiste.",
+      "feat.9.p": "Kein Konto, keine Cloud, keine Telemetrie — alles bleibt auf deinem Mac. In Swift gebaut, ohne Abhängigkeiten.",
       "how.eyebrow": "So funktioniert's",
       "how.h2": "Von einem Hotkey in deine<br>Zwischenablage in Sekunden",
       "how.1.h": "Hotkey drücken",
-      "how.1.p": 'Drück <kbd>⌃⇧X</kbd> für einen Screenshot oder <kbd>⌃⇧R</kbd> zum Aufnehmen, und sofort erscheint ein abgedunkeltes Auswahl-Overlay — bereit, damit du den Ausschnitt festlegst, ganz ohne App-Start und Fenstersuche.',
+      "how.1.p": 'Drück <kbd>⌃⇧X</kbd> für einen Screenshot oder <kbd>⌃⇧R</kbd> zum Aufnehmen — sofort erscheint ein abgedunkeltes Auswahl-Overlay, ganz ohne App-Start.',
       "how.2.h": "Bereich aufziehen",
-      "how.2.p": 'Zieh mit einer Live-Größenanzeige einen beliebigen Bereich auf, oder tipp <kbd>Leertaste</kbd> für den Vollbildmodus und klick. Voll Multi-Monitor-fähig und auf jedem Bildschirm gleich.',
+      "how.2.p": 'Zieh einen Bereich mit Live-Größenanzeige auf, oder tipp <kbd>Leertaste</kbd> für den Vollbildmodus. Voll Multi-Monitor-fähig.',
       "how.3.h": "Annotieren & ausgeben",
-      "how.3.p": 'Der Editor öffnet sich direkt über deiner Aufnahme — für Pfeile, Text, Formen, Weichzeichnen und mehr. Passt alles, drück <kbd>⌘C</kbd> zum Kopieren in die Zwischenablage oder <kbd>⌘S</kbd> zum Speichern als Datei.',
-      "dl.req": "Erfordert macOS 13 oder neuer und die Berechtigung zur Bildschirmaufnahme<br>(Systemeinstellungen → Datenschutz & Sicherheit → Bildschirmaufnahme).",
+      "how.3.p": 'Der Editor öffnet sich direkt über deiner Aufnahme. Drück <kbd>⌘C</kbd> zum Kopieren oder <kbd>⌘S</kbd> zum Speichern — deine Wahl.',
+      "install.eyebrow": "Erste Schritte",
+      "install.h2": "m_capture installieren",
+      "install.p": "m_capture wurde noch nicht von Apple notarisiert, daher sind beim ersten Start ein paar einmalige Schritte nötig.",
+      "install.1.h": "DMG herunterladen",
+      "install.1.p": "Lade die neueste <a href='https://github.com/tuyen-nguyen-mesoneer/m_capture/releases/latest/download/m_capture.dmg'>m_capture.dmg</a> von <a href='https://github.com/tuyen-nguyen-mesoneer/m_capture/releases'>Releases</a> und öffne sie.",
+      "install.2.h": "In den Applications-Ordner ziehen",
+      "install.2.p": "Zieh <strong>m_capture.app</strong> in deinen Home-Ordner <code>~/Applications</code> — nicht das System-<code>/Applications</code>, das App-blockierende Admin-Abfragen auslösen kann.",
+      "install.3.h": "Quarantäne-Flag entfernen",
+      "install.3.p": "Die App ist nicht notarisiert — entferne vor dem ersten Start ihr Quarantäne-Flag und öffne sie dann normal:",
+      "install.3.alt": "Kein Terminal? Öffne die App einmal, dann in <strong>Systemeinstellungen → Datenschutz & Sicherheit</strong> auf <strong>Trotzdem öffnen → Öffnen</strong> klicken (macOS 14 und früher: <strong>Rechtsklick → Öffnen</strong>).",
+      "install.4.h": "Bildschirmaufnahme erlauben",
+      "install.4.p": "Bei der ersten Aufnahme fragt macOS nach der Berechtigung zur <strong>Bildschirmaufnahme</strong>. Erteile sie unter <strong>Systemeinstellungen → Datenschutz & Sicherheit → Bildschirmaufnahme</strong> und starte neu.",
+      "install.copy": "Kopieren",
+      "rel.eyebrow": "Änderungen",
+      "rel.h2": "Versionshinweise",
+      "rel.changelog": "Vollständiges Changelog ansehen",
+      "rel.1.date": "29. Juni 2026",
+      "rel.1.note": "Erste öffentliche Version — Bereichs- und Vollbildaufnahme samt direkter Annotation, OCR-Text & QR, Am Bildschirm anheften, teilbare Hintergründe und Vorher-/Nachher-GIF-Export.",
+      "rel.2.date": "29. Juni 2026",
+      "rel.2.note": "Wartungsupdate — behebt einige kleinere Fehler und Feinschliff bei Aufnahme und Editor.",
+      "idea.eyebrow": "Feedback",
+      "idea.h2": "Eine Idee für m_capture?",
+      "idea.p": "Fehlt ein Werkzeug, ein Tastaturkürzel, ein Exportformat? Schick es uns — jeder Vorschlag wird gelesen.",
+      "idea.btn": "Funktion vorschlagen",
       "foot.col.project": "Projekt",
       "foot.releases": "Releases",
       "foot.bug": "Fehler melden",
+      "foot.feature": "Funktion vorschlagen",
       "foot.website": "Website",
-      "foot.about": "Über uns"
+      "foot.about": "Über uns",
+      "nav.faq": "FAQ",
+      "faq.eyebrow": "FAQ",
+      "faq.h2": "Häufig gestellte Fragen",
+      "faq.1.q": "Ist m_capture kostenlos?",
+      "faq.1.a": "Ja — m_capture ist quelloffen und MIT-lizenziert, kostenlos für alle.",
+      "faq.2.q": "Welche macOS-Versionen werden unterstützt?",
+      "faq.2.a": "macOS 13 (Ventura) und neuer. Läuft dezent in der Menüleiste, ohne Dock-Symbol.",
+      "faq.3.q": "Warum blockiert macOS die App beim ersten Start?",
+      "faq.3.a": "Sie ist noch nicht von Apple notarisiert. Entferne das Quarantäne-Flag oder nutze <strong>Trotzdem öffnen</strong> — siehe <a href='#install'>Erste Schritte</a> oben.",
+      "faq.4.q": "Wo werden meine Aufnahmen gespeichert?",
+      "faq.4.a": "In deinem gewählten Ordner (standardmäßig Schreibtisch) und in der Zwischenablage. Format und Ort legst du in den Einstellungen fest.",
+      "faq.5.q": "Werden meine Screenshots irgendwohin gesendet?",
+      "faq.5.a": "Nein. Alles bleibt auf deinem Mac — kein Konto, keine Cloud, keine Telemetrie.",
+      "faq.6.q": "Kann ich die Tastenkürzel ändern?",
+      "faq.6.a": "Ja — leg die Hotkeys für Screenshot und Aufnahme unter Einstellungen → Tastenkürzel neu fest."
     }
   };
 
@@ -635,6 +982,27 @@
     b.addEventListener('click', function(){ apply(b.getAttribute('data-lang')); });
   });
   apply(detect());
+})();
+</script>
+
+<script>
+// Copy the install command to the clipboard; falls back to selecting it.
+(function(){
+  document.querySelectorAll('[data-copy]').forEach(function(b){
+    b.addEventListener('click', function(){
+      var code = b.parentElement.querySelector('code');
+      if(!code) return;
+      var label = b.getAttribute('data-label') || b.textContent;
+      b.setAttribute('data-label', label);
+      function flash(){ b.textContent = '✓'; setTimeout(function(){ b.textContent = b.getAttribute('data-label'); }, 1400); }
+      if(navigator.clipboard && navigator.clipboard.writeText){
+        navigator.clipboard.writeText(code.textContent).then(flash, flash);
+      } else {
+        var r = document.createRange(); r.selectNodeContents(code);
+        var s = window.getSelection(); s.removeAllRanges(); s.addRange(r); flash();
+      }
+    });
+  });
 })();
 </script>
 
