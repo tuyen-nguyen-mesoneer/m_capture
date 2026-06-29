@@ -3,7 +3,7 @@
 A lightweight **macOS menu-bar tool for screenshots and screen recording**, built
 in **Swift + AppKit** — no external dependencies, no Xcode project (compiled with
 `swiftc`). Internal tool by [mesoneer AG](https://www.mesoneer.io/?r=0),
-MIT-licensed. Targets macOS 13+; bundle id `io.mesoneer.mcapture`.
+MIT-licensed. Targets macOS 14+; bundle id `io.mesoneer.mcapture`.
 
 ## Build & run
 
@@ -14,8 +14,10 @@ MIT-licensed. Targets macOS 13+; bundle id `io.mesoneer.mcapture`.
 
 `build.sh` compiles `Sources/*.swift`, assembles the `.app` (+ `Info.plist`, icon
 via `tools/makeicon.swift`), code-signs, and builds the DMG; the version is set
-here. The app runs as a menu-bar agent (`LSUIElement`) — look for the **m.** icon,
-no Dock icon. No automated tests; smoke-test by hand.
+here. It pins the deployment target with `-target …-macos14.0` to match
+`LSMinimumSystemVersion` (ScreenCaptureKit's capture API needs macOS 14). The app
+runs as a menu-bar agent (`LSUIElement`) — look for the **m.** icon, no Dock icon.
+No automated tests; smoke-test by hand.
 
 Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
 **[`CONTRIBUTING.md`](CONTRIBUTING.md)**.
@@ -45,11 +47,12 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
   clicked button index; used by `Updater` for the update / up-to-date / error dialogs.
 - `Theme.swift` — brand palette + fonts; the single styling source.
 - `Logo.swift` — the "m." logo / menu-bar glyph, drawn in code.
-- `ScreenshotController.swift` — selection-overlay windows; grabs the rect via
-  `screencapture -R`; `deliver(_:)` routes the result per `CaptureBehavior`
-  (editor / save / clipboard). Multi-monitor coordinate math lives in `finish`.
-  Gated on `ScreenRecordingPermission` so a denied grant guides the user instead
-  of silently producing nothing.
+- `ScreenshotController.swift` — selection-overlay windows; grabs the rect
+  *in-process* via ScreenCaptureKit (`SCScreenshotManager`, macOS 14+);
+  `deliver(_:)` routes the result per `CaptureBehavior` (editor / save / clipboard).
+  Multi-monitor coordinate math lives in `finish`. Gated on
+  `ScreenRecordingPermission` so a denied grant guides the user instead of
+  silently producing nothing.
 - `Permissions.swift` — `ScreenRecordingPermission`: `CGPreflightScreenCaptureAccess`
   check + the guidance alert / System Settings deep link when Screen Recording is off.
 - `SelectionOverlay.swift` — the dim drag-to-select overlay; **Space** toggles
@@ -110,22 +113,23 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
 ## Gotchas
 
 - **Screen Recording permission is required, and the grant resets on rebuild.**
-  Capture shells out to `/usr/sbin/screencapture`. `build.sh` ad-hoc signs
-  (`codesign -s -`), so a rebuild can read as a new identity and reset the grant —
-  re-approve under *System Settings → Privacy & Security → Screen Recording* and
-  relaunch if capture silently produces nothing. A self-signed `m_capture-dev` cert
-  (see CONTRIBUTING.md) gives a stable identity so the grant persists.
-- **All capture is out-of-process** via the `screencapture` subprocess — the app
-  grabs no pixels itself. `CGDisplayCreateImage` / `CGWindowListCreateImage` are
-  *obsoleted* (hard compile error) in the macOS 15 SDK; in-process pixels would
-  need ScreenCaptureKit (`SCScreenshotManager`, macOS 14+), not currently a dependency.
-- **Multi-monitor coordinates** are flipped against the *primary* screen's height
-  (`primaryHeight - maxY`) before `screencapture -R` — all in
-  `ScreenshotController.finish`. Change there, carefully.
-- **Capture latency / overlay.** The editor opens only *after* the `screencapture`
-  subprocess finishes (it writes a temp PNG, reloaded then deleted). A short
-  `asyncAfter` delay in `finish` first lets the dim overlay clear so it isn't in the
-  shot; the subprocess spawn is the dominant, variable cost.
+  `build.sh` ad-hoc signs (`codesign -s -`), so a rebuild can read as a new identity
+  and reset the grant — re-approve under *System Settings → Privacy & Security →
+  Screen Recording* and relaunch if capture silently produces nothing. A self-signed
+  `m_capture-dev` cert (see CONTRIBUTING.md) gives a stable identity so the grant persists.
+- **Capture is in-process** via ScreenCaptureKit (`SCScreenshotManager.captureImage`,
+  macOS 14+) — the app grabs the pixels itself, no subprocess. This replaced the old
+  `/usr/sbin/screencapture` subprocess, which stalled for *minutes* on managed Macs
+  where endpoint-security software gated each process spawn. `CGDisplayCreateImage` /
+  `CGWindowListCreateImage` are *obsoleted* (hard compile error) in the macOS 15 SDK,
+  so ScreenCaptureKit is the only supported in-process route — hence the macOS 14 floor.
+- **Multi-monitor coordinates.** `finish` maps the overlay's per-screen (bottom-left)
+  `viewRect` into ScreenCaptureKit's `sourceRect` (points, top-left origin, relative
+  to the display) by flipping Y within *that screen's* height (`screen.frame.height -
+  viewRect.maxY`); pixel size is `viewRect × backingScaleFactor`. Change there, carefully.
+- **Capture latency / overlay.** A short `asyncAfter` delay in `finish` lets the dim
+  overlay clear (a couple of compositor frames) so it isn't in the shot; the actual
+  ScreenCaptureKit grab then runs asynchronously off a `Task`, so the UI never stalls.
 - **Save is async.** `savePressed` flattens on the main thread, then encodes/writes
   off a background queue (the window closes immediately). Files are named
   `<prefix><HH-mm-ss-dd-MM-yyyy>.<ext>` (from Settings, default `m_capture_` / PNG).
@@ -136,7 +140,7 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
 ## Conventions
 
 - **No external dependencies** — system frameworks only (AppKit / CoreImage / Carbon
-  / Vision / ImageIO). Write original code; match the surrounding Swift.
+  / Vision / ImageIO / ScreenCaptureKit). Write original code; match the surrounding Swift.
 - **All styling goes through `Theme.swift`** — never hardcode colors or fonts.
 - **Every screen follows the mesoneer brand style** — all user-facing windows,
   dialogs, popovers and menus use the brand panel chrome (`Theme` gradient + square

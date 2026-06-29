@@ -1,6 +1,8 @@
 // m_capture — independent implementation.
 // SPDX-License-Identifier: MIT
 import AppKit
+import CoreGraphics
+import ScreenCaptureKit
 
 /// Shows the dim selection overlay, grabs the chosen region, and opens the
 /// in-place editor (with a dimmed live-desktop backdrop).
@@ -31,17 +33,8 @@ final class ScreenshotController {
         }
     }
 
-    /// Common `screencapture` flags from Settings. Always `-x` (silent) — a
-    /// non-interactive capture won't emit the shutter sound anyway, so we play it
-    /// ourselves (see `playCaptureSoundIfEnabled`). Cursor only when opted in.
-    private static var captureFlags: [String] {
-        var f = ["-x"]
-        if Settings.shared.captureCursor { f.append("-C") }
-        return f
-    }
-
     /// The system screenshot shutter sound, played when the user enables it
-    /// (`screencapture -R/-l` is otherwise silent).
+    /// (the in-process capture is otherwise silent).
     private static func playCaptureSoundIfEnabled() {
         guard Settings.shared.playSound else { return }
         let path = "/System/Library/Components/CoreAudio.component/Contents/SharedSupport/SystemSounds/system/Grab.aif"
@@ -87,12 +80,49 @@ final class ScreenshotController {
         }
     }
 
-    /// A missing/empty capture almost always means Screen Recording was revoked
-    /// after launch (the pre-check in `begin()` catches the common case up front).
-    /// Clean up the temp file and guide the user rather than failing silently.
-    private static func handleEmptyCapture(at tmp: String) {
-        try? FileManager.default.removeItem(atPath: tmp)
+    /// A nil capture almost always means Screen Recording was revoked after
+    /// launch (the pre-check in `begin()` catches the common case up front).
+    /// Guide the user rather than failing silently.
+    private static func handleEmptyCapture() {
         if !ScreenRecordingPermission.isGranted { ScreenRecordingPermission.handleDenied() }
+    }
+
+    // MARK: - In-process capture
+
+    /// Grab an on-screen region in-process with ScreenCaptureKit, rather than
+    /// shelling out to `/usr/sbin/screencapture`.
+    ///
+    /// The old subprocess spawned a process per capture. On managed Macs,
+    /// endpoint-security software gated each spawn and could stall the capture for
+    /// *minutes*. Staying in-process avoids that, drops the temp-file round-trip,
+    /// and lets ScreenCaptureKit draw the pointer natively. (`CGWindowListCreateImage`
+    /// was obsoleted in macOS 15, so SCK is the only in-process route.)
+    ///
+    /// `sourceRect` is the region within the display in points, top-left origin;
+    /// `pixelWidth`/`pixelHeight` are the output size in native pixels.
+    private static func captureRegion(displayID: CGDirectDisplayID, sourceRect: CGRect,
+                                      pixelWidth: Int, pixelHeight: Int,
+                                      showsCursor: Bool) async -> CGImage? {
+        do {
+            let content = try await SCShareableContent.current
+            guard let display = content.displays.first(where: { $0.displayID == displayID }) else { return nil }
+            let filter = SCContentFilter(display: display, excludingWindows: [])
+            let config = SCStreamConfiguration()
+            config.sourceRect = sourceRect
+            config.width = max(1, pixelWidth)
+            config.height = max(1, pixelHeight)
+            config.showsCursor = showsCursor
+            config.captureResolution = .best
+            return try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: config)
+        } catch {
+            return nil
+        }
+    }
+
+    /// Wrap a captured CGImage as a pixel-sized NSImage (scale 1), so the editor's
+    /// display-scale math (`selectionRect.width / image.size.width`) stays correct.
+    private static func image(from cg: CGImage) -> NSImage {
+        NSImage(cgImage: cg, size: NSSize(width: cg.width, height: cg.height))
     }
 
     private func finish(viewRect: CGRect, screen: NSScreen) {
@@ -101,33 +131,45 @@ final class ScreenshotController {
                             width: viewRect.width, height: viewRect.height)
         dismiss()
         guard global.width >= 3, global.height >= 3 else { return }
+        guard let displayID = screen.displayID else { return }
 
-        let zero = NSScreen.screens.first { $0.frame.origin == .zero } ?? NSScreen.screens[0]
-        let primaryHeight = zero.frame.height
-        let capX = Int(global.minX.rounded()), capY = Int((primaryHeight - global.maxY).rounded())
-        let capW = Int(global.width.rounded()), capH = Int(global.height.rounded())
+        // ScreenCaptureKit's sourceRect is in points with a top-left origin,
+        // relative to the display; `viewRect` is the overlay's (bottom-left,
+        // per-screen) coordinate space, so flip Y within the screen's height.
+        let scale = screen.backingScaleFactor
+        let sourceRect = CGRect(x: viewRect.minX,
+                                y: screen.frame.height - viewRect.maxY,
+                                width: viewRect.width, height: viewRect.height)
+        let pixelWidth = Int((viewRect.width * scale).rounded())
+        let pixelHeight = Int((viewRect.height * scale).rounded())
+        let showsCursor = Settings.shared.captureCursor
 
-        let tmp = NSTemporaryDirectory() + "mcap_\(UUID().uuidString).png"
         // Let the overlay clear before grabbing pixels (a couple of compositor
-        // frames is enough; the dominant cost is the screencapture subprocess).
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.04) {
-            let proc = Process()
-            proc.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
-            proc.arguments = ScreenshotController.captureFlags + ["-R", "\(capX),\(capY),\(capW),\(capH)", tmp]
+        // frames), then capture asynchronously so the UI never stalls.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.06) {
             ScreenshotController.playCaptureSoundIfEnabled()
-            proc.terminationHandler = { _ in
-                DispatchQueue.main.async {
-                    guard FileManager.default.fileExists(atPath: tmp),
-                          let img = NSImage(contentsOfFile: tmp),
-                          img.size.width > 0, img.size.height > 0 else {
-                        ScreenshotController.handleEmptyCapture(at: tmp)
-                        return
-                    }
-                    try? FileManager.default.removeItem(atPath: tmp)
-                    ScreenshotController.deliver(img, selectionRect: global, screen: screen)
+            // `screen` is only ever touched on the main thread (here and in the
+            // MainActor hop below); NSScreen isn't Sendable, so mark the crossing
+            // explicitly rather than tripping the concurrency checker.
+            nonisolated(unsafe) let deliverScreen = screen
+            Task {
+                let cg = await ScreenshotController.captureRegion(
+                    displayID: displayID, sourceRect: sourceRect,
+                    pixelWidth: pixelWidth, pixelHeight: pixelHeight, showsCursor: showsCursor)
+                await MainActor.run {
+                    guard let cg else { ScreenshotController.handleEmptyCapture(); return }
+                    ScreenshotController.deliver(ScreenshotController.image(from: cg),
+                                                selectionRect: global, screen: deliverScreen)
                 }
             }
-            try? proc.run()
         }
+    }
+}
+
+private extension NSScreen {
+    /// The CoreGraphics display ID backing this screen, for matching against
+    /// ScreenCaptureKit's `SCDisplay`.
+    var displayID: CGDirectDisplayID? {
+        (deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value
     }
 }
