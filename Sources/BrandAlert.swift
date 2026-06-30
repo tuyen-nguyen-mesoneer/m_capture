@@ -18,10 +18,8 @@ final class BrandAlert: NSObject {
         self.cancelIndex = cancel
         self.result = cancel
 
-        // Vertical rhythm, laid out top-down (mirrors AboutWindow); the height is
-        // derived from it so the margins stay balanced for any title/message length.
         let side: CGFloat = 24
-        let contentWidth: CGFloat = 260            // the message wraps within this
+        let contentWidth: CGFloat = 260
         let panelWidth = contentWidth + side * 2
         let topMargin: CGFloat = 24
         let gTitleMsg: CGFloat = 8, gMsgButtons: CGFloat = 16
@@ -36,8 +34,6 @@ final class BrandAlert: NSObject {
         let height = topMargin + titleH + gTitleMsg + msgH + gMsgButtons + buttonH + bottom
         let size = NSSize(width: panelWidth, height: ceil(height))
 
-        // Borderless → square corners (macOS rounds `.titled`); chrome is the brand
-        // gradient + a 1px border, matching the About panel and the brand menu.
         panel = AlertPanel(contentRect: NSRect(origin: .zero, size: size),
                            styleMask: .borderless, backing: .buffered, defer: false)
         panel.isReleasedWhenClosed = false
@@ -48,8 +44,6 @@ final class BrandAlert: NSObject {
         let content = NSView(frame: NSRect(origin: .zero, size: size))
         content.wantsLayer = true
         Theme.applyPanelGradient(to: content)
-        content.layer?.borderWidth = 1
-        content.layer?.borderColor = Theme.border.cgColor
 
         super.init()
 
@@ -63,7 +57,6 @@ final class BrandAlert: NSObject {
         content.addSubview(msgField)
         top -= msgH + gMsgButtons
 
-        // A centered row of buttons; widths fit their titles (min 76pt).
         let font = Theme.font(13, .semibold)
         let widths = titles.map { max(92, ceil(($0 as NSString).size(withAttributes: [.font: font]).width) + 36) }
         let gap: CGFloat = 10
@@ -76,13 +69,13 @@ final class BrandAlert: NSObject {
             b.tag = i
             b.target = self
             b.action = #selector(buttonClicked(_:))
-            if i == primary { b.keyEquivalent = "\r" }   // Return triggers the primary action
+            if i == primary { b.keyEquivalent = "\r" }
             content.addSubview(b)
             x += widths[i] + gap
         }
 
         panel.contentView = content
-        panel.onCancel = { [weak self] in self?.dismiss(with: cancel) }   // Esc → cancel button
+        panel.onCancel = { [weak self] in self?.dismiss(with: cancel) }
     }
 
     /// Show the panel modally and return the index of the button the user chose.
@@ -110,8 +103,6 @@ final class BrandAlert: NSObject {
         f.textColor = color
         f.alignment = .center
         f.preferredMaxLayoutWidth = width
-        // Height for the text wrapped to `width`. (Not `sizeToFit()` — that grows the
-        // field to its single-line width, which overflows the panel.)
         let height = (text as NSString).boundingRect(
             with: NSSize(width: width, height: .greatestFiniteMagnitude),
             options: [.usesLineFragmentOrigin, .usesFontLeading],
@@ -147,9 +138,6 @@ private final class BrandButton: NSButton {
         setButtonType(.momentaryChange)
         focusRingType = .none
         alignment = .center
-        // Cell renders the title (robust centering, never clipped); `draw(_:)` only
-        // paints the square brand background. Primary is white with dark ink;
-        // secondary is light on the translucent fill — matching mesoneer.io.
         attributedTitle = NSAttributedString(string: title, attributes: [
             .font: Theme.font(13, .semibold),
             .foregroundColor: kind == .primary ? Theme.surfaceBase : Theme.textPrimary,
@@ -169,8 +157,6 @@ private final class BrandButton: NSButton {
     override func resetCursorRects() { addCursorRect(bounds, cursor: .pointingHand) }
 
     override func draw(_ dirtyRect: NSRect) {
-        // Square corners, matching the brand panels. Primary = solid white; secondary
-        // = a quiet translucent fill with a hairline border (mesoneer.io CTA pair).
         switch kind {
         case .primary:
             (hovering ? NSColor(white: 0.90, alpha: 1) : .white).setFill()
@@ -181,6 +167,7 @@ private final class BrandButton: NSButton {
             Theme.cardStroke.setStroke()
             let border = NSBezierPath(rect: bounds.insetBy(dx: 0.5, dy: 0.5)); border.lineWidth = 1; border.stroke()
         }
-        super.draw(dirtyRect)   // cell renders the centered, attributed title
+        super.draw(dirtyRect)
     }
 }
+

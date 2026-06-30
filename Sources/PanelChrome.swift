@@ -5,8 +5,8 @@ import AppKit
 /// A borderless, square-cornered panel window for About / Settings. macOS rounds the
 /// corners of `.titled` windows and offers no API to square them, so these panels are
 /// borderless and supply their own chrome: a `PanelCloseButton`, Esc / ⌘W to close, and
-/// drag-anywhere-to-move (`isMovableByWindowBackground`). A 1px brand border defines the
-/// square edge, matching the (also square) brand menu.
+/// drag-anywhere-to-move (`isMovableByWindowBackground`). A soft drop shadow defines the
+/// square edge (no border), matching the other panels and the brand menu.
 final class PanelWindow: NSWindow {
     var onClose: (() -> Void)?
 
@@ -23,19 +23,18 @@ final class PanelWindow: NSWindow {
         super.keyDown(with: event)
     }
 
-    /// Wrap `content` in a square brand border and add a close button in the top-right
-    /// corner; call once after the window's final content size is set.
+    /// Give `content` square corners + a top-right close button, and a drop shadow on the
+    /// window to define the (borderless) edge; call once the window's size is final.
     func installChrome(on content: NSView, closeInset: CGFloat = 14) {
         content.wantsLayer = true
         content.layer?.cornerRadius = 0
-        content.layer?.borderWidth = 1
-        content.layer?.borderColor = Theme.border.cgColor
+        hasShadow = true
 
         let size = PanelCloseButton.size
         let close = PanelCloseButton()
         close.frame = NSRect(x: content.bounds.maxX - closeInset - size,
                              y: content.bounds.maxY - closeInset - size, width: size, height: size)
-        close.autoresizingMask = [.minXMargin, .minYMargin]   // stick to the top-right
+        close.autoresizingMask = [.minXMargin, .minYMargin]
         close.onClick = { [weak self] in self?.onClose?() }
         content.addSubview(close)
     }
@@ -82,3 +81,4 @@ final class PanelCloseButton: NSView {
         path.stroke()
     }
 }
+

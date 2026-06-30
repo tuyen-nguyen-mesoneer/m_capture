@@ -17,8 +17,6 @@ final class EmojiPickerPanel: NSObject {
     private var hoverIndex = -1
     private var current: String?
 
-    // A 5×5 grid grouped by purpose: verdict · attention · status/dev · reaction,
-    // with the brand "m." tile as the final stamp.
     static let presets = ["👍","👎","✅","❌","⭐️",
                           "💯","👀","👉","❗","⚠️",
                           "❓","💡","🔴","🟡","🟢",
@@ -41,7 +39,7 @@ final class EmojiPickerPanel: NSObject {
 
         let container = KeyGridView(frame: NSRect(x: 0, y: 0, width: panelW, height: panelH))
         container.onKey = { [weak self] in self?.handleKey($0) }
-        Theme.stylePanel(container, cornerRadius: 14)
+        Theme.stylePanel(container)
 
         let cap = NSTextField(labelWithString: "")
         Theme.styleEyebrow(cap, "Emoji")
@@ -55,7 +53,7 @@ final class EmojiPickerPanel: NSObject {
             let b = HoverCell(frame: NSRect(x: pad + CGFloat(c) * (cell + gap),
                                             y: panelH - capH - pad - CGFloat(r + 1) * cell - CGFloat(r) * gap,
                                             width: cell, height: cell))
-            if e == Logo.stampToken {     // brand tile cell, not a Unicode glyph
+            if e == Logo.stampToken {
                 b.image = Logo.image(size: 24); b.imagePosition = .imageOnly
             } else {
                 b.title = e
@@ -87,7 +85,7 @@ final class EmojiPickerPanel: NSObject {
         }
         NSApp.activate(ignoringOtherApps: true)
         win.makeKeyAndOrderFront(nil)
-        win.makeFirstResponder(container)   // so arrows / ↵ / esc work
+        win.makeFirstResponder(container)
         window = win
         NotificationCenter.default.addObserver(self, selector: #selector(resigned),
                                                name: NSWindow.didResignKeyNotification, object: win)
@@ -113,12 +111,12 @@ final class EmojiPickerPanel: NSObject {
     private func handleKey(_ code: UInt16) {
         let n = Self.presets.count
         switch code {
-        case 123: focusIndex = max(0, focusIndex - 1)                 // ←
-        case 124: focusIndex = min(n - 1, focusIndex + 1)             // →
-        case 125: focusIndex = min(n - 1, focusIndex + cols)          // ↓
-        case 126: focusIndex = max(0, focusIndex - cols)              // ↑
-        case 36, 76: pickIndex(focusIndex); return                    // ↵ / ⌤
-        case 53: close(); return                                      // esc
+        case 123: focusIndex = max(0, focusIndex - 1)
+        case 124: focusIndex = min(n - 1, focusIndex + 1)
+        case 125: focusIndex = min(n - 1, focusIndex + cols)
+        case 126: focusIndex = max(0, focusIndex - cols)
+        case 36, 76: pickIndex(focusIndex); return
+        case 53: close(); return
         default: return
         }
         updateHighlight()
@@ -158,3 +156,4 @@ private final class HoverCell: NSButton {
     override func mouseEntered(with event: NSEvent) { onHover?(true) }
     override func mouseExited(with event: NSEvent) { onHover?(false) }
 }
+

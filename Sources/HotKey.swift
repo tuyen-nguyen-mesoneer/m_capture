@@ -19,7 +19,7 @@ final class HotKey {
         self.id = HotKey.counter
         HotKey.installHandlerIfNeeded()
 
-        let hotKeyID = EventHotKeyID(signature: OSType(0x4D435054), id: id) // 'MCPT'
+        let hotKeyID = EventHotKeyID(signature: OSType(0x4D435054), id: id)
         RegisterEventHotKey(keyCode, modifiers, hotKeyID,
                             GetApplicationEventTarget(), 0, &ref)
         HotKey.registry[id] = self
@@ -54,3 +54,4 @@ final class HotKey {
         }, 1, &spec, nil, nil)
     }
 }
+

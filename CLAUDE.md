@@ -26,8 +26,10 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
 
 - **Screenshot** (⌃⇧X): a dim selection overlay → drag a region (or **Space** →
   whole-screen mode → click) → an in-place annotation editor opens over the dimmed screen.
-- **Record** (⌃⇧R): hands off to the native macOS capture toolbar (⇧⌘5) via
-  `open -b com.apple.screenshot.launcher`; reopens in its last-used mode.
+- **Record** (⌃⇧R): drag a region → record it in-process via ScreenCaptureKit
+  (`SCStream`), encoding HEVC video + AAC audio into an `.mp4`, with a floating control
+  bar (live timer, size estimate, quality badge, pause/stop). Quality and audio source
+  (system / mic / both) live in Settings.
 - Hotkeys are rebindable defaults (**Settings → Shortcuts**). Captures save to the
   configured folder (default Desktop) and copy to the clipboard; format, location
   and auto-copy live in Settings.
@@ -57,6 +59,14 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
   check + the guidance alert / System Settings deep link when Screen Recording is off.
 - `SelectionOverlay.swift` — the dim drag-to-select overlay; **Space** toggles
   Region ↔ Screen mode; draws the cutout, size readout, and mode hint.
+- `VideoRecordController.swift` — the screen-recording flow (macOS 14+): reuses the
+  region overlay, then drives `VideoRecordSession`, the floating `VideoRecordBar`, and a
+  1 Hz update tick; requests mic permission first when the audio source needs it.
+- `VideoRecordSession.swift` — records the region via ScreenCaptureKit (`SCStream`),
+  encoding HEVC video + AAC audio into an `.mp4` with `AVAssetWriter` (PTS-normalized on
+  a serial `writeQueue`).
+- `VideoRecordBar.swift` — the floating recording HUD (live timer, size estimate, quality
+  badge, pause/stop); its `windowNumber` is excluded from the `SCStream` capture.
 - `EditorWindow.swift` — the in-place annotation editor: tool tiles in five groups
   (Markup, Shapes, Color, Actions, Background) as scattered cards or one draggable
   panel. Actions owns the Select tool (move/resize/delete a placed mark; **V**),
@@ -143,11 +153,13 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
   / Vision / ImageIO / ScreenCaptureKit). Write original code; match the surrounding Swift.
 - **All styling goes through `Theme.swift`** — never hardcode colors or fonts.
 - **Every screen follows the mesoneer brand style** — all user-facing windows,
-  dialogs, popovers and menus use the brand panel chrome (`Theme` gradient + square
-  1px border, the `m.` logo, brand-styled buttons), matching About/Settings. Never
-  ship a raw system `NSAlert`, a default `NSWindow`, or an unstyled control: use
-  `BrandAlert` for alerts and the `PanelWindow` / `Theme` helpers for panels.
+  dialogs, popovers and menus use the brand panel chrome (`Theme` gradient, square
+  corners, a soft drop shadow, and **no border**, plus the `m.` logo and brand-styled
+  buttons), matching About/Settings. (The no-border rule is about panel *chrome* —
+  functional strokes like the selection ring, input fields, or a selected-item highlight
+  are fine.) Never ship a raw system `NSAlert`, a default `NSWindow`, or an unstyled
+  control: use `BrandAlert` for alerts and the `PanelWindow` / `Theme` helpers for panels.
 - **Icons are drawn in code** (SF Symbols or CoreGraphics) — no image assets.
 - Editor coordinates stay in full-resolution image space (see `CanvasView`).
-- **Comments explain *why*, not *what*** — prefer one `///` doc comment over
-  scattered inline notes.
+- **Comments explain *why*, not *what*** — put a single `///` doc comment on the
+  method or type; don't annotate the body line by line with inline `//` notes.

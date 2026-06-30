@@ -10,8 +10,8 @@ import Vision
 enum TextRecognizer {
     /// What was found in the region.
     enum Result {
-        case code(String)   // a QR / barcode payload
-        case text(String)   // recognized text
+        case code(String)
+        case text(String)
         case none
     }
 
@@ -19,7 +19,7 @@ enum TextRecognizer {
         let textReq = VNRecognizeTextRequest()
         textReq.recognitionLevel = .accurate
         textReq.usesLanguageCorrection = true
-        let codeReq = VNDetectBarcodesRequest()   // QR + other symbologies, default set
+        let codeReq = VNDetectBarcodesRequest()
 
         DispatchQueue.global(qos: .userInitiated).async {
             let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
@@ -30,7 +30,7 @@ enum TextRecognizer {
 
             let result: Result
             if !codes.isEmpty {
-                result = .code(codes.joined(separator: "\n"))   // a QR in the region wins
+                result = .code(codes.joined(separator: "\n"))
             } else if !lines.isEmpty {
                 result = .text(lines.joined(separator: "\n"))
             } else {
@@ -40,3 +40,4 @@ enum TextRecognizer {
         }
     }
 }
+

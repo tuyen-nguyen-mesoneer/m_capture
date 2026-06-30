@@ -419,7 +419,7 @@
       <div class="card">
         <div class="ic"><svg viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4"/><circle cx="12" cy="10.5" r="2.6"/></svg></div>
         <h3 data-i18n="feat.8.h">Screen recording</h3>
-        <p data-i18n="feat.8.p">A hotkey hands off to the native macOS screen recorder (⇧⌘5), which reopens in your last-used mode.</p>
+        <p data-i18n="feat.8.p">Press a hotkey, drag a region, and record it straight to an MP4 — with a floating timer, pause/stop, and optional system or microphone audio.</p>
       </div>
 
       <div class="card">
@@ -491,7 +491,6 @@
     <div class="sec-head">
       <span class="eyebrow" data-i18n="install.eyebrow">Get started</span>
       <h2 data-i18n="install.h2">Installing m_capture</h2>
-      <p data-i18n="install.p">m_capture isn't notarized by Apple yet, so the first launch takes a couple of one-time steps.</p>
     </div>
     <div class="install-steps">
 
@@ -506,29 +505,16 @@
       <div class="istep">
         <div class="n">2</div>
         <div>
-          <h3 data-i18n="install.2.h">Drag it to your Applications</h3>
-          <p data-i18n="install.2.p">Drag <strong>m_capture.app</strong> into your home <strong>Applications</strong> folder (<code>~/Applications</code>) — not the system <code>/Applications</code>, which can trigger app-blocking admin prompts. Create it if needed.</p>
+          <h3 data-i18n="install.2.h">Open and run it</h3>
+          <p data-i18n="install.2.p">Double-click <strong>m_capture</strong>. Because it isn't notarized, macOS blocks it the first time — in <strong>System Settings → Privacy &amp; Security</strong> click <strong>Open Anyway → Open</strong>. It then installs itself into <code>~/Applications</code> and reopens from there.</p>
         </div>
       </div>
 
       <div class="istep">
         <div class="n">3</div>
         <div>
-          <h3 data-i18n="install.3.h">Clear the quarantine flag</h3>
-          <p data-i18n="install.3.p">The app isn't notarized, so clear its quarantine flag before the first launch, then open it normally:</p>
-          <div class="cmd">
-            <code>cd ~/Applications &amp;&amp; xattr -dr com.apple.quarantine m_capture.app</code>
-            <button type="button" data-copy data-i18n="install.copy">Copy</button>
-          </div>
-          <p data-i18n="install.3.alt">No Terminal? Open the app once, then in <strong>System Settings → Privacy &amp; Security</strong> click <strong>Open Anyway → Open</strong> (macOS 14 and earlier: <strong>Right-click → Open</strong>).</p>
-        </div>
-      </div>
-
-      <div class="istep">
-        <div class="n">4</div>
-        <div>
-          <h3 data-i18n="install.4.h">Grant Screen Recording</h3>
-          <p data-i18n="install.4.p">On first capture, macOS asks for <strong>Screen Recording</strong> permission. Approve m_capture under <strong>System Settings → Privacy &amp; Security → Screen Recording</strong> and relaunch.</p>
+          <h3 data-i18n="install.3.h">Grant Screen Recording</h3>
+          <p data-i18n="install.3.p">On first capture, macOS asks for <strong>Screen Recording</strong> permission. Approve m_capture under <strong>System Settings → Privacy &amp; Security → Screen Recording</strong> and relaunch.</p>
         </div>
       </div>
 
@@ -627,6 +613,18 @@
       <h2 data-i18n="rel.h2">Release notes</h2>
     </div>
     <div class="releases">
+
+      <div class="release">
+        <span class="date" data-i18n="rel.3.date">Jul 2, 2026</span>
+        <span class="ver">v1.1.0</span>
+        <div>
+          <p class="note" data-i18n="rel.3.note">Video recording — capture any region to an MP4 with audio.<br>Automatic updates — new versions install in the background.</p>
+          <a class="changelog" href="https://github.com/tuyen-nguyen-mesoneer/m_capture/releases/tag/1.1.0">
+            <span data-i18n="rel.changelog">See full changelog</span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+          </a>
+        </div>
+      </div>
 
       <div class="release">
         <span class="date" data-i18n="rel.2.date">Jun 29, 2026</span>
@@ -776,7 +774,7 @@
       "feat.7.h": "Instant capture",
       "feat.7.p": "Drag any region with a live size readout, or tap Space for the whole screen — fired by a global hotkey and fully multi-monitor aware.",
       "feat.8.h": "Screen recording",
-      "feat.8.p": "A hotkey hands off to the native macOS screen recorder (⇧⌘5), which reopens in your last-used mode.",
+      "feat.8.p": "Press a hotkey, drag a region, and record it straight to an MP4 — with a floating timer, pause/stop, and optional system or microphone audio.",
       "feat.9.h": "Private & lightweight",
       "feat.9.p": "No accounts, no cloud, no telemetry — every capture stays on your Mac. Built in Swift with zero dependencies, quietly in the menu bar.",
       "how.eyebrow": "How it works",
@@ -789,17 +787,12 @@
       "how.3.p": 'The in-place editor opens right over your capture. Hit <kbd>⌘C</kbd> to copy or <kbd>⌘S</kbd> to save — your call.',
       "install.eyebrow": "Get started",
       "install.h2": "Installing m_capture",
-      "install.p": "m_capture isn't notarized by Apple yet, so the first launch takes a couple of one-time steps.",
       "install.1.h": "Download the DMG",
       "install.1.p": "Download the latest <a href='https://github.com/tuyen-nguyen-mesoneer/m_capture/releases/latest/download/m_capture.dmg'>m_capture.dmg</a> from <a href='https://github.com/tuyen-nguyen-mesoneer/m_capture/releases'>Releases</a> and open it.",
-      "install.2.h": "Drag it to your Applications",
-      "install.2.p": "Drag <strong>m_capture.app</strong> into your home <strong>Applications</strong> folder (<code>~/Applications</code>) — not the system <code>/Applications</code>, which can trigger app-blocking admin prompts. Create it if needed.",
-      "install.3.h": "Clear the quarantine flag",
-      "install.3.p": "The app isn't notarized, so clear its quarantine flag before the first launch, then open it normally:",
-      "install.3.alt": "No Terminal? Open the app once, then in <strong>System Settings → Privacy & Security</strong> click <strong>Open Anyway → Open</strong> (macOS 14 and earlier: <strong>Right-click → Open</strong>).",
-      "install.4.h": "Grant Screen Recording",
-      "install.4.p": "On first capture, macOS asks for <strong>Screen Recording</strong> permission. Approve m_capture under <strong>System Settings → Privacy & Security → Screen Recording</strong> and relaunch.",
-      "install.copy": "Copy",
+      "install.2.h": "Open and run it",
+      "install.2.p": "Double-click <strong>m_capture</strong>. Because it isn't notarized, macOS blocks it the first time — in <strong>System Settings → Privacy & Security</strong> click <strong>Open Anyway → Open</strong>. It then installs itself into <code>~/Applications</code> and reopens from there.",
+      "install.3.h": "Grant Screen Recording",
+      "install.3.p": "On first capture, macOS asks for <strong>Screen Recording</strong> permission. Approve m_capture under <strong>System Settings → Privacy & Security → Screen Recording</strong> and relaunch.",
       "rel.eyebrow": "Changelog",
       "rel.h2": "Release notes",
       "rel.changelog": "See full changelog",
@@ -807,6 +800,8 @@
       "rel.1.note": "First public release — region & full-screen capture plus in-place annotation, OCR text & QR, Pin to screen, share-ready backgrounds, and before/after GIF export.",
       "rel.2.date": "Jun 29, 2026",
       "rel.2.note": "Maintenance update — fixes a handful of minor bugs and rough edges across capture and the editor.",
+      "rel.3.date": "Jul 2, 2026",
+      "rel.3.note": "Video recording — capture any region to an MP4 with audio.<br>Automatic updates — new versions install in the background.",
       "idea.eyebrow": "Feedback",
       "idea.h2": "Got an idea for m_capture?",
       "idea.p": "Missing a tool, a shortcut, an export format? Send it our way — every suggestion is read.",
@@ -876,7 +871,7 @@
       "feat.7.h": "Sofort aufnehmen",
       "feat.7.p": "Zieh einen Bereich mit Live-Größenanzeige auf oder tipp Space für den ganzen Bildschirm — per globalem Hotkey und voll Multi-Monitor-fähig.",
       "feat.8.h": "Bildschirmaufnahme",
-      "feat.8.p": "Ein Hotkey übergibt an die native macOS-Bildschirmaufnahme (⇧⌘5) — sie öffnet sich im zuletzt genutzten Modus.",
+      "feat.8.p": "Hotkey drücken, einen Bereich ziehen und ihn direkt als MP4 aufnehmen — mit schwebendem Timer, Pause/Stopp und optional System- oder Mikrofon-Audio.",
       "feat.9.h": "Privat & schlank",
       "feat.9.p": "Kein Konto, keine Cloud, keine Telemetrie — alles bleibt auf deinem Mac. In Swift gebaut, ohne Abhängigkeiten.",
       "how.eyebrow": "So funktioniert's",
@@ -889,17 +884,12 @@
       "how.3.p": 'Der Editor öffnet sich direkt über deiner Aufnahme. Drück <kbd>⌘C</kbd> zum Kopieren oder <kbd>⌘S</kbd> zum Speichern — deine Wahl.',
       "install.eyebrow": "Erste Schritte",
       "install.h2": "m_capture installieren",
-      "install.p": "m_capture wurde noch nicht von Apple notarisiert, daher sind beim ersten Start ein paar einmalige Schritte nötig.",
       "install.1.h": "DMG herunterladen",
       "install.1.p": "Lade die neueste <a href='https://github.com/tuyen-nguyen-mesoneer/m_capture/releases/latest/download/m_capture.dmg'>m_capture.dmg</a> von <a href='https://github.com/tuyen-nguyen-mesoneer/m_capture/releases'>Releases</a> und öffne sie.",
-      "install.2.h": "In den Applications-Ordner ziehen",
-      "install.2.p": "Zieh <strong>m_capture.app</strong> in deinen Home-Ordner <code>~/Applications</code> — nicht das System-<code>/Applications</code>, das App-blockierende Admin-Abfragen auslösen kann.",
-      "install.3.h": "Quarantäne-Flag entfernen",
-      "install.3.p": "Die App ist nicht notarisiert — entferne vor dem ersten Start ihr Quarantäne-Flag und öffne sie dann normal:",
-      "install.3.alt": "Kein Terminal? Öffne die App einmal, dann in <strong>Systemeinstellungen → Datenschutz & Sicherheit</strong> auf <strong>Trotzdem öffnen → Öffnen</strong> klicken (macOS 14 und früher: <strong>Rechtsklick → Öffnen</strong>).",
-      "install.4.h": "Bildschirmaufnahme erlauben",
-      "install.4.p": "Bei der ersten Aufnahme fragt macOS nach der Berechtigung zur <strong>Bildschirmaufnahme</strong>. Erteile sie unter <strong>Systemeinstellungen → Datenschutz & Sicherheit → Bildschirmaufnahme</strong> und starte neu.",
-      "install.copy": "Kopieren",
+      "install.2.h": "Öffnen und starten",
+      "install.2.p": "Doppelklicke auf <strong>m_capture</strong>. Da die App nicht notarisiert ist, blockiert macOS sie beim ersten Mal — klicke in <strong>Systemeinstellungen → Datenschutz & Sicherheit</strong> auf <strong>Trotzdem öffnen → Öffnen</strong>. Die App installiert sich dann selbst in <code>~/Applications</code> und öffnet sich von dort neu.",
+      "install.3.h": "Bildschirmaufnahme erlauben",
+      "install.3.p": "Bei der ersten Aufnahme fragt macOS nach der Berechtigung zur <strong>Bildschirmaufnahme</strong>. Erteile sie unter <strong>Systemeinstellungen → Datenschutz & Sicherheit → Bildschirmaufnahme</strong> und starte neu.",
       "rel.eyebrow": "Änderungen",
       "rel.h2": "Versionshinweise",
       "rel.changelog": "Vollständiges Changelog ansehen",
@@ -907,6 +897,8 @@
       "rel.1.note": "Erste öffentliche Version — Bereichs- und Vollbildaufnahme samt direkter Annotation, OCR-Text & QR, Am Bildschirm anheften, teilbare Hintergründe und Vorher-/Nachher-GIF-Export.",
       "rel.2.date": "29. Juni 2026",
       "rel.2.note": "Wartungsupdate — behebt einige kleinere Fehler und Feinschliff bei Aufnahme und Editor.",
+      "rel.3.date": "2. Juli 2026",
+      "rel.3.note": "Videoaufnahme — nimm einen Bereich als MP4 mit Audio auf.<br>Automatische Updates — neue Versionen laden im Hintergrund.",
       "idea.eyebrow": "Feedback",
       "idea.h2": "Eine Idee für m_capture?",
       "idea.p": "Fehlt ein Werkzeug, ein Tastaturkürzel, ein Exportformat? Schick es uns — jeder Vorschlag wird gelesen.",

@@ -45,3 +45,4 @@ enum ScreenRecordingPermission {
         }
     }
 }
+

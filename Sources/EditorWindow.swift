@@ -32,7 +32,7 @@ private final class DraggablePanel: NSView {
 /// sits on top at `innerRect`, so only the frame + shadow show around it.
 private final class BackgroundView: NSView {
     var background: Background = .none
-    var innerRect: CGRect = .zero      // image area, in this view's coordinates
+    var innerRect: CGRect = .zero
     var cornerRadius: CGFloat = 0
     var shadowPad: CGFloat = 0
 
@@ -52,7 +52,7 @@ private final class BackgroundView: NSView {
 /// the picture (aspect-locked); the controller previews and commits the resample.
 private final class ResizeHandle: NSView {
     var onBegin: (() -> Void)?
-    var onDrag: ((CGFloat) -> Void)?   // horizontal drag delta (screen points) since begin
+    var onDrag: ((CGFloat) -> Void)?
     var onEnd: (() -> Void)?
     private var startX: CGFloat = 0
 
@@ -132,17 +132,14 @@ final class EditorWindowController: NSObject {
     private var emojiPicker: EmojiPickerPanel?
     private var formatPicker: CounterFormatPicker?
 
-    // Re-laid-out on rotate/crop, so they're tracked for teardown + restore.
     private var clusterViews: [NSView] = []
     private var ring: NSView!
     private var cropButtons: [NSView] = []
-    private var currentSwatch: Int? = 0     // nil = custom color
+    private var currentSwatch: Int? = 0
 
-    // Share-ready background frame (from Settings, None by default); previewed behind the canvas.
     private var currentBackground: Background = Settings.shared.defaultBackground
     private var bgButtons: [ToolButton] = []
 
-    // Corner resize (resample) handle + live preview.
     private var resizeHandle: ResizeHandle?
     private var resizePreview: NSView?
     private var resizeBaseFrame: NSRect = .zero
@@ -150,11 +147,9 @@ final class EditorWindowController: NSObject {
     private var bgColorPicker: ColorPickerPanel?
     private var bgView: BackgroundView?
 
-    // Opacity slider for the selected overlay image (floats above the overlay).
     private var opacityCard: NSView?
     private weak var opacitySlider: NSSlider?
 
-    // Ten popular annotation colors: a full spectrum plus black & white.
     private let palette: [(NSColor, String)] = [
         (Theme.rgb(0xE5, 0x3E, 0x3E), "Red"),
         (Theme.rgb(0xF9, 0x73, 0x16), "Orange"),
@@ -179,7 +174,7 @@ final class EditorWindowController: NSObject {
         window.backgroundColor = .clear
         window.hasShadow = false
         window.isReleasedWhenClosed = false
-        window.level = .screenSaver
+        window.level = .normal
         window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
 
         let content = NSView(frame: NSRect(origin: .zero, size: screen.frame.size))
@@ -215,7 +210,7 @@ final class EditorWindowController: NSObject {
 
         canvas.onColorPicked = { [weak self] _ in self?.deselectSwatches() }
         canvas.onShortcut = { [weak self] key in self?.handleShortcut(key) }
-        canvas.onCancel = { [weak self] in self?.close() }
+        canvas.onCancel = { [weak self] in self?.attemptClose() }
         canvas.onCropBegin = { [weak self] in self?.hideCropConfirm() }
         canvas.onCropReady = { [weak self] in self?.showCropConfirm() }
         canvas.onCropConfirm = { [weak self] in self?.applyCrop() }
@@ -224,22 +219,17 @@ final class EditorWindowController: NSObject {
         canvas.onPaste = { [weak self] in self?.pasteOverlay() }
         selectTool(.pencil)
         selectSwatch(0)
-        canvas.style.lineWidth = 4   // stroke width is fixed at medium; no size control
+        canvas.style.lineWidth = 4
 
         EditorWindowController.open.append(self)
+        NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
         window.makeFirstResponder(canvas)
         window.delegate = self
     }
 
-    // MARK: Clusters
-
     private func buildClusters(around sel: NSRect, in content: NSView) -> [NSView] {
-        // Lay the tools out around the framed graphic (image + background pad) with
-        // a uniform 8px margin off the frame, with or without a background. The
-        // scatter gap below is 16, so offsetting the reference by (8 - bgPad) lands
-        // the cards 8px from the frame (16 - 8 with no background; bgPad + 8 with one).
         let bgPad = currentBackground.isNone ? 0 : Background.padding(maxDim: max(sel.width, sel.height))
         let sel = sel.insetBy(dx: 8 - bgPad, dy: 8 - bgPad)
         func toolButton(_ t: Tool, _ symbol: String, _ tip: String) -> ToolButton {
@@ -255,16 +245,10 @@ final class EditorWindowController: NSObject {
             b.tip = tip; b.keyEquivalent = key; b.keyEquivalentModifierMask = mods; wireHover(b); return b
         }
 
-        // Overlay-image tile: opens a file picker; paste (⌘V) / drop a file also
-        // insert overlays. Tracked in `toolButtons` so it highlights when selected.
         let overlayBtn = ToolButton(style: .tool("photo"), target: self, action: #selector(overlayPressed))
         overlayBtn.tip = "Overlay image — paste (⌘V), drop a file, or click to choose"
         wireHover(overlayBtn); toolButtons[.overlay] = overlayBtn
 
-        // Text tiles fold into the Markup group below. The counter and emoji
-        // tiles need bespoke wiring, so build them up front.
-        // One counter icon: click to place numbered badges, click again (while
-        // active) to open the format popover (numbers / letters / roman).
         let counterBtn = ToolButton(style: .counterGlyph, target: self, action: #selector(counterPressed))
         counterBtn.tip = "Counter — place numbered badges (click again to change format)  (C)"
         wireHover(counterBtn); toolButtons[.counter] = counterBtn; counterFormatButton = counterBtn
@@ -272,8 +256,6 @@ final class EditorWindowController: NSObject {
         emojiBtn.tip = "Emoji — stamp an emoji (click to choose)"; wireHover(emojiBtn)
         emojiButton = emojiBtn; toolButtons[.emoji] = emojiBtn
 
-        // MARKUP — ordered common→niche: everyday strokes + text (row 1), redaction
-        // + stamps (row 2), then the advanced/utility tools (row 3).
         let draw = makeCluster("Markup", [
             toolButton(.pencil, "pencil", "Pencil — freehand draw  (P)"),
             toolButton(.marker, "highlighter", "Highlighter — translucent highlight  (H)"),
@@ -287,8 +269,6 @@ final class EditorWindowController: NSObject {
             toolButton(.ruler, "ruler", "Ruler — press ↑↓ or ←→, move to measure, click to imprint"),
             overlayBtn,
             actionButton("text.viewfinder", "Copy text / QR (OCR) — drag over text or a QR code  (⌘T)", key: "t", mods: [.command], #selector(copyTextPressed))], perRow: 4)
-        // SHAPES — workhorse first: strokes (arrow, line) then enclosures (row 1),
-        // shape fills (row 2), decorative polygons (row 3).
         let shapes = makeCluster("Shape", [
             toolButton(.arrow, "arrow.up.right", "Arrow — point at something  (A)"),
             toolButton(.line, "line.diagonal", "Line — straight line  (L)"),
@@ -303,8 +283,6 @@ final class EditorWindowController: NSObject {
             toolButton(.hexagon, "hexagon", "Hexagon — 6-sided outline  (6)"),
             toolButton(.octagon, "octagon", "Octagon — 8-sided outline  (8)")], perRow: 4)
 
-        // COLOR — eyedropper, swatches and the custom-color picker. Stroke width
-        // is fixed at medium (set once in init); there is no size control.
         let colorR: CGFloat = 14
         let eyedropper = ToolButton(style: .tool("eyedropper"), radius: colorR,
                                    target: self, action: #selector(toolPressed(_:)))
@@ -322,8 +300,6 @@ final class EditorWindowController: NSObject {
         colorTiles.append(plus)
         let color = makeCluster("Color", colorTiles, perRow: 4, radius: colorR)
 
-        // ACTIONS — ordered by row: select + transform (row 1), history + non-closing
-        // outputs (row 2), then the four ways to finish (row 3, exits last).
         let actions = makeCluster("Action", [
             toolButton(.select, "cursorarrow", "Move — drag an object to reposition, drag its corner to resize, ⌫ to delete  (V)"),
             toolButton(.crop, "crop", "Crop — drag a region, then ↵ or ✓"),
@@ -338,8 +314,6 @@ final class EditorWindowController: NSObject {
             actionButton("square.and.arrow.down.on.square", "Save As… — choose location  (⇧⌘S)", key: "s", mods: [.command, .shift], #selector(saveAsPressed)),
             actionButton("xmark", "Cancel  (Esc)", key: "\u{1b}", mods: [], #selector(closePressed))], perRow: 4)
 
-        // BACKGROUND — a share-ready frame (None + presets + a custom color).
-        // Same tile size as the Color cluster.
         let bgR: CGFloat = 14
         var bgTiles: [ToolButton] = []
         for (i, style) in Background.presets.enumerated() {
@@ -359,20 +333,12 @@ final class EditorWindowController: NSObject {
         let cs = content.bounds.size
         let g: CGFloat = 16
 
-        // Scatter around the image only if it's big enough to host the clusters
-        // without overlap; otherwise gather them into one floating panel.
-        let cp: CGFloat = 9  // card padding (each side)
-        // Markup (left) now carries the text tools, so it stands alone in the left
-        // column; Shapes takes the right column the Text card used to occupy.
+        let cp: CGFloat = 9
         let leftW = draw.frame.width + 2 * cp
         let leftH = draw.frame.height + 2 * cp
         let rightW = shapes.frame.width + 2 * cp
         let rightH = shapes.frame.height + 2 * cp
         let rowH = [color.frame.height, background.frame.height, actions.frame.height].max()! + 2 * cp
-        // Use both vertical strips: when the top *and* bottom each have room, the
-        // appearance pair (Color, Background) goes above and Actions below, so the
-        // selection is framed on all four sides. If only one side fits, all three
-        // stack there; if neither, we fall back to the gathered group.
         let topFits = cs.height - sel.maxY >= rowH + 2 * g
         let bottomFits = sel.minY >= rowH + 2 * g
         let canScatter =
@@ -409,18 +375,17 @@ final class EditorWindowController: NSObject {
 
     /// A draggable, free-floating cluster card. It has to stay legible over any
     /// wallpaper — a bright capture or a near-black desktop — so it gets a solid
-    /// brand-gradient fill, a crisp light edge, and a soft drop shadow to lift
-    /// it off the backdrop (the old translucent-white fill vanished on dark UIs).
+    /// brand-gradient fill, the brand hairline edge, and a soft drop shadow to lift
+    /// it off the backdrop (the shadow, not the edge, is what carries the contrast).
+    /// Square corners + `Theme.border` match the Settings / About panels.
     private func cardFit(_ inner: NSView) -> NSView {
-        let pad: CGFloat = 8, radius: CGFloat = 12
+        let pad: CGFloat = 8, radius: CGFloat = 0
         let size = NSSize(width: inner.frame.width + pad * 2, height: inner.frame.height + pad * 2)
         let c = DraggablePanel(frame: NSRect(origin: .zero, size: size))
         c.wantsLayer = true
         guard let layer = c.layer else { return c }
         layer.cornerRadius = radius
-        layer.masksToBounds = false           // let the shadow render
-        layer.borderWidth = 1
-        layer.borderColor = Theme.cardStroke.cgColor
+        layer.masksToBounds = false
         layer.shadowColor = NSColor.black.cgColor
         layer.shadowOpacity = 0.55
         layer.shadowRadius = 16
@@ -438,18 +403,14 @@ final class EditorWindowController: NSObject {
         c.frame = NSRect(origin: .zero, size: size)
         c.wantsLayer = true
         guard let layer = c.layer else { return }
-        let radius: CGFloat = 12
+        let radius: CGFloat = 0
         layer.cornerRadius = radius
-        layer.masksToBounds = false           // let the shadow render
-        layer.borderWidth = 1
-        layer.borderColor = Theme.cardStroke.cgColor
+        layer.masksToBounds = false
         layer.shadowColor = NSColor.black.cgColor
         layer.shadowOpacity = 0.55
         layer.shadowRadius = 16
         layer.shadowOffset = CGSize(width: 0, height: -5)
         Theme.applyPanelGradient(to: c, cornerRadius: radius)
-        // Top-align the cluster (centered horizontally) so every card's caption
-        // sits at the same height regardless of how many tool rows it has.
         inner.setFrameOrigin(NSPoint(x: (size.width - inner.frame.width) / 2,
                                      y: size.height - inner.frame.height - topPad))
         c.addSubview(inner)
@@ -465,7 +426,6 @@ final class EditorWindowController: NSObject {
     /// no background slab of its own — the cards stand on their own gradient fill.
     private func makePanel(_ rows: [[NSView]]) -> NSView {
         let pad: CGFloat = 10, hgap: CGFloat = 8, vgap: CGFloat = 8
-        // Every card uses the same size: the largest cluster + uniform padding.
         let innerPad: CGFloat = 7
         let all = rows.flatMap { $0 }
         let cardW = (all.map { $0.frame.width }.max() ?? 0) + innerPad * 2
@@ -479,7 +439,6 @@ final class EditorWindowController: NSObject {
         let panelW = (rowW.max() ?? 0) + pad * 2
         let panelH = rowH.reduce(0, +) + vgap * CGFloat(cardRows.count - 1) + pad * 2
 
-        // Transparent container — draggable as one unit, but no background slab.
         let panel = DraggablePanel(frame: NSRect(x: 0, y: 0, width: panelW, height: panelH))
         panel.wantsLayer = true
         panel.layer?.masksToBounds = false
@@ -502,19 +461,17 @@ final class EditorWindowController: NSObject {
     /// Place the gathered panel on whichever side of the selection has the most
     /// free space (below / above / left / right), rather than always below.
     private func positionPanel(_ p: NSView, sel: NSRect, cs: CGSize, _ content: NSView) {
-        let g: CGFloat = 16, m: CGFloat = 8   // gap from selection, margin from screen edge
+        let g: CGFloat = 16, m: CGFloat = 8
         let w = p.frame.width, h = p.frame.height
-        let cx = min(max(m, sel.midX - w / 2), cs.width - w - m)   // h-centered on sel, clamped
-        let cy = min(max(m, sel.midY - h / 2), cs.height - h - m)  // v-centered on sel, clamped
+        let cx = min(max(m, sel.midX - w / 2), cs.width - w - m)
+        let cy = min(max(m, sel.midY - h / 2), cs.height - h - m)
 
-        // Each candidate: an origin + the leftover space on that side (slack).
         let candidates: [(CGPoint, CGFloat)] = [
-            (CGPoint(x: cx, y: sel.minY - g - h),   sel.minY - g - h - m),               // below
-            (CGPoint(x: cx, y: sel.maxY + g),       cs.height - (sel.maxY + g + h) - m),  // above
-            (CGPoint(x: sel.minX - g - w, y: cy),   sel.minX - g - w - m),               // left
-            (CGPoint(x: sel.maxX + g, y: cy),       cs.width - (sel.maxX + g + w) - m),   // right
+            (CGPoint(x: cx, y: sel.minY - g - h),   sel.minY - g - h - m),
+            (CGPoint(x: cx, y: sel.maxY + g),       cs.height - (sel.maxY + g + h) - m),
+            (CGPoint(x: sel.minX - g - w, y: cy),   sel.minX - g - w - m),
+            (CGPoint(x: sel.maxX + g, y: cy),       cs.width - (sel.maxX + g + w) - m),
         ]
-        // Pick the side that fits with the most slack; if none fits, the roomiest.
         let best = candidates.max { $0.1 < $1.1 }!.0
         let fx = min(max(m, best.x), cs.width - w - m)
         let fy = min(max(m, best.y), cs.height - h - m)
@@ -558,18 +515,16 @@ final class EditorWindowController: NSObject {
     }
 
     private func makeCluster(_ name: String, _ buttons: [ToolButton], perRow: Int, radius r: CGFloat = 14) -> NSView {
-        let side = ToolButton.size(radius: r).width          // square tile
+        let side = ToolButton.size(radius: r).width
         let hgap: CGFloat = 4, vgap: CGFloat = 4
         let stepX = side + hgap, rowVStep = side + vgap
         let rows = Int(ceil(Double(buttons.count) / Double(perRow)))
 
-        let capH: CGFloat = 17, capToGrid: CGFloat = 22  // caption + divider + gap before icons
+        let capH: CGFloat = 17, capToGrid: CGFloat = 22
         let gridW = CGFloat(perRow - 1) * stepX + side
         let gridH = CGFloat(rows - 1) * rowVStep + side
         let totalH = capH + capToGrid + gridH
 
-        // Group name. Widen the whole cluster if the caption is longer than the
-        // tile grid (e.g. "Background" under small swatches) so it never truncates.
         let cap = groupLabel(name)
         cap.alignment = .center
         let contentW = max(gridW, ceil(cap.intrinsicContentSize.width) + 10)
@@ -580,15 +535,12 @@ final class EditorWindowController: NSObject {
         cap.frame = NSRect(x: 0, y: totalH - capH, width: contentW, height: capH)
         container.addSubview(cap)
 
-        // Thin divider bar under the name to set it apart from the tools.
         let divider = NSView(frame: NSRect(x: contentW * 0.14, y: totalH - capH - 6,
                                            width: contentW * 0.72, height: 1))
         divider.wantsLayer = true
         divider.layer?.backgroundColor = Theme.divider.cgColor
         container.addSubview(divider)
 
-        // Square-tile grid. Each row is centered within the content width, so a
-        // partial last row (e.g. Markup's tools) stays centered.
         for (i, b) in buttons.enumerated() {
             let row = i / perRow, col = i % perRow
             let inThisRow = min(perRow, buttons.count - row * perRow)
@@ -623,16 +575,12 @@ final class EditorWindowController: NSObject {
 
     private func groupLabel(_ title: String) -> NSTextField {
         let l = NSTextField(labelWithString: "")
-        Theme.styleEyebrow(l, title)   // brand eyebrow: UPPERCASE lavender, tracked
-        // styleEyebrow sets attributedStringValue (no paragraph style), which makes
-        // the field ignore `.alignment` and render left-aligned. Bake a centered
-        // paragraph style into the attributed string so the caption sits centered.
+        Theme.styleEyebrow(l, title)
         let para = NSMutableParagraphStyle(); para.alignment = .center
         let s = NSMutableAttributedString(attributedString: l.attributedStringValue)
         s.addAttribute(.paragraphStyle, value: para, range: NSRange(location: 0, length: s.length))
         l.attributedStringValue = s
         l.alignment = .center
-        // Slight shadow so it reads over the image too.
         let sh = NSShadow(); sh.shadowColor = NSColor(white: 0, alpha: 0.6)
         sh.shadowBlurRadius = 2; sh.shadowOffset = NSSize(width: 0, height: -1)
         l.shadow = sh
@@ -644,8 +592,6 @@ final class EditorWindowController: NSObject {
         b.onExit = { [weak self] in self?.hideTip() }
     }
 
-    // MARK: Tooltip
-
     private lazy var tipText: NSTextField = {
         let l = NSTextField(labelWithString: "")
         l.font = Theme.font(11, .medium); l.textColor = Theme.ink
@@ -655,9 +601,7 @@ final class EditorWindowController: NSObject {
         let v = NSView()
         v.wantsLayer = true
         v.layer?.backgroundColor = Theme.surfaceBase.cgColor
-        v.layer?.cornerRadius = 5
-        v.layer?.borderWidth = 1
-        v.layer?.borderColor = Theme.border.cgColor
+        v.layer?.cornerRadius = 0
         v.isHidden = true
         return v
     }()
@@ -679,13 +623,11 @@ final class EditorWindowController: NSObject {
     }
     private func hideTip() { tipBox.isHidden = true }
 
-    // MARK: Actions
-
     @objc private func toolPressed(_ sender: ToolButton) {
         if let t = toolButtons.first(where: { $0.value === sender })?.key { selectTool(t) }
     }
     private func selectTool(_ t: Tool) {
-        if t != .crop, canvas.pendingCrop != nil {   // leaving crop discards an unconfirmed region
+        if t != .crop, canvas.pendingCrop != nil {
             canvas.pendingCrop = nil; canvas.needsDisplay = true; hideCropConfirm()
         }
         canvas.tool = t
@@ -708,7 +650,6 @@ final class EditorWindowController: NSObject {
         else { selectTool(.counter) }
     }
     @objc private func formatPressed() {
-        // Fresh each open so the current format is highlighted.
         formatPicker = CounterFormatPicker(
             current: canvas.counterFormat,
             onPick: { [weak self] f in
@@ -719,8 +660,6 @@ final class EditorWindowController: NSObject {
                 self?.window.makeKeyAndOrderFront(nil)
                 self?.window.makeFirstResponder(self?.canvas)
             })
-        // Anchor to the Text card (the counter button's enclosing card) so the
-        // popover sits just above that card, aligned to it.
         let card = counterFormatButton?.superview?.superview
         var avoid: CGRect?
         if let v = card, v.window != nil { avoid = window.convertToScreen(v.convert(v.bounds, to: nil)) }
@@ -744,8 +683,6 @@ final class EditorWindowController: NSObject {
     }
 
     @objc private func customColorPressed() {
-        // A custom brand-styled picker, opened ABOVE the editor (the system
-        // NSColorPanel is hidden behind the screen-saver-level overlay).
         if colorPicker == nil {
             colorPicker = ColorPickerPanel(
                 onPick: { [weak self] c in
@@ -794,7 +731,6 @@ final class EditorWindowController: NSObject {
             NSPasteboard.general.writeObjects([img])
         }
         let url = Settings.shared.fileURL()
-        // Encode + write off the main thread so a large capture doesn't stall the UI.
         DispatchQueue.global(qos: .userInitiated).async {
             guard let data = Settings.shared.encode(rep) else { return }
             try? data.write(to: url)
@@ -828,7 +764,6 @@ final class EditorWindowController: NSObject {
         }
     }
     @objc private func copyTextPressed() {
-        // Enter OCR mode: drag over text or a QR code to recognize + copy it; editor stays open.
         selectTool(.ocr)
         flashMessage("Drag over text or a QR code to copy it")
     }
@@ -876,8 +811,6 @@ final class EditorWindowController: NSObject {
     }
     @objc private func pinPressed() {
         guard let rep = exportRep() else { return }
-        // Place the pin where the capture sits on screen (expanded to include the
-        // background frame, if any), then close the editor so the pin takes over.
         var viewRect = canvas.convert(canvas.bounds, to: nil)
         if !currentBackground.isNone {
             let pad = Background.padding(maxDim: max(canvas.frame.width, canvas.frame.height))
@@ -886,8 +819,6 @@ final class EditorWindowController: NSObject {
         _ = PinnedWindowController(rep: rep, screenRect: window.convertToScreen(viewRect))
         close()
     }
-
-    // MARK: Overlay image
 
     /// Open a file picker for an image to overlay. Runs modal so the panel sits
     /// above the screen-saver-level editor window; paste (⌘V) / drag-drop are the
@@ -899,8 +830,6 @@ final class EditorWindowController: NSObject {
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
         panel.message = "Choose an image to overlay"
-        // A sheet renders above the screen-saver-level editor window (a free-
-        // floating NSOpenPanel gets stuck behind it); runs async, doesn't block.
         panel.beginSheetModal(for: window) { [weak self] resp in
             guard let self else { return }
             if resp == .OK, let url = panel.url, let img = NSImage(contentsOf: url),
@@ -931,7 +860,6 @@ final class EditorWindowController: NSObject {
               let after = currentBackground.compose(afterRep)?.cgImage else {
             flashMessage("Couldn't build animation"); return
         }
-        // A sheet so the Save dialog renders above the screen-saver-level editor.
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.gif]
         panel.nameFieldStringValue = Settings.shared.fileURL(ext: "gif").lastPathComponent
@@ -955,12 +883,11 @@ final class EditorWindowController: NSObject {
         guard let overlay, let content = window.contentView else {
             opacityCard?.removeFromSuperview(); opacityCard = nil; return
         }
-        selectTool(.overlay)   // keep the Markup tile highlighted (paste/drop bypass it)
+        selectTool(.overlay)
         let card = opacityCard ?? buildOpacityCard()
         opacityCard = card
         opacitySlider?.doubleValue = Double(overlay.opacity)
         if card.superview == nil { content.addSubview(card) }
-        // Center above the overlay's top edge, clamped inside the window.
         let vx = overlay.rect.midX * canvas.displayScale + canvas.frame.minX
         let vy = overlay.rect.maxY * canvas.displayScale + canvas.frame.minY
         var x = vx - card.frame.width / 2, y = vy + 12
@@ -974,9 +901,7 @@ final class EditorWindowController: NSObject {
         let card = NSView(frame: NSRect(x: 0, y: 0, width: w, height: h))
         card.wantsLayer = true
         card.layer?.backgroundColor = Theme.surfaceRaised.withAlphaComponent(0.97).cgColor
-        card.layer?.cornerRadius = Theme.radiusMedium
-        card.layer?.borderColor = Theme.border.cgColor
-        card.layer?.borderWidth = 1
+        card.layer?.cornerRadius = 0
         let label = NSTextField(labelWithString: "")
         Theme.styleEyebrow(label, "Opacity")
         label.frame = NSRect(x: 14, y: h - 23, width: w - 28, height: 14)
@@ -992,8 +917,6 @@ final class EditorWindowController: NSObject {
     @objc private func opacityChanged(_ sender: NSSlider) {
         canvas.setSelectedOverlayOpacity(CGFloat(sender.doubleValue))
     }
-
-    // MARK: Background frame
 
     /// The flattened capture wrapped in the selected background (or just the
     /// flattened capture when `.none`). Used by Copy / Save / Pin (not OCR).
@@ -1015,8 +938,6 @@ final class EditorWindowController: NSObject {
                     let wasFramed = !self.currentBackground.isNone
                     self.currentBackground = .solid(c)
                     if wasFramed {
-                        // Just a new fill color — update the live preview cheaply,
-                        // no need to re-flow the tool clusters.
                         self.applyBackgroundPreview()
                         self.bgButtons.forEach { $0.selectedState = false }
                         self.bgPlusButton?.selectedState = true
@@ -1062,10 +983,16 @@ final class EditorWindowController: NSObject {
         canvas.layer?.masksToBounds = true
         ring.isHidden = true
     }
-    @objc private func closePressed() { close() }
-    private func close() { colorPicker?.close(); bgColorPicker?.close(); window.close() }
+    @objc private func closePressed() { attemptClose() }
 
-    // MARK: Transforms (rotate / crop)
+    private func attemptClose() {
+        let choice = BrandAlert(title: "Discard capture?",
+                                message: "Your screenshot and any edits will be discarded and can't be recovered.",
+                                titles: ["Keep Editing", "Discard"],
+                                primary: 0, cancel: 0).runModal()
+        if choice == 1 { close() }
+    }
+    private func close() { colorPicker?.close(); bgColorPicker?.close(); window.close() }
 
     @objc private func rotateRightPressed() { rotate(left: false) }
 
@@ -1129,7 +1056,6 @@ final class EditorWindowController: NSObject {
     /// around it (after the image changed size). Selection highlights restored.
     private func relayout(canvasFrame: NSRect) {
         guard let content = window.contentView else { return }
-        // Keep the whole framed graphic (image + background padding) on-screen.
         let pad = currentBackground.isNone ? 0 : Background.padding(maxDim: max(canvasFrame.width, canvasFrame.height))
         var fr = canvasFrame
         fr.origin.x = min(max(8 + pad, fr.origin.x), max(8 + pad, content.bounds.width - fr.width - 8 - pad))
@@ -1142,19 +1068,14 @@ final class EditorWindowController: NSObject {
         clusterViews = []
         toolButtons = [:]; swatchButtons = []; bgButtons = []; plusButton = nil
         let prevTool = canvas.tool
-        // buildClusters expands around the background pad itself, so pass the bare frame.
         clusterViews = buildClusters(around: fr, in: content)
         animateIn(clusterViews)
 
         selectTool(prevTool)
         for (i, b) in swatchButtons.enumerated() { b.selectedState = (i == currentSwatch) }
         plusButton?.selectedState = (currentSwatch == nil)
-        // Background selection is restored inline by buildClusters (by preset
-        // name + the custom + button), so nothing more to do here.
         placeResizeHandle(in: content)
     }
-
-    // MARK: Corner resize
 
     /// Put (or move) the resize knob at the canvas's bottom-right corner.
     private func placeResizeHandle(in content: NSView) {
@@ -1168,7 +1089,7 @@ final class EditorWindowController: NSObject {
             resizeHandle = h
         }
         h.frame = NSRect(x: canvas.frame.maxX - s / 2, y: canvas.frame.minY - s / 2, width: s, height: s)
-        content.addSubview(h)   // keep on top
+        content.addSubview(h)
     }
 
     private func resizeBegan() {
@@ -1202,8 +1123,6 @@ final class EditorWindowController: NSObject {
         canvas.bakeResample(scale: scale)
         relayout(canvasFrame: newFrame)
     }
-
-    // MARK: Crop confirm control
 
     private func showCropConfirm() {
         guard let pc = canvas.pendingCrop, let content = window.contentView else { return }
@@ -1239,5 +1158,7 @@ final class EditorWindowController: NSObject {
 extension EditorWindowController: NSWindowDelegate {
     func windowWillClose(_ notification: Notification) {
         EditorWindowController.open.removeAll { $0 === self }
+        if EditorWindowController.open.isEmpty { NSApp.setActivationPolicy(.accessory) }
     }
 }
+

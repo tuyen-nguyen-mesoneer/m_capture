@@ -33,11 +33,11 @@ final class ColorPickerPanel: NSObject {
         let pad: CGFloat = 14, w: CGFloat = 208
         let sqH: CGFloat = 150, stripH: CGFloat = 20, gap: CGFloat = 12, previewH: CGFloat = 28
         let panelW = w + pad * 2
-        let panelH = pad + previewH + gap + stripH + gap + sqH + pad + 22 // +22 caption
+        let panelH = pad + previewH + gap + stripH + gap + sqH + pad + 22
 
         let container = KeyView(frame: NSRect(x: 0, y: 0, width: panelW, height: panelH))
         container.onEsc = { [weak self] in self?.close() }
-        Theme.stylePanel(container, cornerRadius: 14)
+        Theme.stylePanel(container)
 
         let cap = NSTextField(labelWithString: "")
         Theme.styleEyebrow(cap, "Custom color")
@@ -78,7 +78,6 @@ final class ColorPickerPanel: NSObject {
         win.level = NSWindow.Level(rawValue: NSWindow.Level.screenSaver.rawValue + 1)
         win.contentView = container
 
-        // Position above the button, kept on screen.
         if let scr = button.window?.screen ?? NSScreen.main,
            let bw = button.window {
             let onScreen = bw.convertToScreen(button.convert(button.bounds, to: nil))
@@ -92,7 +91,7 @@ final class ColorPickerPanel: NSObject {
 
         NSApp.activate(ignoringOtherApps: true)
         win.makeKeyAndOrderFront(nil)
-        win.makeFirstResponder(container)   // so Esc closes the picker
+        win.makeFirstResponder(container)
         window = win
 
         NotificationCenter.default.addObserver(self, selector: #selector(resigned),
@@ -150,13 +149,11 @@ private final class SVSquareView: NSView {
         ctx.setFillColor(NSColor(deviceHue: hue, saturation: 1, brightness: 1, alpha: 1).cgColor)
         ctx.fill(bounds)
         let cs = CGColorSpaceCreateDeviceRGB()
-        // White → clear, left to right (saturation).
         if let g = CGGradient(colorsSpace: cs, colors: [NSColor.white.cgColor,
                 NSColor(white: 1, alpha: 0).cgColor] as CFArray, locations: [0, 1]) {
             ctx.drawLinearGradient(g, start: CGPoint(x: bounds.minX, y: 0),
                                    end: CGPoint(x: bounds.maxX, y: 0), options: [])
         }
-        // Black → clear, bottom to top (brightness).
         if let g = CGGradient(colorsSpace: cs, colors: [NSColor.black.cgColor,
                 NSColor(white: 0, alpha: 0).cgColor] as CFArray, locations: [0, 1]) {
             ctx.drawLinearGradient(g, start: CGPoint(x: 0, y: bounds.minY),
@@ -219,3 +216,4 @@ private final class HueStripView: NSView {
         onChange?(hue)
     }
 }
+

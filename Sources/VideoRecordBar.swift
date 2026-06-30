@@ -28,12 +28,12 @@ final class VideoRecordBar: NSObject {
     private var dotLayer: CALayer { dotView.layer! }
 
     init(quality: String) {
-        pauseBtn = RecordBarButton(title: "⏸  Pause", primary: false)
-        stopBtn = RecordBarButton(title: "⏹  Stop", primary: true)
+        pauseBtn = RecordBarButton(title: "Pause", primary: false)
+        stopBtn = RecordBarButton(title: "Stop", primary: true)
         super.init()
 
         // ── Window ─────────────────────────────────────────────────────────
-        let barSize = NSSize(width: 340, height: 72)
+        let barSize = NSSize(width: 340, height: 84)
         let win = RecordBarWindow(
             contentRect: NSRect(origin: .zero, size: barSize),
             styleMask: .borderless,
@@ -42,7 +42,7 @@ final class VideoRecordBar: NSObject {
         )
         win.isOpaque = false
         win.backgroundColor = .clear
-        win.hasShadow = false
+        win.hasShadow = true   // borderless: the drop shadow defines the edge (brand chrome)
         win.level = .floating
         win.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary]
         win.onKeyStop = { [weak self] in self?.onStop?() }
@@ -51,47 +51,61 @@ final class VideoRecordBar: NSObject {
         // ── Card ───────────────────────────────────────────────────────────
         let card = RecordCardView(frame: NSRect(origin: .zero, size: barSize))
 
-        // ── Row 1: status line (y=42) ──────────────────────────────────────
+        // One shared grid: both rows honour the same 16 pt side margins and a
+        // symmetric 13 / 12 / 13 vertical rhythm, so the HUD reads as one block.
+        let sidePad: CGFloat = 16
+        let contentRight = barSize.width - sidePad          // 324
+        let statusRowY: CGFloat = 53, statusRowH: CGFloat = 18
+        let buttonRowY: CGFloat = 13, buttonRowH: CGFloat = 28
 
-        // Pulsing red dot (8×8 pt, centred on y=42 row mid: y = 42 + (18-8)/2 = 47)
-        dotView.frame = NSRect(x: 16, y: 47, width: 8, height: 8)
+        // ── Row 1: status line ─────────────────────────────────────────────
+
+        // Pulsing recording dot (the app accent), centred in the status row.
+        let dotSize: CGFloat = 8
+        dotView.frame = NSRect(x: sidePad, y: statusRowY + (statusRowH - dotSize) / 2,
+                               width: dotSize, height: dotSize)
         dotView.wantsLayer = true
-        dotView.layer!.cornerRadius = 4
-        dotView.layer!.backgroundColor = Theme.accent.cgColor  // coral-red
+        dotView.layer!.cornerRadius = dotSize / 2
+        dotView.layer!.backgroundColor = Theme.accent.cgColor
         card.addSubview(dotView)
         startPulse()
 
-        // "REC" eyebrow label
+        // "REC" eyebrow — the mesoneer accent-label move.
         let recLabel = NSTextField(labelWithString: "")
         Theme.styleEyebrow(recLabel, "REC", size: 11)
-        recLabel.frame = NSRect(x: 28, y: 42, width: 36, height: 18)
+        recLabel.frame = NSRect(x: 30, y: statusRowY, width: 34, height: statusRowH)
         card.addSubview(recLabel)
 
-        // Timer label — mono so digits don't jump width
+        // Timer — monospaced digits so the width doesn't jitter each tick.
         timerLabel.font = NSFont.monospacedDigitSystemFont(ofSize: 13, weight: .semibold)
         timerLabel.textColor = Theme.textPrimary
-        timerLabel.frame = NSRect(x: 70, y: 42, width: 100, height: 18)
+        timerLabel.frame = NSRect(x: 72, y: statusRowY, width: 72, height: statusRowH)
         card.addSubview(timerLabel)
 
-        // File size label
+        // File-size estimate — quiet secondary text.
         sizeLabel.font = Theme.font(11, .medium)
         sizeLabel.textColor = Theme.textSecondary
-        sizeLabel.frame = NSRect(x: 180, y: 42, width: 100, height: 18)
+        sizeLabel.frame = NSRect(x: 152, y: statusRowY, width: 80, height: statusRowH)
         card.addSubview(sizeLabel)
 
-        // Quality badge (rounded pill)
-        let badge = QualityBadge(frame: NSRect(x: 290, y: 44, width: 24, height: 16), letter: quality)
+        // Quality chip — right-aligned to the content margin.
+        let badgeW: CGFloat = 24, badgeH: CGFloat = 16
+        let badge = QualityBadge(frame: NSRect(x: contentRight - badgeW,
+                                               y: statusRowY + (statusRowH - badgeH) / 2,
+                                               width: badgeW, height: badgeH), letter: quality)
         card.addSubview(badge)
 
-        // ── Row 2: buttons (y=12) ─────────────────────────────────────────
+        // ── Row 2: actions — two equal halves spanning the content width ────
+        let gap: CGFloat = 12
+        let buttonW = (contentRight - sidePad - gap) / 2      // 148
 
-        pauseBtn.frame = NSRect(x: 16, y: 12, width: 120, height: 28)
-        pauseBtn.onClick = { [weak self] in self?.onPauseResume?() }
-        card.addSubview(pauseBtn)
-
-        stopBtn.frame = NSRect(x: 144, y: 12, width: 100, height: 28)
+        stopBtn.frame = NSRect(x: sidePad, y: buttonRowY, width: buttonW, height: buttonRowH)
         stopBtn.onClick = { [weak self] in self?.onStop?() }
         card.addSubview(stopBtn)
+
+        pauseBtn.frame = NSRect(x: sidePad + buttonW + gap, y: buttonRowY, width: buttonW, height: buttonRowH)
+        pauseBtn.onClick = { [weak self] in self?.onPauseResume?() }
+        card.addSubview(pauseBtn)
 
         window.contentView = card
     }
@@ -132,7 +146,7 @@ final class VideoRecordBar: NSObject {
             }
 
             // Pause/resume state
-            self.pauseBtn.setTitle(isPaused ? "▶  Resume" : "⏸  Pause")
+            self.pauseBtn.setTitle(isPaused ? "Resume" : "Pause")
 
             // Dot animation
             if isPaused {
@@ -175,18 +189,20 @@ private final class RecordBarWindow: NSWindow {
 
 // MARK: - Card background
 
-/// Rounded dark card: `Theme.surfaceRaised` fill + `Theme.border` hairline stroke.
+/// Square brand card: the shared panel gradient behind the HUD content, no border —
+/// the same chrome as the About / Settings panels and the editor's floating cards.
+/// The window's drop shadow (not an edge stroke) lifts it off the backdrop.
 private final class RecordCardView: NSView {
-    override func draw(_ dirtyRect: NSRect) {
-        let path = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.5, dy: 0.5), xRadius: 12, yRadius: 12)
-        Theme.surfaceRaised.setFill(); path.fill()
-        Theme.border.setStroke(); path.lineWidth = 1; path.stroke()
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        Theme.applyPanelGradient(to: self)
     }
+    required init?(coder: NSCoder) { fatalError() }
 }
 
 // MARK: - Quality badge
 
-/// Small rounded pill drawn with `Theme.lavender` fill and a single quality letter.
+/// Small square chip drawn with `Theme.lavender` fill and a single quality letter.
 private final class QualityBadge: NSView {
     private let letter: String
 
@@ -197,7 +213,7 @@ private final class QualityBadge: NSView {
     required init?(coder: NSCoder) { fatalError() }
 
     override func draw(_ dirtyRect: NSRect) {
-        let path = NSBezierPath(roundedRect: bounds, xRadius: bounds.height / 2, yRadius: bounds.height / 2)
+        let path = NSBezierPath(rect: bounds)
         Theme.lavender.setFill(); path.fill()
         let attrs: [NSAttributedString.Key: Any] = [
             .font: Theme.font(10, .bold),
@@ -211,7 +227,9 @@ private final class QualityBadge: NSView {
 
 // MARK: - Button
 
-/// Brand-styled rounded text button (mirrors the `BarButton` in ScrollCaptureController).
+/// Brand action button matching `BrandAlert`: square, flat, no radius. `primary` is a
+/// solid white fill (dark text); the secondary is a quiet hairline ghost that brightens
+/// on hover. White/ghost/square is the mesoneer button system (see styleguide).
 private final class RecordBarButton: NSView {
     var onClick: (() -> Void)?
     private var currentTitle: String
@@ -247,16 +265,21 @@ private final class RecordBarButton: NSView {
     override func resetCursorRects() { addCursorRect(bounds, cursor: .pointingHand) }
 
     override func draw(_ dirtyRect: NSRect) {
-        let path = NSBezierPath(roundedRect: bounds, xRadius: 7, yRadius: 7)
-        let fill: NSColor = primary
-            ? (hovering ? (Theme.lavender.blended(withFraction: 0.16, of: .black) ?? Theme.lavender) : Theme.lavender)
-            : (hovering ? Theme.accentPurple : Theme.surfaceBase)
-        fill.setFill(); path.fill()
-        if !primary { Theme.border.setStroke(); path.lineWidth = 1; path.stroke() }
+        let path = NSBezierPath(rect: bounds)
+        if primary {
+            (hovering ? NSColor(white: 0.90, alpha: 1) : .white).setFill()
+            path.fill()
+        } else {
+            (hovering ? NSColor(white: 1, alpha: 0.16) : NSColor(white: 1, alpha: 0.07)).setFill()
+            path.fill()
+            Theme.cardStroke.setStroke()
+            let border = NSBezierPath(rect: bounds.insetBy(dx: 0.5, dy: 0.5))
+            border.lineWidth = 1; border.stroke()
+        }
 
         let color: NSColor = primary ? Theme.surfaceBase : Theme.textPrimary
         let attrs: [NSAttributedString.Key: Any] = [
-            .font: Theme.font(12, .semibold), .foregroundColor: color,
+            .font: Theme.font(13, .semibold), .foregroundColor: color,
         ]
         let ts = currentTitle.size(withAttributes: attrs)
         currentTitle.draw(at: NSPoint(x: bounds.midX - ts.width / 2, y: bounds.midY - ts.height / 2),

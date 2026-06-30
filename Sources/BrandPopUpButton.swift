@@ -90,7 +90,6 @@ private final class BrandPopUpCell: NSPopUpButtonCell {
         drawChevron(in: r)
     }
 
-    // Suppress the cell's own (centered) title — BrandPopUpButton draws its own.
     override func drawInterior(withFrame cellFrame: NSRect, in controlView: NSView) {}
 }
 
@@ -137,13 +136,11 @@ final class BrandPopUpList {
         let titles = button.itemTitles
         guard !titles.isEmpty, let bwin = button.window else { return }
         let selected = button.indexOfSelectedItem
-        // Align to the button: the list reads as an extension of the field, not
-        // a separate, wider panel.
         let width = button.bounds.width
         let total = CGFloat(titles.count) * rowH + 2 * pad
 
         let container = FlippedView(frame: NSRect(x: 0, y: 0, width: width, height: total))
-        Theme.stylePanel(container, cornerRadius: 8)
+        Theme.stylePanel(container)
 
         for (i, title) in titles.enumerated() {
             let row = PopUpRow(width: width, height: rowH, title: title, checked: i == selected) { [weak self] in
@@ -160,15 +157,12 @@ final class BrandPopUpList {
         win.level = .popUpMenu
         win.contentView = container
 
-        // Drop the list below the button (left edges aligned), but flip above if
-        // there isn't room below, and clamp so the whole list stays on-screen.
         let onScreen = bwin.convertToScreen(button.convert(button.bounds, to: nil))
         let screen = (NSScreen.screens.first { $0.frame.intersects(onScreen) } ?? NSScreen.main)?.frame
-        var topY = onScreen.minY - 3                          // top edge when dropping below
+        var topY = onScreen.minY - 3
         if let f = screen {
             let fitsBelow = (onScreen.minY - 3 - total) >= f.minY + 8
-            if !fitsBelow { topY = onScreen.maxY + 3 + total }  // open upward instead
-            // Final clamp: keep both edges within the screen.
+            if !fitsBelow { topY = onScreen.maxY + 3 + total }
             topY = min(max(topY, f.minY + 8 + total), f.maxY - 8)
         }
         win.setFrameTopLeftPoint(NSPoint(x: onScreen.minX, y: topY))
@@ -247,3 +241,4 @@ private final class PopUpRow: NSView {
         onClick()
     }
 }
+

@@ -31,7 +31,6 @@ extension Shortcut {
     /// specials people pick for capture shortcuts).
     static func keyName(_ code: UInt32) -> String {
         if let s = specials[Int(code)] { return s }
-        // Letters / digits via the current keyboard layout, upper-cased.
         if let ch = layoutCharacter(code) { return ch.uppercased() }
         return "Key \(code)"
     }
@@ -132,7 +131,7 @@ final class HotKeyField: NSView {
             }
             if ev.keyCode == UInt16(kVK_Escape) { self.cancelRecording(); return nil }
             let mods = Shortcut.carbonModifiers(ev.modifierFlags)
-            guard mods != 0 else { return nil }   // require at least one modifier
+            guard mods != 0 else { return nil }
             Settings.shared.setShortcut(Shortcut(keyCode: UInt32(ev.keyCode), modifiers: mods), for: self.action)
             self.stopRecording()
             self.onChange()
@@ -149,3 +148,4 @@ final class HotKeyField: NSView {
 
     deinit { if let m = monitor { NSEvent.removeMonitor(m) } }
 }
+

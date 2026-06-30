@@ -8,38 +8,32 @@ enum Theme {
         NSColor(srgbRed: CGFloat(r) / 255, green: CGFloat(g) / 255, blue: CGFloat(b) / 255, alpha: 1)
     }
 
-    // — Surfaces (the dark mesoneer.io purple) —
-    static let surfaceBase    = rgb(0x19, 0x15, 0x28) // #191528 hero/base surface
-    static let surfaceRaised  = rgb(0x30, 0x23, 0x55) // #302355 raised container
-    static let gradientTop    = rgb(0x2a, 0x1f, 0x50) // #2a1f50 top-left glow of the panel gradient
-    static let gradientBottom = rgb(0x12, 0x0d, 0x20) // #120d20 deep bottom-right of the gradient
+    static let surfaceBase    = rgb(0x19, 0x15, 0x28)
+    static let surfaceRaised  = rgb(0x30, 0x23, 0x55)
+    static let gradientTop    = rgb(0x2a, 0x1f, 0x50)
+    static let gradientBottom = rgb(0x12, 0x0d, 0x20)
 
-    // — Accents —
-    static let accentPurple    = rgb(0x43, 0x2a, 0x84) // #432a84 solid purple fill/border
-    static let lavender        = rgb(0xd5, 0xba, 0xff) // #d5baff brand lavender (eyebrows, strokes, glyphs)
-    static let accent          = rgb(0xff, 0x67, 0x5c) // #ff675c coral accent (default annotation color)
+    static let accentPurple    = rgb(0x43, 0x2a, 0x84)
+    static let lavender        = rgb(0xd5, 0xba, 0xff)
+    static let accent          = rgb(0xff, 0x67, 0x5c)
 
-    // — Text roles —
-    static let textPrimary     = NSColor.white                  // headings + body
-    static let ink             = NSColor(white: 1, alpha: 0.92) // softened-white glyph + content ink on dark
-    static let textSecondary   = rgb(0xc6, 0xbe, 0xda)          // #c6beda quiet lilac (grouping/labels)
-    static let textMuted       = NSColor(white: 1, alpha: 0.6)  // styleguide muted-white body-secondary
-    static let eyebrow         = lavender                       // UPPERCASE tracked labels ONLY
+    static let textPrimary     = NSColor.white
+    static let ink             = NSColor(white: 1, alpha: 0.92)
+    static let textSecondary   = rgb(0xc6, 0xbe, 0xda)
+    static let textMuted       = NSColor(white: 1, alpha: 0.6)
+    static let eyebrow         = lavender
 
-    // — Lines / states —
-    static let border          = rgb(0x3a, 0x2f, 0x5e)          // #3a2f5e hairline
-    static let divider         = NSColor(white: 1, alpha: 0.18) // hairline separator over a dark panel
-    static let cardStroke      = NSColor(white: 1, alpha: 0.22) // translucent edge on floating editor cards
-    static let hoverFill        = NSColor(white: 1, alpha: 0.10) // pointer hover on custom rows/cells
-    static let focusRing        = lavender                       // keyboard focus ring
+    static let border          = rgb(0x3a, 0x2f, 0x5e)
+    static let divider         = NSColor(white: 1, alpha: 0.18)
+    static let cardStroke      = NSColor(white: 1, alpha: 0.22)
+    static let hoverFill        = NSColor(white: 1, alpha: 0.10)
+    static let focusRing        = lavender
 
-    // — Geometry scale —
     static let radiusSmall: CGFloat = 6
     static let radiusMedium: CGFloat = 12
 
-    // — Logo tile (sampled from mesoneer.io's official "m." webclip icon) —
-    static let logoTileTop    = rgb(0x41, 0x28, 0x80) // #412880 bright top-right corner
-    static let logoTileBottom = rgb(0x2a, 0x20, 0x48) // #2a2048 deep bottom-left corner
+    static let logoTileTop    = rgb(0x41, 0x28, 0x80)
+    static let logoTileBottom = rgb(0x2a, 0x20, 0x48)
 
     static func font(_ size: CGFloat, _ weight: NSFont.Weight = .regular) -> NSFont {
         NSFont.systemFont(ofSize: size, weight: weight)
@@ -71,15 +65,14 @@ enum Theme {
         return g
     }
 
-    /// Style `view` as a rounded brand popover: clipped corners, a hairline
-    /// border, and the panel gradient behind its content. Call once `view` is sized.
-    static func stylePanel(_ view: NSView, cornerRadius: CGFloat = radiusMedium) {
+    /// Style `view` as a brand popover: the panel gradient behind its content, square
+    /// corners, no border — the single panel style across the app (menu, Settings/About,
+    /// pickers). Its window supplies a drop shadow to define the edge. Call once `view` is sized.
+    static func stylePanel(_ view: NSView, cornerRadius: CGFloat = 0) {
         view.wantsLayer = true
         guard let layer = view.layer else { return }
         layer.cornerRadius = cornerRadius
         layer.masksToBounds = true
-        layer.borderWidth = 1
-        layer.borderColor = border.cgColor
         applyPanelGradient(to: view, cornerRadius: cornerRadius)
     }
 
@@ -104,3 +97,4 @@ enum Theme {
         field.isEditable = false
     }
 }
+

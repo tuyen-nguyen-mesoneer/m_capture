@@ -12,50 +12,47 @@
 open build/m_capture.app   # menu-bar app — look for the "m." icon
 ```
 
-`build.sh` compiles `Sources/*.swift` with `swiftc`, assembles the bundle
-(`io.mesoneer.mcapture`, `LSUIElement`), draws the icon, signs, and packages the
+`build.sh` compiles `Sources/*.swift` with `swiftc`, assembles the bundle, draws the icon, signs, and packages the
 DMG. No Xcode/SPM project.
 
-**Faster development loop**
-
-- `./build.sh --run` — rebuild, quit, and relaunch in place (skips the DMG).
-- **Preserving the Screen Recording grant:** ad-hoc signing changes the app's
-  identity on each build and resets the grant. Create a self-signed **Code Signing**
-  certificate named **`m_capture-dev`** in Keychain Access (Certificate Assistant →
-  Create a Certificate, Identity Type *Self Signed Root*); `build.sh` then signs with
-  it, so the grant persists.
-- `./build.sh && open build/m_capture.app --args --settings-demo` — opens the
-  Settings panel at launch to iterate on it.
+- **Faster development loop**
+  - `./build.sh --run` — rebuild, quit, and relaunch in place (skips the DMG).
+  - **Keep the Screen Recording grant across rebuilds:** ad-hoc signing resets the
+    grant every build. Create a self-signed **Code Signing** cert named **`m_capture-dev`** in
+    Keychain Access (*Self Signed Root*); `./build.sh --run` then signs with it. It's local and
+    per-developer, separate from the shared release identity (see *Releasing*).
+  - `./build.sh && open build/m_capture.app --args --settings-demo` — opens the
+    Settings panel at launch to iterate on it.
 
 ## Releasing
 
-1. Bump `VERSION` in `build.sh` (semver, e.g. `1.1.0`).
-2. Build with the **`m_capture-dev`** cert present (see *Faster dev loop* above) — a
-   stable signing identity means users keep their Screen Recording grant across
-   updates instead of re-granting after every release.
-3. `./build.sh` → `m_capture.dmg` in the repo root.
-4. Create a **GitHub Release** tagged `v<VERSION>` and attach the DMG. The app's
-   **Check for Updates** reads `releases` (newest-first), so the tag must match `VERSION` and
-   the repo's releases (and issues, for **Report a Bug**) must be readable by every
-   user — i.e. the repo is public or org-accessible to all employees.
+CI does the work: push a version tag and a signed `m_capture.dmg` is published to a GitHub
+Release (`.github/workflows/release.yml`). Every release is signed with one shared identity,
+**`m_capture-release`**, so users keep their Screen Recording grant across updates — the grant
+is tied to the signing cert, and a different cert forces everyone to re-grant.
 
-> The build is **not notarized** (no Apple Developer ID), so first launch needs the
-> *System Settings → Privacy & Security → Open Anyway* step. See the README's Install
-> section — link users there.
+### One-time setup (admin, once)
 
-## Where things live
+1. **Create the cert** — Keychain Access → *Certificate Assistant → Create a Certificate* → a
+   **Code Signing** cert (*Self Signed Root*) named exactly **`m_capture-release`**.
+2. **Export it** — right-click the cert → *Export* → `m_capture-release.p12`, and set a password.
+3. **Add two GitHub secrets** — repo → **Settings → Secrets and variables → Actions → New
+   repository secret**:
+   - `RELEASE_CERT_P12_BASE64` — run `base64 -i m_capture-release.p12 | pbcopy`, then paste.
+   - `RELEASE_CERT_PASSWORD` — the password from step 2.
+4. **Pin it** — set `RELEASE_CERT_SHA` in `build.sh` to the cert's SHA-1 (from
+   `security find-identity -p codesigning`), so a build signed by any other cert fails.
 
-Full source map in **[`CLAUDE.md`](CLAUDE.md)**. Quick index:
+### Cut a release (anyone)
 
-- **Menu item / hotkey** → `AppDelegate.swift` (+ `HotKey.swift` for Carbon).
-- **Selection overlay** → `ScreenshotController.swift` / `SelectionOverlay.swift`.
-- **New annotation tool** → `Tool` case + drawing in `Annotations.swift` (also give
-  the mark `bounds` and, if it has a size scalar, a `scale(by:around:)` override so
-  the Select tool can move/resize it), input in `CanvasView.swift`, tile + shortcut
-  in `EditorWindow.swift`.
-- **Background** → `Background.swift`; **setting/preference** → `Settings.swift` +
-  `SettingsWindow.swift`.
-- **Colors, fonts, spacing** → `Theme.swift`.
+1. Bump `VERSION` in `build.sh` and commit.
+2. Tag (no `v` prefix, equal to `VERSION`) and push:
+   `git tag 1.1.0 && git push origin 1.1.0`.
+
+CI checks the tag matches `VERSION`, signs the DMG, and publishes the release. Users' apps
+download it, swap in place, and run the new version on next launch (a silent daily check, plus
+**Check for Updates**). The repo's releases (and issues, for **Report a Bug**) must be readable
+by every user — keep the repo public or org-accessible.
 
 ## Conventions
 
@@ -66,11 +63,6 @@ Full source map in **[`CLAUDE.md`](CLAUDE.md)**. Quick index:
 - **Comments explain *why*, not *what*** — prefer one `///` doc comment over
   scattered inline notes.
 - Write original code; match the surrounding Swift.
-
-> ⚠️ Before touching capture code: all capture shells out to
-> `/usr/sbin/screencapture` (no in-process pixel grab), and multi-monitor
-> coordinate math lives in `ScreenshotController.finish`. See
-> **[`CLAUDE.md` → Gotchas](CLAUDE.md)** for the rest.
 
 ## Testing
 
@@ -113,7 +105,7 @@ empty — that usually points at the signing/grant reset above.
 
 ## Pull requests
 
-1. Branch off `main`.
+1. Branch off `trunk`.
 2. Run `./build.sh` — confirm it builds and launches.
 3. Smoke-test the areas you touched.
 4. Update docs (`README.md` / `CLAUDE.md`) and screenshots when behavior, tools, or shortcuts change.

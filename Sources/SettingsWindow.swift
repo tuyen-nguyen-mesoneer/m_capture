@@ -39,8 +39,6 @@ final class SettingsWindowController: NSObject {
 
     private func build() {
         let size = NSSize(width: Layout.windowWidth, height: 484)
-        // Borderless so the corners are square (macOS rounds `.titled` windows); chrome
-        // is supplied by PanelWindow (close button, Esc/⌘W, drag-to-move).
         let w = PanelWindow(contentRect: NSRect(origin: .zero, size: size),
                             styleMask: .borderless, backing: .buffered, defer: false)
         w.isReleasedWhenClosed = false
@@ -56,7 +54,6 @@ final class SettingsWindowController: NSObject {
         delayPopup = popup(CaptureDelay.allCases.map { $0.label }, #selector(delayChanged))
         behaviorPopup = popup(CaptureBehavior.allCases.map { $0.label }, #selector(behaviorChanged))
 
-        // — Shortcuts — (a recorder per rebindable action)
         shortcutFields = ShortcutAction.allCases
             .map { action in HotKeyField(action: action) { Self.reloadHotKeys() } }
 
@@ -68,7 +65,7 @@ final class SettingsWindowController: NSObject {
         pathLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         let choose = PointerButton(title: "Choose…", target: self, action: #selector(chooseLocation))
         choose.bezelStyle = .rounded
-        choose.bezelColor = Theme.accentPurple   // brand tint on the one action button
+        choose.bezelColor = Theme.accentPurple
 
         prefixField = textField(#selector(prefixChanged))
 
@@ -114,23 +111,17 @@ final class SettingsWindowController: NSObject {
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 11
-        // Looser gap before each section header (except the first) so the groups
-        // read as distinct blocks.
         for (i, view) in rows.enumerated() where view is SectionHeader && i > 0 {
             stack.setCustomSpacing(22, after: rows[i - 1])
         }
         stack.translatesAutoresizingMaskIntoConstraints = false
         content.addSubview(stack)
-        // 44px top clears the overlapping titlebar; 24px elsewhere (matches the
-        // side margins and the About panel).
         let topInset: CGFloat = 44, bottomInset: CGFloat = 24
         NSLayoutConstraint.activate([
             stack.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: Layout.sideMargin),
             stack.topAnchor.constraint(equalTo: content.topAnchor, constant: topInset),
         ])
 
-        // Size the window to the content so the top and bottom margins match
-        // (instead of a hardcoded height that leaves an uneven gap at the bottom).
         w.contentView = content
         content.layoutSubtreeIfNeeded()
         let height = ceil(topInset + stack.fittingSize.height + bottomInset)
@@ -139,8 +130,6 @@ final class SettingsWindowController: NSObject {
         w.installChrome(on: content)
         window = w
     }
-
-    // MARK: Builders
 
     /// A section header: small, letter-spaced uppercase in the muted secondary
     /// tone — a quiet group marker, not a third competing text color.
@@ -153,8 +142,6 @@ final class SettingsWindowController: NSObject {
 
     private func checkbox(_ title: String, _ action: Selector) -> NSButton {
         let b = PointerButton(checkboxWithTitle: title, target: self, action: action)
-        // Explicit white title (don't let the control tint bleed into the text);
-        // the lavender accent only colors the tick.
         b.attributedTitle = NSAttributedString(string: title, attributes: [
             .foregroundColor: Theme.textPrimary,
             .font: Theme.font(12),
@@ -178,7 +165,7 @@ final class SettingsWindowController: NSObject {
         let t = BrandTextField(string: "")
         t.font = Theme.font(12)
         t.textColor = Theme.textPrimary
-        t.drawsBackground = false          // the rounded layer draws the fill
+        t.drawsBackground = false
         t.isBezeled = false
         t.isBordered = false
         t.focusRingType = .none
@@ -204,8 +191,8 @@ final class SettingsWindowController: NSObject {
     private enum Layout {
         static let labelWidth: CGFloat = 116
         static let gap: CGFloat = 14
-        static var controlX: CGFloat { labelWidth + gap }   // left edge of the control column
-        static let infoCol: CGFloat = 24   // 8px gap + the ⓘ glyph, right of each control
+        static var controlX: CGFloat { labelWidth + gap }
+        static let infoCol: CGFloat = 24
         static let sideMargin: CGFloat = 24
         /// Wide enough for the longest checkbox label on one line. Controls span
         /// exactly `controlWidth` from `controlX`, so every popup/field is the
@@ -257,21 +244,17 @@ final class SettingsWindowController: NSObject {
         dot.onEnter = { [weak self, weak dot] in if let dot { self?.showTip(tip, near: dot) } }
         dot.onExit = { [weak self] in self?.hideTip() }
         row.addSubview(dot)
-        // Tie the ⓘ to its control (a clean 8px gap) so it reads as that control's
-        // help, not a free-floating column at the window edge.
         NSLayoutConstraint.activate([
             dot.leadingAnchor.constraint(equalTo: control.trailingAnchor, constant: 8),
             dot.centerYAnchor.constraint(equalTo: control.centerYAnchor),
         ])
     }
 
-    // MARK: Brand tooltip (the system tooltip can't be themed)
-
     private lazy var tipText: NSTextField = {
         let l = NSTextField(wrappingLabelWithString: "")
         l.font = Theme.font(11, .medium)
         l.textColor = Theme.ink
-        l.isSelectable = false   // wrapping labels default to selectable; the rest already match a label
+        l.isSelectable = false
         l.preferredMaxLayoutWidth = 220
         return l
     }()
@@ -297,8 +280,8 @@ final class SettingsWindowController: NSObject {
         let vf = content.convert(view.bounds, from: view)
         var x = vf.midX - w / 2
         x = max(8, min(x, content.bounds.width - w - 8))
-        var y = vf.minY - h - 6                       // prefer below the dot
-        if y < 8 { y = vf.maxY + 6 }                  // flip above if it'd clip
+        var y = vf.minY - h - 6
+        if y < 8 { y = vf.maxY + 6 }
         content.addSubview(tipBox, positioned: .above, relativeTo: nil)
         tipBox.frame = NSRect(x: x, y: y, width: w, height: h)
         tipText.frame = NSRect(x: padX, y: padY, width: ts.width, height: ts.height)
@@ -378,11 +361,8 @@ final class SettingsWindowController: NSObject {
         videoAudioSourcePopup.selectItem(at: VideoAudioSource.allCases.firstIndex(of: s.videoAudioSource) ?? 0)
     }
 
-    // MARK: Actions
-
     @objc private func loginToggled() {
         Settings.shared.launchAtLogin = (loginCheck.state == .on)
-        // Reflect what actually stuck (the toggle can fail silently).
         loginCheck.state = Settings.shared.launchAtLogin ? .on : .off
     }
 
@@ -396,7 +376,7 @@ final class SettingsWindowController: NSObject {
 
     @objc private func prefixChanged() {
         Settings.shared.filenamePrefix = prefixField.stringValue
-        prefixField.stringValue = Settings.shared.filenamePrefix   // reflect sanitized value
+        prefixField.stringValue = Settings.shared.filenamePrefix
         showToast("Filename prefix saved")
     }
 
@@ -570,3 +550,4 @@ private final class BrandTextFieldCell: NSTextFieldCell {
                      delegate: delegate, start: selStart, length: selLength)
     }
 }
+

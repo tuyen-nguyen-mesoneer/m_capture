@@ -195,7 +195,7 @@ Latency and correctness criteria measured by hand or stopwatch.
 | Stop → file saved | < 3 s for clips up to 60 s |
 | HEVC codec confirmed | `mdls -name kMDItemCodecs <file>` returns `HEVC` |
 | 30 s 1080p Medium quality | < 15 MB |
-| No regression | Screenshot (⌃⇧X) and scrolling (⌃⇧S) still work after each task |
+| No regression | Screenshot (⌃⇧X) still works after each task |
 
 ---
 

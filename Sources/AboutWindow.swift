@@ -14,8 +14,6 @@ final class AboutWindowController {
             return
         }
 
-        // Compact vertical rhythm, laid out top-down; the window height is derived
-        // from it so the top (clears the close button) and bottom margins stay balanced.
         let side: CGFloat = 24
         let topClear: CGFloat = 40, logoSize: CGFloat = 80
         let titleH: CGFloat = 32, verH: CGFloat = 18, descH: CGFloat = 22, footerH: CGFloat = 16
@@ -24,18 +22,12 @@ final class AboutWindowController {
         let height = topClear + logoSize + gLogoTitle + titleH + gTitleVer + verH
                    + gVerDesc + descH + gDescDiv + 1 + gDivFooter + footerH + bottom
 
-        // The description is the widest element, so it sets the content width: the
-        // panel is exactly as wide as the description + side margins, and the divider
-        // spans the same width — both equal `descWidth`, inset by `side`. `sizeToFit`
-        // measures the field's true width (incl. its internal padding) so it can't clip.
         let desc = label("Internal screen capture and recording tool",
                          font: Theme.font(12), color: Theme.textMuted)
         desc.sizeToFit()
         let descWidth = ceil(desc.frame.width)
         let size = NSSize(width: descWidth + side * 2, height: ceil(height))
 
-        // Borderless so the corners are square (macOS rounds `.titled` windows); chrome
-        // is supplied by PanelWindow (close button, Esc/⌘W, drag-to-move).
         let w = PanelWindow(contentRect: NSRect(origin: .zero, size: size),
                             styleMask: .borderless, backing: .buffered, defer: false)
         w.isReleasedWhenClosed = false
@@ -47,7 +39,6 @@ final class AboutWindowController {
         let content = NSView(frame: NSRect(origin: .zero, size: size))
         Theme.applyPanelGradient(to: content)
 
-        // Lay out top-down: `top` tracks the y of the next element's top edge.
         var top = size.height - topClear
 
         let logo = NSImageView(frame: NSRect(x: (size.width - logoSize) / 2, y: top - logoSize,
@@ -61,8 +52,6 @@ final class AboutWindowController {
         content.addSubview(title)
         top -= titleH + gTitleVer
 
-        // Version — read from the bundle (set by build.sh) so it never drifts.
-        // Quiet secondary identifier (lavender reserved for eyebrows only).
         let versionString = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0.0"
         let version = label(versionString, font: Theme.font(12, .bold), color: Theme.textSecondary)
         version.frame = NSRect(x: 0, y: top - verH, width: size.width, height: verH)
@@ -78,8 +67,6 @@ final class AboutWindowController {
         content.addSubview(divider)
         top -= 1 + gDivFooter
 
-        // Footer: a centered row of clickable links separated by a middot —
-        // [MIT License] · [© 2026 mesoneer AG] — sitting `bottom` px off the edge.
         let footerFont = Theme.font(11)
         let licenseLink = LinkButton("MIT License", url: "https://github.com/tuyen-nguyen-mesoneer/m_capture/blob/trunk/LICENSE", font: footerFont)
         let dot = label("·", font: footerFont, color: Theme.textMuted)
@@ -162,3 +149,4 @@ private final class LinkButton: NSButton {
     override func mouseEntered(with event: NSEvent) { render(underline: true) }
     override func mouseExited(with event: NSEvent) { render(underline: false) }
 }
+

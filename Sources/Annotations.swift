@@ -10,8 +10,8 @@ struct DrawStyle {
 /// One drawable mark on the canvas. Coordinates are in image space.
 protocol Annotation: AnyObject {
     func draw(in ctx: CGContext)
-    func hit(_ p: CGPoint) -> Bool   // for the eraser
-    func remap(_ f: (CGPoint) -> CGPoint)  // move every stored point through f (rotate/crop)
+    func hit(_ p: CGPoint) -> Bool
+    func remap(_ f: (CGPoint) -> CGPoint)
     /// Tight bounding box in image space — drives the Select tool's outline + handle.
     var bounds: CGRect { get }
     /// Whether the Select tool offers a corner resize handle. Path-like marks
@@ -36,8 +36,6 @@ private func contrasting(_ c: NSColor) -> NSColor {
     return lum > 0.6 ? .black : .white
 }
 
-// MARK: - Freehand
-
 class FreehandAnnotation: Annotation {
     private(set) var points: [CGPoint] = []
     let style: DrawStyle
@@ -45,7 +43,7 @@ class FreehandAnnotation: Annotation {
     func add(_ p: CGPoint) { points.append(p) }
     func remap(_ f: (CGPoint) -> CGPoint) { points = points.map(f) }
     var strokeWidth: CGFloat { style.lineWidth }
-    var resizable: Bool { false }   // a path; the Select tool only moves it
+    var resizable: Bool { false }
     var bounds: CGRect {
         guard let first = points.first else { return .zero }
         var (minX, minY, maxX, maxY) = (first.x, first.y, first.x, first.y)
@@ -89,8 +87,6 @@ final class MarkerAnnotation: FreehandAnnotation {
     }
 }
 
-// MARK: - Two-point shapes
-
 class TwoPointAnnotation: Annotation {
     var start: CGPoint
     var end: CGPoint
@@ -103,23 +99,15 @@ class TwoPointAnnotation: Annotation {
     func draw(in ctx: CGContext) {}
     func hit(_ p: CGPoint) -> Bool { rect.insetBy(dx: -6, dy: -6).contains(p) }
     func remap(_ f: (CGPoint) -> CGPoint) { start = f(start); end = f(end) }
-    // A class property (not the protocol default) so LineAnnotation can override it.
     var resizable: Bool { true }
     var bounds: CGRect { rect }
 }
 
-final class LineAnnotation: TwoPointAnnotation {
-    override var resizable: Bool { false }   // a path; move-only, like the arrow
-    override func draw(in ctx: CGContext) {
-        ctx.setStrokeColor(style.color.cgColor); ctx.setLineWidth(style.lineWidth); ctx.setLineCap(.round)
-        ctx.beginPath(); ctx.move(to: start); ctx.addLine(to: end); ctx.strokePath()
-    }
-}
-
-/// A bendable arrow: a quadratic curve from `start` to `end` shaped by one
+/// A bendable mark: a quadratic curve from `start` to `end` shaped by one
 /// `control` point. Straight when the control sits on the start–end line; the
-/// editor exposes a draggable handle at the curve's apex to bend it.
-final class CurvedArrowAnnotation: Annotation {
+/// editor exposes a draggable handle at the curve's apex to bend it. Base for the
+/// bendable line and arrow — subclasses only supply `draw`.
+class CurvedAnnotation: Annotation {
     var start: CGPoint
     var end: CGPoint
     var control: CGPoint
@@ -133,20 +121,18 @@ final class CurvedArrowAnnotation: Annotation {
     var apex: CGPoint { CGPoint(x: (lineMid.x + control.x) / 2, y: (lineMid.y + control.y) / 2) }
     /// Reshape so the apex passes through `p` (dragging the handle).
     func bend(through p: CGPoint) { control = CGPoint(x: 2 * p.x - lineMid.x, y: 2 * p.y - lineMid.y) }
-    /// Reset to a straight arrow (control on the line) — used while drawing it out.
+    /// Reset to a straight mark (control on the line) — used while drawing it out.
     func straighten() { control = lineMid }
 
-    func draw(in ctx: CGContext) {
-        ctx.setStrokeColor(style.color.cgColor); ctx.setFillColor(style.color.cgColor)
-        ctx.setLineWidth(style.lineWidth); ctx.setLineCap(.round); ctx.setLineJoin(.round)
-        let head = max(12, style.lineWidth * 4)
-        let a = atan2(end.y - control.y, end.x - control.x)   // tangent at the tip
-        ctx.beginPath(); ctx.move(to: start); ctx.addQuadCurve(to: end, control: control); ctx.strokePath()
-        let w = CGFloat.pi / 7
-        let p1 = CGPoint(x: end.x - cos(a - w) * head, y: end.y - sin(a - w) * head)
-        let p2 = CGPoint(x: end.x - cos(a + w) * head, y: end.y - sin(a + w) * head)
-        ctx.beginPath(); ctx.move(to: end); ctx.addLine(to: p1); ctx.addLine(to: p2); ctx.closePath(); ctx.fillPath()
+    /// Strokes the quad-curve shaft up to `tip`. The line draws all the way to
+    /// `end`; the arrow stops at its head's base so the head reads cleanly.
+    func strokeShaft(to tip: CGPoint, in ctx: CGContext) {
+        ctx.setStrokeColor(style.color.cgColor); ctx.setLineWidth(style.lineWidth)
+        ctx.setLineCap(.round); ctx.setLineJoin(.round)
+        ctx.beginPath(); ctx.move(to: start); ctx.addQuadCurve(to: tip, control: control); ctx.strokePath()
     }
+    func draw(in ctx: CGContext) {}
+
     func hit(_ p: CGPoint) -> Bool {
         let n = 24
         for i in 0...n {
@@ -158,16 +144,43 @@ final class CurvedArrowAnnotation: Annotation {
         return false
     }
     func remap(_ f: (CGPoint) -> CGPoint) { start = f(start); end = f(end); control = f(control) }
-    var resizable: Bool { false }   // shaped by its apex handle; the Select tool only moves it
+    var resizable: Bool { false }
     /// A quadratic curve stays within the hull of its three points, so their box
-    /// (padded for the line width / arrowhead) bounds the whole arrow.
+    /// (padded by `boundsPadding`) bounds the whole mark.
     var bounds: CGRect {
         let xs = [start.x, end.x, control.x], ys = [start.y, end.y, control.y]
-        let pad = max(12, style.lineWidth * 4)
+        let pad = boundsPadding
         return CGRect(x: xs.min()!, y: ys.min()!,
                       width: xs.max()! - xs.min()!, height: ys.max()! - ys.min()!)
             .insetBy(dx: -pad, dy: -pad)
     }
+    /// Padding around the point hull — enough to cover the stroke (overridden by
+    /// the arrow to also cover its head).
+    var boundsPadding: CGFloat { max(12, style.lineWidth * 2) }
+}
+
+/// A bendable line — the curved shaft, no arrowhead.
+final class CurvedLineAnnotation: CurvedAnnotation {
+    override func draw(in ctx: CGContext) { strokeShaft(to: end, in: ctx) }
+}
+
+/// A bendable arrow — the curved shaft plus a filled arrowhead at `end`.
+final class CurvedArrowAnnotation: CurvedAnnotation {
+    override func draw(in ctx: CGContext) {
+        let head = CurvedArrowAnnotation.headLength(style.lineWidth)
+        let w = CGFloat.pi / 6
+        let a = atan2(end.y - control.y, end.x - control.x)
+        let p1 = CGPoint(x: end.x - cos(a - w) * head, y: end.y - sin(a - w) * head)
+        let p2 = CGPoint(x: end.x - cos(a + w) * head, y: end.y - sin(a + w) * head)
+        let backoff = min(head * cos(w), hypot(end.x - start.x, end.y - start.y))
+        let shaftEnd = CGPoint(x: end.x - cos(a) * backoff, y: end.y - sin(a) * backoff)
+        strokeShaft(to: shaftEnd, in: ctx)
+        ctx.setFillColor(style.color.cgColor)
+        ctx.beginPath(); ctx.move(to: end); ctx.addLine(to: p1); ctx.addLine(to: p2); ctx.closePath(); ctx.fillPath()
+    }
+    /// Arrowhead length, shared by `draw` and `boundsPadding` so the box covers the barbs.
+    static func headLength(_ lineWidth: CGFloat) -> CGFloat { max(14, lineWidth * 4.5) }
+    override var boundsPadding: CGFloat { CurvedArrowAnnotation.headLength(style.lineWidth) }
 }
 
 final class RectAnnotation: TwoPointAnnotation {
@@ -221,8 +234,8 @@ final class StarAnnotation: TwoPointAnnotation {
         let inner: CGFloat = 0.4
         var pts: [CGPoint] = []
         for i in 0..<10 {
-            let a = .pi / 2 + CGFloat(i) * .pi / 5          // start at top, 36° steps
-            let f: CGFloat = i % 2 == 0 ? 1 : inner          // alternate outer / inner
+            let a = .pi / 2 + CGFloat(i) * .pi / 5
+            let f: CGFloat = i % 2 == 0 ? 1 : inner
             pts.append(CGPoint(x: cx + cos(a) * rx * f, y: cy + sin(a) * ry * f))
         }
         strokePolygon(pts, in: ctx, style)
@@ -249,7 +262,7 @@ final class HexagonAnnotation: TwoPointAnnotation {
 
 final class OctagonAnnotation: TwoPointAnnotation {
     override func draw(in ctx: CGContext) {
-        strokePolygon(regularPolygon(sides: 8, in: rect, rotation: .pi / 8), in: ctx, style)  // flat top
+        strokePolygon(regularPolygon(sides: 8, in: rect, rotation: .pi / 8), in: ctx, style)
     }
 }
 
@@ -265,7 +278,6 @@ final class RoundedRectAnnotation: TwoPointAnnotation {
 final class CheckmarkAnnotation: TwoPointAnnotation {
     override func draw(in ctx: CGContext) {
         let r = rect
-        // Short arm down to a low vertex, then a long arm up to the top-right.
         strokePolygon([CGPoint(x: r.minX, y: r.minY + r.height * 0.5),
                        CGPoint(x: r.minX + r.width * 0.33, y: r.minY),
                        CGPoint(x: r.maxX, y: r.maxY)], in: ctx, style, closed: false)
@@ -293,7 +305,6 @@ final class SpotlightAnnotation: TwoPointAnnotation {
         let r = rect
         ctx.setFillColor(NSColor(white: 0, alpha: 0.55).cgColor)
         let W = fullSize.width, H = fullSize.height
-        // Four bands (top, bottom, left, right) around the clear rectangle.
         ctx.fill(CGRect(x: 0, y: r.maxY, width: W, height: H - r.maxY))
         ctx.fill(CGRect(x: 0, y: 0, width: W, height: r.minY))
         ctx.fill(CGRect(x: 0, y: r.minY, width: r.minX, height: r.height))
@@ -302,30 +313,45 @@ final class SpotlightAnnotation: TwoPointAnnotation {
     override func hit(_ p: CGPoint) -> Bool { !rect.contains(p) }
 }
 
-// MARK: - Click-placed
-
 final class TextAnnotation: Annotation {
     let text: String
-    var origin: CGPoint        // lower-left in image space
+    var origin: CGPoint
     var fontSize: CGFloat
     let color: NSColor
-    init(text: String, origin: CGPoint, fontSize: CGFloat, color: NSColor) {
-        self.text = text; self.origin = origin; self.fontSize = fontSize; self.color = color
+    /// Wrap width in image space: long text flows onto multiple lines instead of
+    /// running off the canvas. Scales with the font so resizing stays proportional.
+    var maxWidth: CGFloat
+    /// Height of the text box; the text is centered vertically within it to match
+    /// the live editor. Scales with the font on resize.
+    var boxHeight: CGFloat
+    init(text: String, origin: CGPoint, fontSize: CGFloat, color: NSColor,
+         maxWidth: CGFloat, boxHeight: CGFloat) {
+        self.text = text; self.origin = origin; self.fontSize = fontSize
+        self.color = color; self.maxWidth = max(1, maxWidth); self.boxHeight = max(1, boxHeight)
     }
     private var attrs: [NSAttributedString.Key: Any] {
-        [.font: Theme.font(fontSize, .semibold), .foregroundColor: color]
+        let para = NSMutableParagraphStyle(); para.lineBreakMode = .byWordWrapping
+        return [.font: Theme.font(fontSize, .semibold), .foregroundColor: color, .paragraphStyle: para]
     }
-    var bounds: CGRect {
-        CGRect(origin: origin, size: NSAttributedString(string: text, attributes: attrs).size())
+    private var textHeight: CGFloat {
+        ceil(NSAttributedString(string: text, attributes: attrs).boundingRect(
+            with: CGSize(width: maxWidth, height: .greatestFiniteMagnitude),
+            options: [.usesLineFragmentOrigin, .usesFontLeading]).height)
     }
+    var bounds: CGRect { CGRect(x: origin.x, y: origin.y, width: maxWidth, height: boxHeight) }
     func draw(in ctx: CGContext) {
-        NSAttributedString(string: text, attributes: attrs).draw(at: origin)
+        let dy = max(0, boxHeight - textHeight)
+        NSAttributedString(string: text, attributes: attrs).draw(
+            with: CGRect(x: origin.x, y: origin.y + dy, width: maxWidth, height: textHeight),
+            options: [.usesLineFragmentOrigin, .usesFontLeading])
     }
     func hit(_ p: CGPoint) -> Bool { bounds.insetBy(dx: -6, dy: -6).contains(p) }
     func remap(_ f: (CGPoint) -> CGPoint) { origin = f(origin) }
     func scale(by f: CGFloat, around a: CGPoint) {
         origin = CGPoint(x: a.x + (origin.x - a.x) * f, y: a.y + (origin.y - a.y) * f)
         fontSize *= f
+        maxWidth *= f
+        boxHeight *= f
     }
 }
 
@@ -399,7 +425,6 @@ final class EmojiAnnotation: Annotation {
     private var isLogo: Bool { emoji == Logo.stampToken }
     private var attrs: [NSAttributedString.Key: Any] { [.font: Theme.font(size)] }
     private var box: CGRect {
-        // The brand tile is square; Unicode glyphs use their measured text size.
         let sz = isLogo ? CGSize(width: size, height: size) : (emoji as NSString).size(withAttributes: attrs)
         return CGRect(x: center.x - sz.width / 2, y: center.y - sz.height / 2, width: sz.width, height: sz.height)
     }
@@ -421,20 +446,20 @@ final class EmojiAnnotation: Annotation {
     }
 }
 
-// MARK: - Measurement (ruler)
-
 /// An axis-aligned dimension line with end-ticks and a label showing the span in
 /// **image pixels**. Imprinted by the Ruler tool. `pixelsPerPoint` is the capture's
 /// Retina factor (crop/rotate preserve it, so the value stays correct after them).
 final class MeasureAnnotation: Annotation {
     var start: CGPoint
     var end: CGPoint
-    let pixelsPerPoint: CGFloat
     let style: DrawStyle
-    init(start: CGPoint, end: CGPoint, pixelsPerPoint: CGFloat, style: DrawStyle) {
-        self.start = start; self.end = end; self.pixelsPerPoint = pixelsPerPoint; self.style = style
+    init(start: CGPoint, end: CGPoint, style: DrawStyle) {
+        self.start = start; self.end = end; self.style = style
     }
-    var pixels: Int { Int((hypot(end.x - start.x, end.y - start.y) * pixelsPerPoint).rounded()) }
+    /// Length in the image's logical points — i.e. on-screen pixels. The capture's
+    /// point space is 1:1 with screen coordinates, so no Retina scaling is applied
+    /// (a Retina grab's device pixels are 2× this).
+    var pixels: Int { Int(hypot(end.x - start.x, end.y - start.y).rounded()) }
     private var labelAttrs: [NSAttributedString.Key: Any] {
         [.font: Theme.font(12, .semibold), .foregroundColor: NSColor.white]
     }
@@ -442,7 +467,6 @@ final class MeasureAnnotation: Annotation {
         let lw = max(1.5, style.lineWidth * 0.6)
         ctx.setStrokeColor(style.color.cgColor); ctx.setLineWidth(lw); ctx.setLineCap(.round)
         ctx.beginPath(); ctx.move(to: start); ctx.addLine(to: end); ctx.strokePath()
-        // Unit perpendicular, for the end-ticks and the label offset.
         let dx = end.x - start.x, dy = end.y - start.y
         let len = max(0.0001, hypot(dx, dy))
         let nx = -dy / len, ny = dx / len
@@ -453,7 +477,6 @@ final class MeasureAnnotation: Annotation {
             ctx.addLine(to: CGPoint(x: p.x - nx * tick, y: p.y - ny * tick))
             ctx.strokePath()
         }
-        // Dark label chip beside the midpoint, legible over any image.
         let mid = CGPoint(x: (start.x + end.x) / 2, y: (start.y + end.y) / 2)
         let s = NSAttributedString(string: "\(pixels) px", attributes: labelAttrs)
         let sz = s.size()
@@ -474,14 +497,12 @@ final class MeasureAnnotation: Annotation {
         return hypot(p.x - proj.x, p.y - proj.y) < max(8, style.lineWidth)
     }
     func remap(_ f: (CGPoint) -> CGPoint) { start = f(start); end = f(end) }
-    var resizable: Bool { false }   // resizing would change the measured length; move-only
+    var resizable: Bool { false }
     var bounds: CGRect {
         CGRect(x: min(start.x, end.x), y: min(start.y, end.y),
                width: abs(end.x - start.x), height: abs(end.y - start.y)).insetBy(dx: -8, dy: -8)
     }
 }
-
-// MARK: - Overlay image
 
 /// An image pasted/inserted on top of the capture. Movable + resizable in the
 /// editor; `opacity` (0–1) lets it sit semi-transparent to highlight differences.
@@ -507,10 +528,8 @@ final class ImageOverlayAnnotation: Annotation {
         let a = f(CGPoint(x: rect.minX, y: rect.minY)), b = f(CGPoint(x: rect.maxX, y: rect.maxY))
         rect = CGRect(x: min(a.x, b.x), y: min(a.y, b.y), width: abs(a.x - b.x), height: abs(a.y - b.y))
     }
-    var bounds: CGRect { rect }   // default uniform scale keeps the aspect locked
+    var bounds: CGRect { rect }
 }
-
-// MARK: - Zoom callout
 
 /// A magnifier callout: outlines a small `source` region and draws its pixels
 /// enlarged inside a rounded `dest` bubble, connected by a thin leader line.
@@ -526,7 +545,6 @@ final class ZoomAnnotation: Annotation {
     }
     func draw(in ctx: CGContext) {
         let lw = max(1.5, style.lineWidth)
-        // Leader line behind both boxes.
         ctx.setStrokeColor(style.color.withAlphaComponent(0.6).cgColor)
         ctx.setLineWidth(max(1, lw * 0.6)); ctx.setLineCap(.round)
         ctx.beginPath()
@@ -535,18 +553,16 @@ final class ZoomAnnotation: Annotation {
         ctx.strokePath()
         ctx.setStrokeColor(style.color.cgColor); ctx.setLineWidth(lw * 0.8)
         ctx.stroke(source)
-        // Enlarged pixels in a rounded bubble.
         let radius = min(dest.width, dest.height) * 0.08
         let path = CGPath(roundedRect: dest, cornerWidth: radius, cornerHeight: radius, transform: nil)
         ctx.saveGState(); ctx.addPath(path); ctx.clip()
         if let patch {
-            ctx.interpolationQuality = .none   // show actual enlarged pixels
+            ctx.interpolationQuality = .none
             ctx.draw(patch, in: dest)
         } else {
             ctx.setFillColor(NSColor(white: 0.5, alpha: 1).cgColor); ctx.fill(dest)
         }
         ctx.restoreGState()
-        // White halo + colored edge so the bubble reads on any background.
         ctx.addPath(path); ctx.setStrokeColor(NSColor(white: 1, alpha: 0.9).cgColor); ctx.setLineWidth(lw + 2); ctx.strokePath()
         ctx.addPath(path); ctx.setStrokeColor(style.color.cgColor); ctx.setLineWidth(lw); ctx.strokePath()
     }
@@ -558,5 +574,6 @@ final class ZoomAnnotation: Annotation {
         }
         source = mapRect(source); dest = mapRect(dest)
     }
-    var bounds: CGRect { dest.union(source) }   // the whole callout: bubble + framed region
+    var bounds: CGRect { dest.union(source) }
 }
+

@@ -7,11 +7,10 @@ import AppKit
 /// bottom-right corner to scale (aspect preserved), and right-click for a
 /// brand-styled menu (Copy / Save / Reset size / Close; Esc or ⌘W also close it).
 final class PinnedWindowController: NSObject, NSWindowDelegate {
-    // Retain live pins so several can coexist; each drops itself on close.
     private static var pinned: [PinnedWindowController] = []
 
     private let window: PinWindow
-    private let rep: NSBitmapImageRep   // full-resolution pixels for copy/save
+    private let rep: NSBitmapImageRep
 
     /// - Parameters:
     ///   - rep: the flattened, full-resolution capture.
@@ -57,7 +56,6 @@ final class PinnedWindowController: NSObject, NSWindowDelegate {
     private func saveToDisk() {
         let url = Settings.shared.fileURL()
         let rep = self.rep
-        // Encode + write off the main thread (matches the editor's Save).
         DispatchQueue.global(qos: .userInitiated).async {
             guard let data = Settings.shared.encode(rep) else { return }
             try? data.write(to: url)
@@ -85,16 +83,16 @@ private final class PinView: NSView {
     var onClose: (() -> Void)?
 
     private let image: NSImage
-    private let aspect: CGFloat              // width / height, preserved on resize
-    var initialSize: NSSize = .zero          // pin size at creation (for "Reset size")
-    private var contextMenu: BrandMenu?      // retained while shown
-    private let cornerRadius = Theme.radiusMedium   // matches the app's 12pt panels
-    private let grab: CGFloat = 22           // bottom-right resize hot-zone
+    private let aspect: CGFloat
+    var initialSize: NSSize = .zero
+    private var contextMenu: BrandMenu?
+    private let cornerRadius: CGFloat = 0
+    private let grab: CGFloat = 22
 
     private enum Mode { case move, resize }
     private var mode: Mode = .move
-    private var startMouse: NSPoint = .zero  // global, at mouseDown
-    private var startFrame: NSRect = .zero   // window frame, at mouseDown
+    private var startMouse: NSPoint = .zero
+    private var startFrame: NSRect = .zero
 
     init(rep: NSBitmapImageRep) {
         let img = NSImage(size: NSSize(width: rep.pixelsWide, height: rep.pixelsHigh))
@@ -109,8 +107,6 @@ private final class PinView: NSView {
     override func viewDidMoveToWindow() { window?.makeFirstResponder(self) }
     override func resetCursorRects() { addCursorRect(bounds, cursor: .openHand) }
 
-    // MARK: Drawing
-
     override func draw(_ dirtyRect: NSRect) {
         let path = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.5, dy: 0.5),
                                 xRadius: cornerRadius, yRadius: cornerRadius)
@@ -119,15 +115,10 @@ private final class PinView: NSView {
         image.draw(in: bounds)
         NSGraphicsContext.restoreGraphicsState()
 
-        Theme.lavender.withAlphaComponent(0.6).setStroke()
-        path.lineWidth = 1
-        path.stroke()
-
-        // Resize grip: a double-chevron in the bottom-right, inset to clear the
-        // rounded corner, with a dark underlay so it stays visible over light captures.
         func gripPath() -> NSBezierPath {
             let p = NSBezierPath()
-            let x0 = bounds.maxX - cornerRadius - 14, y0 = cornerRadius + 2
+            let inset: CGFloat = 12
+            let x0 = bounds.maxX - inset - 14, y0 = inset + 2
             p.move(to: NSPoint(x: x0, y: y0));     p.line(to: NSPoint(x: x0 + 11, y: y0 + 11))
             p.move(to: NSPoint(x: x0 + 6, y: y0)); p.line(to: NSPoint(x: x0 + 11, y: y0 + 6))
             return p
@@ -137,8 +128,6 @@ private final class PinView: NSView {
         let grip = gripPath(); grip.lineWidth = 1.5
         Theme.lavender.setStroke(); grip.stroke()
     }
-
-    // MARK: Move & resize
 
     override func mouseDown(with event: NSEvent) {
         window?.makeFirstResponder(self)
@@ -158,14 +147,11 @@ private final class PinView: NSView {
         case .resize:
             let newW = max(win.minSize.width, startFrame.width + dx)
             let newH = max(win.minSize.height, newW / aspect)
-            // Anchor the top-left corner so it grows toward the cursor.
             win.setFrame(NSRect(x: startFrame.minX, y: startFrame.maxY - newH,
                                 width: newW, height: newH), display: true)
             win.invalidateShadow()
         }
     }
-
-    // MARK: Context menu (brand-styled)
 
     override func rightMouseDown(with event: NSEvent) {
         let menu = BrandMenu(entries: [
@@ -182,16 +168,13 @@ private final class PinView: NSView {
     private func resetSize() {
         guard let win = window, initialSize.width > 0 else { return }
         let f = win.frame
-        // Keep the top-left corner fixed, like the corner-resize.
         win.setFrame(NSRect(x: f.minX, y: f.maxY - initialSize.height,
                             width: initialSize.width, height: initialSize.height), display: true)
         win.invalidateShadow()
     }
 
-    // MARK: Keyboard dismissal
-
     override func keyDown(with event: NSEvent) {
-        if event.keyCode == 53 { onClose?(); return }   // Esc
+        if event.keyCode == 53 { onClose?(); return }
         super.keyDown(with: event)
     }
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
@@ -202,3 +185,4 @@ private final class PinView: NSView {
         return super.performKeyEquivalent(with: event)
     }
 }
+

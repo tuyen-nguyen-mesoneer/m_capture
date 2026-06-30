@@ -5,7 +5,7 @@ import AVFoundation
 
 /// Singleton orchestrator for the video-recording flow.
 /// Coordinates the region-selection overlay, `VideoRecordBar`, `VideoRecordSession`,
-/// and the 1 Hz update tick. Mirrors the lifecycle of `ScrollCaptureController`.
+/// and the 1 Hz update tick.
 ///
 /// Call `begin()` from AppDelegate (guarded with `#available(macOS 14, *)`).
 @available(macOS 14, *)

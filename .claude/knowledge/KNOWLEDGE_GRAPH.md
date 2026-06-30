@@ -1,7 +1,7 @@
 # m_capture — Knowledge Graph
 
 > **For agents and the leader.** Navigate to the section you need; every claim traces back to the Swift source.  
-> Scanned: 25 files · 6 154 lines · Sources/ only (tools/ excluded).  
+> Scanned: 23 files · Sources/ only (tools/ excluded).  
 > Generated: 2026-06-26
 
 ---
@@ -34,7 +34,7 @@
 
 ## File Catalogue
 
-All 25 production Swift files in `Sources/`. Sorted by category.
+All 23 production Swift files in `Sources/`. Sorted by category.
 
 ### Entry Point
 | File | Types Defined | Role |
@@ -53,8 +53,6 @@ All 25 production Swift files in `Sources/`. Sorted by category.
 |------|---------------|------|
 | `ScreenshotController.swift` | `ScreenshotController` | Region/window screenshot: overlay → subprocess → editor |
 | `SelectionOverlay.swift` | `OverlayWindow`, `SelectionView`, `WindowInfo` | Dim selection overlay; region, window-capture, and full-screen modes; loupe. `allowsFullScreenMode` flag opts video recording into the full-screen mode. |
-| `ScrollCaptureController.swift` | `ScrollCaptureController`, `ScrollSession`†, `ScrollCaptureBar`†, etc. | Scrolling screenshot orchestration (macOS 14+) |
-| `ScrollStitcher.swift` | `ScrollStitcher`, `ScrollStitcher.Result` | Pure stitch engine: frame alignment, sticky-band detection |
 | `VideoRecordSession.swift` | `VideoRecordSession`, `RecordError` | HEVC recording engine: SCStream capture → AVAssetWriter → `.mp4`; pause/resume, PTS normalisation (macOS 14+) |
 | `VideoRecordBar.swift` | `VideoRecordBar` | Floating brand-styled HUD: timer, file-size readout, pause/stop buttons, pulse animation |
 | `VideoRecordController.swift` | `VideoRecordController` | Singleton orchestrator: selection overlay → mic permission → session lifecycle → 1 Hz UI tick |
@@ -102,21 +100,20 @@ Who depends on whom. Higher = more central.
 | 2 | **Settings.swift** | 8 files | AppDelegate, Background, EditorWindow, HotKey, PinnedWindow, ScreenshotController, SettingsWindow, ShortcutRecorder |
 | 3 | **Annotations.swift** | 3 files | CanvasView (all types), CounterFormatPicker (CounterFormat), EditorWindow (DrawStyle, CounterFormat) |
 | 4 | **Background.swift** | 3 files | EditorWindow, PinnedWindow, SettingsWindow |
-| 5 | **EditorWindow.swift** | 3 files | AppDelegate, ScreenshotController, ScrollCaptureController |
-| 6 | **ColorPicker.swift** | 3 files | CounterFormatPicker, EditorWindow, EmojiPicker (`KeyablePickerWindow`) |
-| 7 | **Logo.swift** | 3 files | AboutWindow, AppDelegate, BrandMenu |
+| 5 | **ColorPicker.swift** | 3 files | CounterFormatPicker, EditorWindow, EmojiPicker (`KeyablePickerWindow`) |
+| 6 | **Logo.swift** | 3 files | AboutWindow, AppDelegate, BrandMenu |
+| 7 | **EditorWindow.swift** | 2 files | AppDelegate, ScreenshotController |
 | 8 | **BrandMenu.swift** | 2 files | AppDelegate, PinnedWindow |
-| 9 | **SelectionOverlay.swift** | 2 files | ScreenshotController, ScrollCaptureController |
+| 9 | **SelectionOverlay.swift** | 2 files | ScreenshotController, VideoRecordController |
 | 10 | **BrandPopUpButton.swift** | 2 files | SettingsWindow, ShortcutRecorder |
 | 11 | **VideoRecordController.swift** | AppDelegate | Settings, SelectionOverlay, VideoRecordSession, VideoRecordBar, AVFoundation |
 | 12 | **VideoRecordSession.swift** | VideoRecordController | SCStream, AVAssetWriter, AVCaptureSession, Settings |
 | 13 | **VideoRecordBar.swift** | VideoRecordController | Theme, BrandMenu |
-| 14–28 | All others | 0–1 files | Leaves |
+| 14–23 | All others | 0–1 files | Leaves |
 
 **Circular dependency:** `Settings.swift` ↔ `Background.swift` — Settings decodes `defaultBackground` to a `Background` case; Background reads `Settings.shared.paddingSize` in `compose()`. Both are singletons; no runtime cycle risk, but a refactor must touch both.
 
 **Isolated leaves (safest to test/modify independently):**
-- `ScrollStitcher.swift` — no project-type references, purely algorithmic.
 - `TextRecognizer.swift` — stateless Vision wrapper, no project-type references.
 - `Theme.swift` — no dependencies at all; changing it affects 17 files visually.
 
@@ -126,9 +123,9 @@ Who depends on whom. Higher = more central.
 
 | Framework | Used by |
 |-----------|---------|
-| **AppKit** | All 25 files |
+| **AppKit** | All 23 files |
 | **Carbon.HIToolbox** | HotKey, Settings, ShortcutRecorder |
-| **ScreenCaptureKit** | ScreenshotController, ScrollCaptureController |
+| **ScreenCaptureKit** | ScreenshotController, VideoRecordSession |
 | **CoreImage** | CanvasView (CIPixellate for blur) |
 | **Vision** | TextRecognizer |
 | **ImageIO** | Settings (HEIC encoding via CGImageDestination) |
@@ -148,7 +145,6 @@ Who depends on whom. Higher = more central.
 | `NSApplicationDelegate` | (AppKit) | AppDelegate |
 | `NSWindowDelegate` | (AppKit) | EditorWindowController, PinnedWindowController |
 | `NSTextFieldDelegate` | (AppKit) | CanvasView |
-| `Sendable` (unchecked) | (Swift) | ScrollStitcher, ScrollSession |
 
 ### Enums (namespace / value types)
 | Enum | File | Key Members |
@@ -162,21 +158,19 @@ Who depends on whom. Higher = more central.
 | `ImageFormat` | Settings.swift | `png`, `jpeg`, `heic`, `tiff`; `encode(_ rep:) -> Data?` |
 | `CaptureDelay` | Settings.swift | `none(0)`, `three(3)`, `five(5)`, `ten(10)` |
 | `CaptureBehavior` | Settings.swift | `editor`, `save`, `copy` |
-| `ShortcutAction` | Settings.swift | `screenshot`, `scrolling`, `record` |
+| `ShortcutAction` | Settings.swift | `screenshot`, `record` |
 | `VideoQuality` | Settings.swift | `low`, `medium`, `high`; `bitrate(for: CGSize) -> Int` |
 | `VideoAudioSource` | Settings.swift | `none`, `system`, `mic`, `both`; `capturesSystemAudio`, `capturesMic` |
 | `PaddingSize` | Settings.swift | `small`, `medium`, `large`; `scale: CGFloat` |
 | `BrandControl` | BrandPopUpButton.swift | `textInset: CGFloat = 11` |
 | `MenuEntry` | BrandMenu.swift | `header(String)`, `item(…)`, `separator` |
 | `DrawStyle` | Annotations.swift | `color: NSColor`, `lineWidth: CGFloat` (struct, value type) |
-| `ScrollStitcher.Result` | ScrollStitcher.swift | `noMovement`, `appended(Int)`, `noOverlap`, `capReached` |
 
 ### Singletons (classes)
 | Class | File | Access |
 |-------|------|--------|
 | `Settings` | Settings.swift | `Settings.shared` |
 | `ScreenshotController` | ScreenshotController.swift | `ScreenshotController.shared` |
-| `ScrollCaptureController` | ScrollCaptureController.swift | `ScrollCaptureController.shared` (macOS 14+) |
 | `SettingsWindowController` | SettingsWindow.swift | `SettingsWindowController.shared` |
 | `AboutWindowController` | AboutWindow.swift | `AboutWindowController.shared` |
 | `VideoRecordController` | VideoRecordController.swift | `VideoRecordController.shared` (macOS 14+) |
@@ -195,7 +189,6 @@ Who depends on whom. Higher = more central.
 | `CanvasView` | CanvasView.swift | NSView | Drawing, annotation CRUD, undo/redo, crop/rotate, OCR trigger |
 | `SelectionView` | SelectionOverlay.swift | NSView | Mouse-driven region selection, window-capture mode, loupe |
 | `OverlayWindow` | SelectionOverlay.swift | NSWindow | One full-screen borderless window per display |
-| `ScrollStitcher` | ScrollStitcher.swift | — | Pure frame-alignment and stitch engine |
 | `BrandMenu` | BrandMenu.swift | NSObject | Custom themed drop-down (not NSMenu) |
 | `HotKey` | HotKey.swift | — | Carbon hotkey wrapper; one per action |
 
@@ -244,13 +237,6 @@ NSApplication
     │           ├── owns (transient): CounterFormatPicker
     │           └── creates → PinnedWindowController (self-retained in pinned[])
     │
-    ├── dispatches → ScrollCaptureController.shared  [macOS 14+]
-    │     └── creates (transient): [OverlayWindow]
-    │     └── creates (transient): ScrollSession
-    │           ├── owns: ScrollStitcher       ← confined to stitchQueue
-    │           └── owns: ScrollCaptureBar     ← floating Done/Cancel window
-    │     └── calls → EditorWindowController (same as above)
-    │
     ├── dispatches → SettingsWindowController.shared
     │     ├── owns: [HotKeyField]
     │     └── calls back → AppDelegate.reloadHotKeys()
@@ -274,7 +260,6 @@ NSApplication
 ```swift
 Settings.shared                    // UserDefaults-backed prefs
 ScreenshotController.shared        // screenshot capture session
-ScrollCaptureController.shared     // scroll-capture session (macOS 14+)
 VideoRecordController.shared       // video recording session (macOS 14+)
 SettingsWindowController.shared    // Settings panel
 AboutWindowController.shared       // About panel
@@ -333,52 +318,7 @@ SelectionView.mouseUp → onWindowCapture?(WindowInfo)
     → same terminationHandler path → deliver()
 ```
 
-### Flow 2 — Scrolling Screenshot (macOS 14+)
-
-```
-[User presses ⌃⇧S]
-AppDelegate.scrollingScreenshot()
-  → ScrollCaptureController.shared.begin()
-    → OverlayWindow × N screens (allowsWindowMode: false)
-
-[User drags a region]
-OverlayWindow.onComplete?(CGRect)
-  → ScrollCaptureController.startSession(viewRect:screen:)
-    → dismiss overlays
-    → ScrollSession.init(region:CGRect, screen:NSScreen)
-      → ScrollStitcher()
-      → ScrollCaptureBar (floating window: Done/Cancel + live preview)
-      → FrameOutlineView (invisible accent border)
-    → ScrollSession.start()
-      → [async Task @MainActor]
-        → SCShareableContent.current (await)
-        → SCContentFilter (excludes frame window + bar by windowID)
-        → SCStreamConfiguration (sourceRect: display-local points, top-left origin)
-        → ScrollSession.loop()  [~42 Hz]
-          → SCScreenshotManager.captureImage(filter, config) (await) → CGImage
-          → stitchQueue.async { ScrollStitcher.add(CGImage) → Result }
-            (bridged back via withCheckedContinuation)
-          → ScrollSession.handle(Result)
-            → bar.setStatus()
-            → [.appended] refreshPreview()
-              → stitchQueue.async { stitcher.previewImage() → NSImage? }
-                → DispatchQueue.main.async { bar.setPreview(img) }
-          → Task.sleep(24_000_000 ns)
-
-[User clicks Done or presses ↵]
-ScrollCaptureBar.onDone()
-  → ScrollSession.finish()
-    → teardown()
-    → stitchQueue.async { stitcher.finalImage() → NSImage? }
-      → DispatchQueue.main.async { onFinish?(img) }
-        → ScrollCaptureController.finish(NSImage?, NSScreen)
-          → EditorWindowController.init(image:selectionRect:screen:)
-
-[User clicks Cancel or presses Esc]
-ScrollCaptureBar.onCancel()  →  ScrollSession.cancel()  →  teardown()
-```
-
-### Flow 3 — Annotation Lifecycle
+### Flow 2 — Annotation Lifecycle
 
 ```
 [EditorWindowController opens]
@@ -445,7 +385,7 @@ EditorWindowController.copyTextPressed() → canvas.tool = .ocr
   → NSPasteboard.setString(text)
 ```
 
-### Flow 4 — Settings Read / Write
+### Flow 3 — Settings Read / Write
 
 ```
 WRITE (SettingsWindow UI → UserDefaults):
@@ -464,11 +404,10 @@ WRITE (SettingsWindow UI → UserDefaults):
 READ (Settings.shared → callers, all synchronous computed properties):
 
   AppDelegate.takeScreenshot()        → captureDelay
-  AppDelegate.buildMenu()             → shortcut(for:) × 3
-  AppDelegate.reloadHotKeys()         → shortcut(for:) × 3
+  AppDelegate.buildMenu()             → shortcut(for:) × 2
+  AppDelegate.reloadHotKeys()         → shortcut(for:) × 2
   ScreenshotController               → captureCursor, playSound, captureBehavior,
                                         fileURL(), encode(_:)
-  ScrollCaptureController (implicit) → captureBehavior via deliver()
   EditorWindowController.init        → defaultBackground
   EditorWindowController.savePressed → autoCopyOnSave, fileURL(), encode(_:)
   Background.compose                 → paddingSize.scale
@@ -478,7 +417,7 @@ READ (Settings.shared → callers, all synchronous computed properties):
   NO NotificationCenter — all reads are poll-at-use-time.
 ```
 
-### Flow 5 — Video Recording (macOS 14+)
+### Flow 4 — Video Recording (macOS 14+)
 
 ```
 [User presses ⌃⇧R]
@@ -618,31 +557,6 @@ RegisterEventHotKey (Carbon, background)
                     → EditorWindowController.init OR saveToDisk OR pasteboard
 ```
 
-### Hotkey → Scrolling Screenshot
-```
-AppDelegate.scrollingScreenshot()
-  → ScrollCaptureController.shared.begin()
-    → OverlayWindow.init × N (allowsWindowMode: false)
-    → [user selects]
-      → startSession(viewRect:screen:)
-        → ScrollSession.init → start()
-          → Task @MainActor
-            → SCShareableContent.current (await)
-            → SCContentFilter; SCStreamConfiguration
-            → loop() [@MainActor async, ~42 Hz]
-              → SCScreenshotManager.captureImage(…) (await) → CGImage
-              → withCheckedContinuation:
-                stitchQueue.async { stitcher.add(CGImage) }
-              → handle(Result)
-                → [.appended] stitchQueue.async { previewImage }
-                  → main.async { bar.setPreview(img) }
-              → Task.sleep(24ms)
-      → [Done]
-        → ScrollSession.finish()
-          → stitchQueue.async { stitcher.finalImage() }
-            → main.async { EditorWindowController.init(image:…) }
-```
-
 ### CanvasView — Tool Dispatch
 ```
 CanvasView.mouseDown(NSEvent)
@@ -712,16 +626,12 @@ HotKeyField (click) → recording mode
 | `screencapture` subprocess | `Process.terminationHandler` + `main.async` | background → main |
 | ScreenshotController.saveToDisk | `DispatchQueue.global.async` | main → global |
 | SCShareableContent.current | `Task @MainActor` + `await` | main (async) |
-| ScrollSession.loop | `Task @MainActor` + `await` (~42 Hz) | main (async loop) |
-| ScrollStitcher work | `stitchQueue.async` + `main.async` | serial queue → main |
-| ScrollSession preview | `stitchQueue.async` + `main.async` | serial queue → main |
-| ScrollSession finalImage | `stitchQueue.async` + `main.async` | serial queue → main |
 | TextRecognizer.recognize | `DispatchQueue.global.async` + `main.async` | global → main |
 | EditorWindowController.savePressed | `DispatchQueue.global.async` | main → global |
 | PinnedWindowController.saveToDisk | `DispatchQueue.global.async` | main → global |
 | NSOpenPanel.beginSheetModal | async sheet modal | main → user → main |
 
-**Rule of thumb:** All UI mutations are on main. Encoding and Vision are always off-main. The stitch engine is pinned to its own serial queue — never touch it from main directly.
+**Rule of thumb:** All UI mutations are on main. Encoding and Vision are always off-main.
 
 ---
 
@@ -762,16 +672,6 @@ HotKeyField (click) → recording mode
 - **After every capture (including window mode):** inject in `ScreenshotController.deliver(_:selectionRect:screen:)` — this is the single funnel for all capture paths. You have `NSImage`, `CGRect`, `NSScreen` in scope.
 - **After editor save only:** inject after `data.write(to: url)` inside the `DispatchQueue.global.async` block in `EditorWindowController.savePressed()`. You have `Data` and `URL` in scope.
 
-### Replacing or Extending the Stitch Engine
-
-`ScrollStitcher` has zero project dependencies. Its public interface is:
-```swift
-func add(_ cg: CGImage) -> Result
-func previewImage() -> NSImage?
-func finalImage() -> NSImage?
-```
-Swap the implementation freely. The match thresholds (`staticEps`, `matchEps`) and the 30 000 px height cap are the first things to tune.
-
 ### Adding a New CaptureBehavior
 
 1. Add a case to `CaptureBehavior` in `Settings.swift`.
@@ -811,7 +711,7 @@ Full diagnosis and code sample: `.claude/knowledge/scstream-avassetwriter-pts-no
 
 ### Coordinate Systems (critical — two different conventions)
 - **`screencapture -R` uses primary-screen-height flip:** `y = primaryHeight - frame.maxY`. This lives in `ScreenshotController.finish()`. Do not copy this math elsewhere.
-- **SCK `sourceRect` uses display-local top-left origin:** `y = screen.frame.maxY - region.maxY`. This lives in `ScrollCaptureController / ScrollSession`. Completely different from the above.
+- **SCK `sourceRect` uses display-local top-left origin:** `y = screen.frame.maxY - region.maxY`. This lives in `VideoRecordController / VideoRecordSession`. Completely different from the above.
 - **`CanvasView` uses image-space coordinates** (full pixel resolution). The canvas only scales for display. All annotation geometry must be in image space.
 
 ### Screen Recording Permission & Code Signing
@@ -825,9 +725,6 @@ Full diagnosis and code sample: `.claude/knowledge/scstream-avassetwriter-pts-no
 ### Circular Dependency: Settings ↔ Background
 `Settings.swift` decodes `defaultBackground` into a `Background` case. `Background.swift` reads `Settings.shared.paddingSize` in `compose()`. Refactoring either must touch both files and ensure no init-order issue (both are lazy singletons / static properties, so this is currently safe).
 
-### Scrolling Capture Has No Native API
-`ScrollCaptureController` re-captures a fixed region ~42×/s via SCK while the user scrolls, and `ScrollStitcher` aligns and stitches. The stitcher's thresholds are tuned by eye. There is no native macOS scrolling capture API.
-
 ### `EditorWindowController` Is Not an NSWindowController
 Despite its name, it subclasses `NSObject`, not `NSWindowController`. It manages its window directly and self-retains via the static `open` array. `windowWillClose` removes it.
 
@@ -835,4 +732,4 @@ Despite its name, it subclasses `NSObject`, not `NSWindowController`. It manages
 `EditorWindowController.savePressed()` closes the window before the `DispatchQueue.global.async` write completes. The `Data` write can still fail silently after the window is gone. Any error handling must be inside the async block.
 
 ### Build Tool: `swiftc` Only, No Xcode / SPM
-There is no `.xcodeproj` or `Package.swift`. Everything is compiled by `build.sh` with a direct `swiftc` invocation. All 25 `Sources/*.swift` files are compiled together in one pass. Adding a new file requires no project-file edit — just drop it in `Sources/`.
+There is no `.xcodeproj` or `Package.swift`. Everything is compiled by `build.sh` with a direct `swiftc` invocation. All 23 `Sources/*.swift` files are compiled together in one pass. Adding a new file requires no project-file edit — just drop it in `Sources/`.

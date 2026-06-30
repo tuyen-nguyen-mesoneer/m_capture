@@ -22,8 +22,6 @@ final class ScreenshotController {
             ?? NSScreen.main ?? NSScreen.screens[0]
 
         NSApp.activate(ignoringOtherApps: true)
-        // Cover *every* screen so a region can be selected on any display
-        // (one borderless overlay per screen, each in its own coordinate space).
         for screen in NSScreen.screens {
             let win = OverlayWindow(screen: screen)
             win.onComplete = { [weak self] viewRect in self?.finish(viewRect: viewRect, screen: screen) }
@@ -87,8 +85,6 @@ final class ScreenshotController {
         if !ScreenRecordingPermission.isGranted { ScreenRecordingPermission.handleDenied() }
     }
 
-    // MARK: - In-process capture
-
     /// Grab an on-screen region in-process with ScreenCaptureKit, rather than
     /// shelling out to `/usr/sbin/screencapture`.
     ///
@@ -133,9 +129,6 @@ final class ScreenshotController {
         guard global.width >= 3, global.height >= 3 else { return }
         guard let displayID = screen.displayID else { return }
 
-        // ScreenCaptureKit's sourceRect is in points with a top-left origin,
-        // relative to the display; `viewRect` is the overlay's (bottom-left,
-        // per-screen) coordinate space, so flip Y within the screen's height.
         let scale = screen.backingScaleFactor
         let sourceRect = CGRect(x: viewRect.minX,
                                 y: screen.frame.height - viewRect.maxY,
@@ -144,13 +137,8 @@ final class ScreenshotController {
         let pixelHeight = Int((viewRect.height * scale).rounded())
         let showsCursor = Settings.shared.captureCursor
 
-        // Let the overlay clear before grabbing pixels (a couple of compositor
-        // frames), then capture asynchronously so the UI never stalls.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.06) {
             ScreenshotController.playCaptureSoundIfEnabled()
-            // `screen` is only ever touched on the main thread (here and in the
-            // MainActor hop below); NSScreen isn't Sendable, so mark the crossing
-            // explicitly rather than tripping the concurrency checker.
             nonisolated(unsafe) let deliverScreen = screen
             Task {
                 let cg = await ScreenshotController.captureRegion(
