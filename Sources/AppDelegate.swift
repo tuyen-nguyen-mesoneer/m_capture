@@ -56,8 +56,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .item(title: "Screenshot", symbol: "camera.viewfinder",
                   shortcut: s.shortcut(.screenshot).displayString) { [weak self] in self?.takeScreenshot() },
         ]
+        if #available(macOS 14.0, *) {
+            entries.append(.item(title: "Scrolling Screenshot", symbol: "arrow.up.and.down",
+                                 shortcut: s.shortcut(.scrolling).displayString) { [weak self] in self?.scrollingScreenshot() })
+        }
         entries.append(contentsOf: [
-            .item(title: "Record", symbol: "record.circle",
+            .item(title: "Record Video", symbol: "record.circle",
                   shortcut: s.shortcut(.record).displayString) { [weak self] in self?.record() },
             .item(title: "Library", symbol: "folder", shortcut: nil) { [weak self] in self?.openLibrary() },
             .item(title: "Settings", symbol: "gearshape", shortcut: nil) { [weak self] in self?.settings() },
@@ -77,6 +81,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hotKeys.removeAll()
         let s = Settings.shared
         hotKeys.append(HotKey(s.shortcut(.screenshot)) { [weak self] in self?.takeScreenshot() })
+        if #available(macOS 14.0, *) {
+            hotKeys.append(HotKey(s.shortcut(.scrolling)) { [weak self] in self?.scrollingScreenshot() })
+        }
         hotKeys.append(HotKey(s.shortcut(.record)) { [weak self] in self?.record() })
         buildMenu()
     }
@@ -116,12 +123,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         tick(seconds)
     }
 
+    @available(macOS 14.0, *)
+    @objc func scrollingScreenshot() {
+        ScrollCaptureController.shared.begin()
+    }
+
     @objc func record() {
-        // The ⇧⌘5 toolbar reopens in its last-used mode.
-        let proc = Process()
-        proc.executableURL = URL(fileURLWithPath: "/usr/bin/open")
-        proc.arguments = ["-b", "com.apple.screenshot.launcher"]
-        try? proc.run()
+        guard #available(macOS 14, *) else {
+            // Fallback on macOS 13: open native screenshot toolbar.
+            let p = Process()
+            p.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+            p.arguments = ["-b", "com.apple.screenshot.launcher"]
+            try? p.run()
+            return
+        }
+        VideoRecordController.shared.begin()
     }
 
     @objc func openLibrary() {

@@ -21,6 +21,8 @@ final class SettingsWindowController: NSObject {
     private var autoCopyCheck: NSButton!
     private var cursorCheck: NSButton!
     private var soundCheck: NSButton!
+    private var videoQualityPopup: NSPopUpButton!
+    private var videoAudioSourcePopup: NSPopUpButton!
     private var shortcutFields: [HotKeyField] = []
     private var toast: NSWindow?
 
@@ -77,6 +79,9 @@ final class SettingsWindowController: NSObject {
         defaultBGPopup = popup(bgPresets.map { $0.name }, #selector(defaultBGChanged))
         autoCopyCheck = checkbox("Also copy to clipboard when saving", #selector(autoCopyToggled))
 
+        videoQualityPopup = popup(VideoQuality.allCases.map { $0.label }, #selector(videoQualityChanged))
+        videoAudioSourcePopup = popup(VideoAudioSource.allCases.map { $0.label }, #selector(videoAudioSourceChanged))
+
         var rows: [NSView] = [
             sectionHeader("General"),
             checkRow(loginCheck),
@@ -101,6 +106,9 @@ final class SettingsWindowController: NSObject {
             row("Background", defaultBGPopup,
                 tip: "The background frame pre-selected when the editor opens; you can still change it per capture."),
             checkRow(autoCopyCheck),
+            sectionHeader("Video"),
+            row("Quality", videoQualityPopup),
+            row("Audio", videoAudioSourcePopup),
         ]
         let stack = NSStackView(views: rows)
         stack.orientation = .vertical
@@ -366,6 +374,8 @@ final class SettingsWindowController: NSObject {
         autoCopyCheck.state = s.autoCopyOnSave ? .on : .off
         cursorCheck.state = s.captureCursor ? .on : .off
         soundCheck.state = s.playSound ? .on : .off
+        videoQualityPopup.selectItem(at: VideoQuality.allCases.firstIndex(of: s.videoQuality) ?? 0)
+        videoAudioSourcePopup.selectItem(at: VideoAudioSource.allCases.firstIndex(of: s.videoAudioSource) ?? 0)
     }
 
     // MARK: Actions
@@ -476,6 +486,14 @@ final class SettingsWindowController: NSObject {
 
     @objc private func soundToggled() {
         Settings.shared.playSound = (soundCheck.state == .on)
+    }
+
+    @objc private func videoQualityChanged() {
+        Settings.shared.videoQuality = VideoQuality.allCases[videoQualityPopup.indexOfSelectedItem]
+    }
+
+    @objc private func videoAudioSourceChanged() {
+        Settings.shared.videoAudioSource = VideoAudioSource.allCases[videoAudioSourcePopup.indexOfSelectedItem]
     }
 }
 
