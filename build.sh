@@ -16,10 +16,14 @@ rm -rf "$BUILD"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 
 echo "==> Compiling Swift sources"
-swiftc -swift-version 5 -O \
+# Pin the deployment target to match LSMinimumSystemVersion below; ScreenCaptureKit's
+# SCScreenshotManager (the capture path) needs macOS 14. Without an explicit -target,
+# swiftc bakes in the build host's OS as the minimum and the app refuses to launch on
+# 14. (swiftc ignores MACOSX_DEPLOYMENT_TARGET, so this must be -target.)
+swiftc -swift-version 5 -O -target "$(uname -m)-apple-macos14.0" \
     -o "$APP/Contents/MacOS/m_capture" \
     "$DIR"/Sources/*.swift \
-    -framework AppKit -framework Carbon
+    -framework AppKit -framework Carbon -framework ScreenCaptureKit
 
 echo "==> Writing Info.plist"
 cat > "$APP/Contents/Info.plist" <<PLIST
@@ -36,7 +40,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
     <key>CFBundleVersion</key><string>${VERSION}</string>
     <key>CFBundlePackageType</key><string>APPL</string>
     <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
-    <key>LSMinimumSystemVersion</key><string>13.0</string>
+    <key>LSMinimumSystemVersion</key><string>14.0</string>
     <key>NSHighResolutionCapable</key><true/>
     <key>LSUIElement</key><true/>
     <key>NSScreenCaptureUsageDescription</key><string>m_capture captures your screen to take screenshots.</string>
