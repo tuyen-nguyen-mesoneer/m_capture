@@ -80,11 +80,12 @@ struct Shortcut: Equatable {
 
 /// The capture actions that each have a rebindable global hotkey.
 enum ShortcutAction: String, CaseIterable {
-    case screenshot, record
+    case screenshot, scrolling, record
 
     var label: String {
         switch self {
         case .screenshot: return "Screenshot"
+        case .scrolling:  return "Scrolling Screenshot"
         case .record:     return "Record"
         }
     }
@@ -93,6 +94,7 @@ enum ShortcutAction: String, CaseIterable {
         let cs = UInt32(controlKey | shiftKey)
         switch self {
         case .screenshot: return Shortcut(keyCode: UInt32(kVK_ANSI_X), modifiers: cs)
+        case .scrolling:  return Shortcut(keyCode: UInt32(kVK_ANSI_S), modifiers: cs)
         case .record:     return Shortcut(keyCode: UInt32(kVK_ANSI_R), modifiers: cs)
         }
     }
@@ -124,6 +126,46 @@ enum RadiusSize: String, CaseIterable {
     var label: String { self == .none ? "Square" : rawValue.capitalized }
 }
 
+/// HEVC recording bitrate preset. `bitrate(for:)` scales the base rate by pixel
+/// count relative to 1080p, so small regions record at a proportionally lower rate.
+enum VideoQuality: String, CaseIterable {
+    case high, medium, low
+    var label: String {
+        switch self {
+        case .high:   return "High (8 Mbps)"
+        case .medium: return "Medium (4 Mbps)"
+        case .low:    return "Low (2 Mbps)"
+        }
+    }
+    func bitrate(for resolution: CGSize) -> Int {
+        let reference: CGFloat = 1920 * 1080
+        let pixels = resolution.width * resolution.height
+        let scale = max(pixels / reference, 0.01)
+        let base: Int
+        switch self {
+        case .high:   base = 8_000_000
+        case .medium: base = 4_000_000
+        case .low:    base = 2_000_000
+        }
+        return max(Int(CGFloat(base) * scale), 500_000)
+    }
+}
+
+/// Which audio streams to mix into a video recording.
+enum VideoAudioSource: String, CaseIterable {
+    case none, system, mic, both
+    var label: String {
+        switch self {
+        case .none:   return "None"
+        case .system: return "System Audio"
+        case .mic:    return "Microphone"
+        case .both:   return "System + Mic"
+        }
+    }
+    var capturesSystemAudio: Bool { self == .system || self == .both }
+    var capturesMic: Bool { self == .mic || self == .both }
+}
+
 /// Persisted output preferences (save location, format, filename prefix,
 /// auto-copy). The single source of truth for where and how captures are saved;
 /// the editor, the pin window, and the Library menu all read it.
@@ -138,6 +180,7 @@ final class Settings {
         static let delay = "captureDelay", padding = "paddingSize", defaultBG = "defaultBackground"
         static let radius = "radiusSize"
         static let behavior = "captureBehavior", prefix = "filenamePrefix"
+        static let videoQuality = "videoQuality", videoAudioSource = "videoAudioSource"
     }
 
     private let defaultPrefix = "m_capture_"
@@ -218,6 +261,18 @@ final class Settings {
     var radiusSize: RadiusSize {
         get { d.string(forKey: Key.radius).flatMap(RadiusSize.init) ?? .medium }
         set { d.set(newValue.rawValue, forKey: Key.radius) }
+    }
+
+    /// HEVC bitrate preset for video recordings (default high).
+    var videoQuality: VideoQuality {
+        get { d.string(forKey: Key.videoQuality).flatMap(VideoQuality.init) ?? .high }
+        set { d.set(newValue.rawValue, forKey: Key.videoQuality) }
+    }
+
+    /// Which audio streams to record alongside the video (default system audio).
+    var videoAudioSource: VideoAudioSource {
+        get { d.string(forKey: Key.videoAudioSource).flatMap(VideoAudioSource.init) ?? .system }
+        set { d.set(newValue.rawValue, forKey: Key.videoAudioSource) }
     }
 
     /// The background preset selected when the editor opens. Stored by preset

@@ -15,9 +15,13 @@ final class OverlayWindow: NSWindow {
     let captureScreen: NSScreen
     private let selectionView: SelectionView
 
-    init(screen: NSScreen) {
+    /// - Parameters:
+    ///   - allowsWindowMode: Unused in the current implementation (no window-pick mode).
+    ///   - allowsFullScreenMode: When `false`, Space cannot toggle into whole-screen mode.
+    init(screen: NSScreen, allowsWindowMode: Bool = true, allowsFullScreenMode: Bool = true) {
         captureScreen = screen
-        selectionView = SelectionView(frame: NSRect(origin: .zero, size: screen.frame.size))
+        selectionView = SelectionView(frame: NSRect(origin: .zero, size: screen.frame.size),
+                                     allowsFullScreenMode: allowsFullScreenMode)
         super.init(contentRect: screen.frame, styleMask: .borderless,
                    backing: .buffered, defer: false)
         isOpaque = false
@@ -46,11 +50,18 @@ final class SelectionView: NSView {
     var onCancel: (() -> Void)?
 
     private var captureMode: CaptureMode = .region
+    private let allowsFullScreenMode: Bool
 
     // Region-selection state.
     private var startPoint: CGPoint?
     private var currentPoint: CGPoint?
     private var trackingAreaRef: NSTrackingArea?
+
+    init(frame: NSRect, allowsFullScreenMode: Bool = true) {
+        self.allowsFullScreenMode = allowsFullScreenMode
+        super.init(frame: frame)
+    }
+    required init?(coder: NSCoder) { fatalError() }
 
     override var acceptsFirstResponder: Bool { true }
     override func viewDidMoveToWindow() { window?.makeFirstResponder(self); modeCursor.set() }
@@ -95,8 +106,8 @@ final class SelectionView: NSView {
 
     override func keyDown(with event: NSEvent) {
         if event.keyCode == 53 { onCancel?(); return } // Esc
-        // Space toggles between region selection and whole-screen capture.
-        if event.keyCode == 49 {
+        // Space toggles between region selection and whole-screen capture (when permitted).
+        if event.keyCode == 49, allowsFullScreenMode {
             captureMode = (captureMode == .region) ? .screen : .region
             startPoint = nil; currentPoint = nil
             modeCursor.set(); needsDisplay = true; return   // reflect the new mode immediately
