@@ -248,7 +248,7 @@ One paragraph: confidence given static analysis, any concerns.
 | Timer drift over 30 s | ± 1 s max |
 | HEVC codec confirmed | `mdls -name kMDItemCodecs` returns `HEVC` |
 | 30 s 1080p Medium quality | < 15 MB |
-| Regressions (⌃⇧X, ⌃⇧S) | Must still work after every task |
+| Regressions (⌃⇧X) | Must still work after every task |
 
 ---
 

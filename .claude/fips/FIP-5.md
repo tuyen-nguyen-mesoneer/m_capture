@@ -4,7 +4,7 @@
 
 `VideoRecordController` is the singleton that coordinates every other piece: it shows the selection overlay, creates a `VideoRecordSession` with the right parameters, shows the `VideoRecordBar`, drives the 1 Hz update tick, handles pause/resume, and finally saves the output file.
 
-It follows the exact same singleton + lifecycle pattern as `ScreenshotController` and `ScrollCaptureController`. AppDelegate will call `VideoRecordController.shared.begin()` (Task 7); this task makes that call meaningful.
+It follows the exact same singleton + lifecycle pattern as `ScreenshotController`. AppDelegate will call `VideoRecordController.shared.begin()` (Task 7); this task makes that call meaningful.
 
 This is also where microphone permission is requested, since the controller is the first point where `VideoAudioSource` is resolved against the actual system state.
 
@@ -68,7 +68,7 @@ private var overlays: [OverlayWindow] = []
 ## Implementation Direction
 
 1. Create `Sources/VideoRecordController.swift`.
-2. Mark the class `@available(macOS 14, *)` (same as `ScrollCaptureController`).
+2. Mark the class `@available(macOS 14, *)`.
 3. For mic permission: wrap in `AVCaptureDevice.requestAccess(for: .audio) { granted in DispatchQueue.main.async { … } }`.
 4. The `updateTimer` is a `DispatchSourceTimer` set to fire on `DispatchQueue.main` every 1 second — do not use `Timer.scheduledTimer` (it requires a runloop; DispatchSourceTimer is more reliable).
 5. `fileURL()` in `Settings` produces timestamped paths. Add a small extension or override to force `.mp4` suffix regardless of `Settings.shared.format`.
@@ -126,5 +126,5 @@ No other files modified in this task. `AppDelegate` wiring is Task 7.
 
 - `SelectionOverlay` full-screen mode implementation (Task 6 — but this controller will use it)
 - AppDelegate hotkey + menu wiring (Task 7)
-- Any changes to screenshot or scrolling capture flows
+- Any changes to screenshot capture flows
 - Custom save-path UI for video files (uses the same Settings save directory as screenshots)

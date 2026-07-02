@@ -9,6 +9,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var countdownActive = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        if Relocator.relocateToUserApplicationsIfNeeded() { return }
+
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         statusItem.button?.image = Logo.menuBarImage()
         statusItem.button?.target = self
@@ -17,22 +19,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         buildMenu()
         reloadHotKeys()
 
-        // A quiet once-a-day check; surfaces only when a newer release exists.
+        Updater.reconcileAfterRelaunch()
         Updater.checkInBackgroundIfDue()
 
-        // Dev-only: `--editor-demo` opens the annotation editor on a generated
-        // sample image at launch, so the real running app's editor (and its tool
-        // icons) can be inspected/screenshotted without the capture flow.
         if CommandLine.arguments.contains("--editor-demo") {
             DispatchQueue.main.async { [weak self] in self?.openEditorDemo() }
         }
-        // Dev-only: `--settings-demo` opens the Settings panel at launch so the
-        // redesigned layout can be inspected/screenshotted directly.
         if CommandLine.arguments.contains("--settings-demo") {
             DispatchQueue.main.async { [weak self] in self?.settings() }
         }
-        // Dev-only: `--alert-demo` opens a sample `BrandAlert` so the brand dialog
-        // chrome can be inspected/screenshotted without waiting on a real update check.
         if CommandLine.arguments.contains("--alert-demo") {
             DispatchQueue.main.async {
                 _ = BrandAlert(title: "Update available",
@@ -56,10 +51,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .item(title: "Screenshot", symbol: "camera.viewfinder",
                   shortcut: s.shortcut(.screenshot).displayString) { [weak self] in self?.takeScreenshot() },
         ]
-        if #available(macOS 14.0, *) {
-            entries.append(.item(title: "Scrolling Screenshot", symbol: "arrow.up.and.down",
-                                 shortcut: s.shortcut(.scrolling).displayString) { [weak self] in self?.scrollingScreenshot() })
-        }
         entries.append(contentsOf: [
             .item(title: "Record Video", symbol: "record.circle",
                   shortcut: s.shortcut(.record).displayString) { [weak self] in self?.record() },
@@ -81,14 +72,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hotKeys.removeAll()
         let s = Settings.shared
         hotKeys.append(HotKey(s.shortcut(.screenshot)) { [weak self] in self?.takeScreenshot() })
-        if #available(macOS 14.0, *) {
-            hotKeys.append(HotKey(s.shortcut(.scrolling)) { [weak self] in self?.scrollingScreenshot() })
-        }
         hotKeys.append(HotKey(s.shortcut(.record)) { [weak self] in self?.record() })
         buildMenu()
     }
-
-    // MARK: - Actions
 
     /// Region-selection overlay, then grab + copy. Honors the configured
     /// capture delay, showing a 3→2→1 countdown in the menu-bar icon first.
@@ -101,9 +87,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Counts down in the status-item button, then begins the capture. Guards
     /// against re-entry so a second hotkey press during the countdown is ignored.
     private func countdown(from seconds: Int) {
-        if countdownActive { return }   // a countdown is already running — ignore the repeat press
+        if countdownActive { return }
         guard let button = statusItem.button else {
-            ScreenshotController.shared.begin()   // no status button to count down in; just start
+            ScreenshotController.shared.begin()
             return
         }
         countdownActive = true
@@ -123,20 +109,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         tick(seconds)
     }
 
-    @available(macOS 14.0, *)
-    @objc func scrollingScreenshot() {
-        ScrollCaptureController.shared.begin()
-    }
-
     @objc func record() {
-        guard #available(macOS 14, *) else {
-            // Fallback on macOS 13: open native screenshot toolbar.
-            let p = Process()
-            p.executableURL = URL(fileURLWithPath: "/usr/bin/open")
-            p.arguments = ["-b", "com.apple.screenshot.launcher"]
-            try? p.run()
-            return
-        }
         VideoRecordController.shared.begin()
     }
 
@@ -166,8 +139,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc func quit() {
         NSApp.terminate(nil)
     }
-
-    // MARK: - Dev
 
     /// Open the editor on a generated sample image (see `--editor-demo`).
     private func openEditorDemo() {

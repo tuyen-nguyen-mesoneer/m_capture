@@ -5,15 +5,15 @@ import AppKit
 /// A menu-style rounded tool button used in the editor's tool clusters.
 final class ToolButton: NSButton {
     enum Style {
-        case tool(String)    // SF Symbol
-        case text(String)    // short label (e.g. "+", "S")
-        case swatch(NSColor) // solid color
-        case mosaic          // blur: pixelation grid
-        case spotlightGlyph  // spotlight: sun
-        case counterGlyph    // counter: numbered badge
-        case roundedSquare   // rounded-rectangle shape tool
-        case noneGlyph       // "no background": circle + diagonal slash
-        case plusGlyph       // "+" add-custom-color: two centered strokes
+        case tool(String)
+        case text(String)
+        case swatch(NSColor)
+        case mosaic
+        case spotlightGlyph
+        case counterGlyph
+        case roundedSquare
+        case noneGlyph
+        case plusGlyph
     }
 
     var tip: String?
@@ -55,7 +55,6 @@ final class ToolButton: NSButton {
     override func mouseEntered(with event: NSEvent) { hovering = true; onEnter?(self) }
     override func mouseExited(with event: NSEvent) { hovering = false; onExit?() }
 
-    // Pointer over the icon itself (overrides the card's drag cursor here).
     override func resetCursorRects() { addCursorRect(bounds, cursor: .pointingHand) }
 
     override func draw(_ dirtyRect: NSRect) {
@@ -64,7 +63,6 @@ final class ToolButton: NSButton {
         let tile = bounds.insetBy(dx: 1.5, dy: 1.5)
         let path = CGPath(roundedRect: tile, cornerWidth: corner, cornerHeight: corner, transform: nil)
 
-        // Swatches: a colour chip the same size as the icons (not the whole tile).
         if case .swatch(let c) = style {
             if hovering {
                 ctx.addPath(path); ctx.setFillColor(NSColor(white: 1, alpha: 0.10).cgColor); ctx.fillPath()
@@ -94,16 +92,6 @@ final class ToolButton: NSButton {
 
         switch style {
         case .tool(let symbol):
-            // Size AND center every glyph on its *visible ink*, not its SF canvas.
-            // Canvases carry uneven padding and off-center ink, so canvas-based
-            // placement makes a row drift: tight glyphs (the X) loom large, padded
-            // ones (crop) shrink, and arrow-topped or bottom-heavy glyphs (pin,
-            // ruler) float off the shared centerline. Fitting the visible ink to one
-            // target and centering on it puts every icon at the same optical size on
-            // a common centerline.
-            // The X is a solid corner-to-corner cross, so at the shared size/weight it
-            // reads heavier and larger than the airy outline glyphs around it. Render
-            // it lighter and a touch smaller so its optical weight matches the row.
             let heavy = (symbol == "xmark")
             var conf = NSImage.SymbolConfiguration(pointSize: radius * 1.2, weight: heavy ? .light : .regular)
             conf = conf.applying(.init(paletteColors: [Theme.textPrimary]))
@@ -121,7 +109,7 @@ final class ToolButton: NSButton {
             }
         case .text(let t):
             let label = overrideText ?? t
-            if label == Logo.stampToken {   // brand "m." stamp — draw the tile, not text
+            if label == Logo.stampToken {
                 let box = radius * 1.4
                 Logo.image(size: box).draw(in: NSRect(x: bounds.midX - box / 2, y: bounds.midY - box / 2, width: box, height: box))
                 return
@@ -159,10 +147,6 @@ final class ToolButton: NSButton {
     /// SF symbol and hand-drawn glyph is fitted to this so a row reads as one size.
     private var glyphInk: CGFloat { radius * 1.12 }
 
-    // Shared glyph metrics so the hand-drawn icons match the neighbouring SF
-    // Symbols. `glyphBox` is the common optical box (kept a touch smaller than
-    // `glyphInk`, since the filled hand-drawn shapes read heavier than the airy SF
-    // outlines at the same extent); `glyphStroke` is the common line weight.
     private var glyphBox: CGRect {
         let s = glyphInk * 0.92
         return CGRect(x: bounds.midX - s / 2, y: bounds.midY - s / 2, width: s, height: s)
@@ -193,7 +177,7 @@ final class ToolButton: NSButton {
         }
         guard maxX >= minX, maxY >= minY else { return nil }
         let Wf = CGFloat(W), Hf = CGFloat(H)
-        let ppp = Wf / max(1, image.size.width)                 // pixels per point
+        let ppp = Wf / max(1, image.size.width)
         return (cx: (CGFloat(minX + maxX) / 2 + 0.5) / Wf,
                 cyBottom: (CGFloat(minY + maxY) / 2 + 0.5) / Hf,
                 w: CGFloat(maxX - minX + 1) / ppp,
@@ -267,7 +251,7 @@ final class ToolButton: NSButton {
         ctx.setLineWidth(glyphStroke)
         ctx.setLineCap(.round)
         ctx.strokeEllipse(in: a)
-        let d = r * cos(.pi / 4)   // slash from rim to rim at 45°
+        let d = r * cos(.pi / 4)
         ctx.move(to: CGPoint(x: c.x - d, y: c.y + d))
         ctx.addLine(to: CGPoint(x: c.x + d, y: c.y - d))
         ctx.strokePath()
@@ -301,3 +285,4 @@ final class ToolButton: NSButton {
                  withAttributes: attrs)
     }
 }
+

@@ -4,7 +4,7 @@
 
 While a recording is in progress, the user needs live feedback: how long they have been recording, how large the file is growing, and the ability to pause or stop without going back to the menu bar. `VideoRecordBar` is the floating window that provides this.
 
-Its design mirrors `ScrollCaptureBar` from `ScrollCaptureController.swift` — a brand-styled dark card with a minimal control set. It must be excluded from the SCStream capture filter so it does not appear in the recorded video.
+It is a brand-styled dark card with a minimal control set. It must be excluded from the SCStream capture filter so it does not appear in the recorded video.
 
 **How to verify:** Instantiate the bar standalone (e.g., show it from a temporary AppDelegate action), confirm the timer counts, pause/resume toggles the label, Esc triggers `onStop`, and the bar's `windowNumber` can be retrieved for SCContentFilter exclusion.
 
@@ -54,7 +54,7 @@ func update(elapsed: TimeInterval, fileSize: Int64, isPaused: Bool)
 ## Implementation Direction
 
 1. Create `Sources/VideoRecordBar.swift`.
-2. Follow `ScrollCaptureBar` in `ScrollCaptureController.swift` as the structural template (private `NSWindow`, `CardView`, `BarButton`).
+2. Use a private `NSWindow` with a `CardView` and `BarButton`s as the structural pattern.
 3. Build the window as `.nonactivatingPanel` (or `.borderless` NSWindow with `canBecomeKey` = true for Esc handling).
 4. Use `Theme` constants for all colours and fonts — no hardcoded values.
 5. The pulsing red dot: a 1-second `CABasicAnimation` on the dot view's `opacity` (0.3 → 1.0 → 0.3), stopped on pause.

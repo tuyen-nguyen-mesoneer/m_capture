@@ -65,7 +65,7 @@
 S26 and S30 are cosmetic/convention deviations, not blocking failures. Issue 4 (focus theft via `makeKeyAndOrderFront`) needs runtime verification (R15).
 
 ## Risk Assessment
-Structurally sound. Two minor convention deviations (monospaced font, KB decimal). The focus-theft concern is the only medium-risk item and is a runtime-only question — the static code pattern is standard for brand-styled bars in this codebase (ScrollCaptureBar uses the same `makeKeyAndOrderFront`). Overall risk: **low–medium**, gated on R15.
+Structurally sound. Two minor convention deviations (monospaced font, KB decimal). The focus-theft concern is the only medium-risk item and is a runtime-only question — the static code pattern is standard for brand-styled bars in this codebase. Overall risk: **low–medium**, gated on R15.
 
 ## Recommendation
 **STATIC: PASS with notes — 28/30 clean, 2/30 minor convention deviations (non-blocking).**

@@ -70,18 +70,12 @@ final class BrandMenu: NSObject {
         container.wantsLayer = true
         container.layer?.backgroundColor = Theme.surfaceBase.cgColor
         container.layer?.cornerRadius = 0
-        container.layer?.borderWidth = 1
-        container.layer?.borderColor = Theme.border.cgColor
         container.layer?.masksToBounds = true
 
         var y = pad
         for entry in entries {
             switch entry {
             case .header(let title, let url):
-                // A brand lockup: the "m." logo tile + the product name (a TITLE,
-                // like mesoneer.io's white nav wordmark — eyebrows are reserved for
-                // labels above content), tying the menu to the icon and About panel.
-                // When a url is set, the whole lockup is a link to the repo.
                 let header = HeaderView(width: width, pad: pad, title: title,
                                         url: url.flatMap(URL.init(string:))) { [weak self] in self?.close() }
                 header.frame = NSRect(x: 0, y: y, width: width, height: 34)
@@ -229,3 +223,4 @@ private final class MenuRowView: NSView {
         onClick()
     }
 }
+

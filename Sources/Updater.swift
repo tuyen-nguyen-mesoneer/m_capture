@@ -3,12 +3,20 @@
 import AppKit
 
 /// Checks GitHub Releases for a newer build — no dependencies, just URLSession +
-/// JSONDecoder. Drives the "Check for Updates" menu item (manual; always reports
-/// a result) and a silent once-a-day check at launch.
+/// JSONDecoder — and drives the install. Two entry points:
 ///
-/// Both paths require the repo's releases to be readable by the running user;
-/// for an internal rollout the repo (or its releases) must be public or
-/// org-accessible.
+/// - `checkInBackgroundIfDue()` — a silent once-a-day launch check that downloads and
+///   swaps the new build in place with no UI; it takes effect on the next launch.
+/// - `checkManually()` — the "Check for Updates" item; always reports an outcome and,
+///   on a newer build, installs it and offers an immediate relaunch.
+///
+/// Both paths require the repo's releases to be readable by the running user; for an
+/// internal rollout the repo (or its releases) must be public or org-accessible.
+///
+/// Whether the user keeps their Screen Recording grant across an update is a *signing*
+/// property, not an updater one: releases must share the `m_capture-dev` identity (see
+/// `build.sh` / CONTRIBUTING). The updater installs regardless of identity, so a release
+/// signed differently costs a one-time re-grant.
 enum Updater {
     private static let repo = "tuyen-nguyen-mesoneer/m_capture"
     private static let releasesURL = URL(string: "https://api.github.com/repos/\(repo)/releases")!
@@ -16,6 +24,9 @@ enum Updater {
     private static let checkInterval: TimeInterval = 24 * 60 * 60
 
     private static let lastCheckKey = "updater.lastCheck"
+    /// A build we've already swapped onto disk but haven't relaunched into yet. Kept so
+    /// the daily check doesn't see the just-installed release as "newer" and reinstall it.
+    private static let pendingVersionKey = "updater.pendingVersion"
 
     private struct Release: Decodable {
         let tagName: String
@@ -36,19 +47,39 @@ enum Updater {
         }
     }
 
-    private static var currentVersion: String {
+    /// The version baked into the running bundle (the *old* one even after a swap, since
+    /// `Bundle.main` is fixed at launch).
+    private static var runningVersion: String {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0"
     }
 
-    // MARK: - Entry points
+    /// What releases are compared against: the running build, or a newer build already
+    /// swapped onto disk and awaiting a relaunch. Prevents reinstalling the same release.
+    static var effectiveCurrentVersion: String {
+        let running = runningVersion
+        guard let pending = UserDefaults.standard.string(forKey: pendingVersionKey) else { return running }
+        return isNewer(pending, than: running) ? pending : running
+    }
+
+    /// Drop the pending marker once a relaunch has actually picked up that build (or newer).
+    /// Call once at launch.
+    static func reconcileAfterRelaunch() {
+        let defaults = UserDefaults.standard
+        guard let pending = defaults.string(forKey: pendingVersionKey) else { return }
+        if !isNewer(pending, than: runningVersion) { defaults.removeObject(forKey: pendingVersionKey) }
+    }
+
+    private static func markInstalled(_ version: String) {
+        UserDefaults.standard.set(version, forKey: pendingVersionKey)
+    }
 
     /// Manual check — always tells the user the outcome (up to date / available /
-    /// couldn't check).
+    /// couldn't check), and installs on demand.
     static func checkManually() {
         fetch { result in
             switch result {
-            case .success(let release) where isNewer(release.tagName, than: currentVersion):
-                presentUpdateAlert(release)
+            case .success(let release) where isNewer(release.tagName, than: effectiveCurrentVersion):
+                promptAndInstall(release)
             case .success:
                 presentUpToDateAlert()
             case .failure:
@@ -57,26 +88,64 @@ enum Updater {
         }
     }
 
-    /// Silent launch check, throttled to once a day; only surfaces a newer version.
+    /// Silent launch check, throttled to once a day; on a newer build it downloads and
+    /// swaps with no UI. Any failure stays silent — the running version is untouched.
     static func checkInBackgroundIfDue() {
         let defaults = UserDefaults.standard
         let now = Date().timeIntervalSince1970
         guard now - defaults.double(forKey: lastCheckKey) >= checkInterval else { return }
         fetch { result in
-            defaults.set(now, forKey: lastCheckKey)   // record only on a completed check
+            defaults.set(now, forKey: lastCheckKey)
             guard case .success(let release) = result,
-                  isNewer(release.tagName, than: currentVersion)
+                  isNewer(release.tagName, than: effectiveCurrentVersion),
+                  let dmg = dmgURL(for: release)
             else { return }
-            presentUpdateAlert(release)
+            UpdateInstaller.install(dmgURL: dmg, expectedVersion: normalize(release.tagName)) { outcome in
+                if case .success = outcome { markInstalled(normalize(release.tagName)) }
+            }
         }
     }
 
-    // MARK: - Networking
+    private static func promptAndInstall(_ release: Release) {
+        let version = normalize(release.tagName)
+        let choice = BrandAlert(title: "Update available",
+                                message: "m_capture \(version) is available.",
+                                titles: ["Install", "Later"], primary: 0, cancel: 1).runModal()
+        guard choice == 0 else { return }
+        guard let dmg = dmgURL(for: release) else { presentErrorAlert(); return }
+        UpdateInstaller.install(dmgURL: dmg, expectedVersion: version) { outcome in
+            switch outcome {
+            case .success:
+                markInstalled(version)
+                presentInstalledAlert(version)
+            case .failure:
+                presentErrorAlert()
+            }
+        }
+    }
+
+    private static func dmgURL(for release: Release) -> URL? {
+        guard let asset = release.assets.first(where: { $0.name.hasSuffix(".dmg") }) else { return nil }
+        return URL(string: asset.browserDownloadURL)
+    }
+
+    /// Quit and reopen the freshly swapped bundle. A detached shell waits for this
+    /// process to exit, then relaunches — it outlives our own termination.
+    private static func relaunch() {
+        let pid = ProcessInfo.processInfo.processIdentifier
+        let path = Bundle.main.bundlePath
+        let script = "while /bin/kill -0 \(pid) 2>/dev/null; do /bin/sleep 0.2; done; /usr/bin/open \"\(path)\""
+        let proc = Process()
+        proc.executableURL = URL(fileURLWithPath: "/bin/sh")
+        proc.arguments = ["-c", script]
+        try? proc.run()
+        NSApp.terminate(nil)
+    }
 
     private static func fetch(_ completion: @escaping (Result<Release, Error>) -> Void) {
         var request = URLRequest(url: releasesURL)
         request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
-        request.setValue("m_capture", forHTTPHeaderField: "User-Agent")   // GitHub rejects requests without one
+        request.setValue("m_capture", forHTTPHeaderField: "User-Agent")
         request.timeoutInterval = 15
         URLSession.shared.dataTask(with: request) { data, _, error in
             let result: Result<Release, Error>
@@ -89,8 +158,6 @@ enum Updater {
         }.resume()
     }
 
-    // MARK: - Version comparison
-
     /// Drop a leading "v" and any pre-release suffix so tags compare numerically.
     private static func normalize(_ tag: String) -> String {
         var t = tag.hasPrefix("v") ? String(tag.dropFirst()) : tag
@@ -98,7 +165,9 @@ enum Updater {
         return t
     }
 
-    private static func isNewer(_ tag: String, than current: String) -> Bool {
+    /// Whether `tag` is a newer version than `current`. Internal so `UpdateInstaller` can
+    /// re-check the extracted bundle before swapping.
+    static func isNewer(_ tag: String, than current: String) -> Bool {
         let a = normalize(tag).split(separator: ".").map { Int($0) ?? 0 }
         let b = normalize(current).split(separator: ".").map { Int($0) ?? 0 }
         for i in 0..<max(a.count, b.count) {
@@ -109,28 +178,24 @@ enum Updater {
         return false
     }
 
-    // MARK: - Alerts
-
-    private static func presentUpdateAlert(_ release: Release) {
-        let message = "m_capture \(normalize(release.tagName)) is available."
-        let choice = BrandAlert(title: "Update available", message: message,
-                                titles: ["Download", "Later"], primary: 0, cancel: 1).runModal()
-        if choice == 0 {
-            let link = release.assets.first { $0.name.hasSuffix(".dmg") }?.browserDownloadURL ?? release.htmlURL
-            if let url = URL(string: link) { NSWorkspace.shared.open(url) }
-        }
+    private static func presentInstalledAlert(_ version: String) {
+        let choice = BrandAlert(title: "Update installed",
+                                message: "m_capture \(version) will run the next time you launch.",
+                                titles: ["Relaunch now", "Later"], primary: 0, cancel: 1).runModal()
+        if choice == 0 { relaunch() }
     }
 
     private static func presentUpToDateAlert() {
         BrandAlert(title: "You’re up to date",
-                   message: "m_capture \(currentVersion) is the latest version.",
+                   message: "m_capture \(effectiveCurrentVersion) is the latest version.",
                    titles: ["OK"], primary: 0, cancel: 0).runModal()
     }
 
     private static func presentErrorAlert() {
-        let choice = BrandAlert(title: "Couldn't check for updates",
+        let choice = BrandAlert(title: "Couldn't update",
                                 message: "Check your connection and try again.",
                                 titles: ["Open Releases", "OK"], primary: 0, cancel: 1).runModal()
         if choice == 0, let url = URL(string: releasesPage) { NSWorkspace.shared.open(url) }
     }
 }
+

@@ -14,7 +14,6 @@ enum AnimatedGIF {
         guard let dest = CGImageDestinationCreateWithURL(
             url as CFURL, UTType.gif.identifier as CFString, frames.count, nil) else { return false }
 
-        // loopCount 0 = loop forever.
         let fileProps = [kCGImagePropertyGIFDictionary as String:
                             [kCGImagePropertyGIFLoopCount as String: 0]]
         CGImageDestinationSetProperties(dest, fileProps as CFDictionary)
@@ -28,3 +27,4 @@ enum AnimatedGIF {
         return CGImageDestinationFinalize(dest)
     }
 }
+

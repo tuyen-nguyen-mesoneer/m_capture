@@ -67,7 +67,6 @@ top -pid $(pgrep m_capture) -l 4 -s 1 -stats pid,cpu,mem
 
 ### Step 7 — Regression: existing features
 - ⌃⇧X: screenshot still works end-to-end (overlay → editor → save).
-- ⌃⇧S: scrolling screenshot still works.
 - Settings panel: all existing pickers still save/restore.
 - Hotkey rebinding: rebind ⌃⇧R to another combination; verify new combo triggers recording.
 
@@ -127,7 +126,6 @@ Add to `.claude/knowledge/KNOWLEDGE_GRAPH.md`:
 - [ ] Quality sizes: High > Medium > Low for same clip duration
 - [ ] All outputs pass `mdls -name kMDItemCodecs` → `HEVC`
 - [ ] ⌃⇧X screenshot: no regression
-- [ ] ⌃⇧S scrolling screenshot: no regression
 - [ ] Settings Video pickers save/restore across relaunch
 - [ ] Hotkey rebinding works for ⌃⇧R
 - [ ] `./build.sh` exits 0, zero warnings
@@ -158,4 +156,4 @@ No source code changes. If any QA step fails, fixes go back to the relevant task
 - New features or UX changes discovered during testing — file as separate issues
 - Performance optimisation beyond the thresholds above
 - Distribution / notarisation / DMG changes
-- Any change to existing screenshot or scrolling capture code
+- Any change to existing screenshot capture code

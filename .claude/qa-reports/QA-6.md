@@ -18,7 +18,7 @@
 | S10 | Space: `region → fullScreen` when `!allowsWindowMode && allowsFullScreenMode` | ✅ PASS | Lines 153–154 |
 | S11 | Space: skips `.window` when `!allowsWindowMode` | ✅ PASS | Falls through to `allowsFullScreenMode` check |
 | S12 | Space: `fullScreen → region` cycles back | ✅ PASS | Lines 158–159 |
-| S13 | Space: no effect when both flags false (scroll regression) | ✅ PASS | Line 154: `else { return }` |
+| S13 | Space: no effect when both flags false | ✅ PASS | Line 154: `else { return }` |
 | S14 | Return key (36) in `.fullScreen` calls `onComplete?(bounds)` | ✅ PASS | Lines 165–168 |
 | S15 | Return key only fires in `.fullScreen` | ✅ PASS | Guarded by `captureMode == .fullScreen` |
 | S16 | Esc (53) calls `onCancel()` regardless of mode | ✅ PASS | Line 145 |
@@ -28,9 +28,8 @@
 | S20 | `drawFullScreenMode`: centred instruction label | ✅ PASS | Lines 265–277 |
 | S21 | `drawModePill()`: `.fullScreen` returns early | ✅ PASS | Lines 285–286 |
 | S22 | `drawModePill()`: `.region` + `allowsFullScreenMode` → correct hint | ✅ PASS | Line 288 |
-| S23 | `drawModePill()`: `.region` + scroll-capture flags → scroll label (regression) | ✅ PASS | Line 289 |
-| S24 | `drawModePill()`: `.region` + `allowsWindowMode` → original label (regression) | ✅ PASS | Line 290 |
-| S25 | No new retained subview | ✅ PASS | Hint drawn in Core Graphics; no `NSTextField` added |
+| S23 | `drawModePill()`: `.region` + `allowsWindowMode` → original label (regression) | ✅ PASS | Line 290 |
+| S24 | No new retained subview | ✅ PASS | Hint drawn in Core Graphics; no `NSTextField` added |
 
 ## FLAG Resolution — S7/S14 Coordinate Contract
 
@@ -55,9 +54,8 @@ When `rect = bounds` (origin .zero), `global` correctly equals `screen.frame` fo
 | R5 | Full-screen mode → Esc | Overlay dismisses, no recording | ⏳ AWAITING |
 | R6 | Space again in full-screen | Cycles back to region mode | ⏳ AWAITING |
 | R7 | ⌃⇧X → Space | Still cycles region ↔ window (no full-screen) | ⏳ AWAITING |
-| R8 | ⌃⇧S → Space | No mode change (scroll capture regression) | ⏳ AWAITING |
-| R9 | `leaks` after full-screen Esc | 0 leaks | ⏳ AWAITING |
-| R10 | `./build.sh` clean | No regressions in screenshot / scroll flows | ⏳ AWAITING |
+| R8 | `leaks` after full-screen Esc | 0 leaks | ⏳ AWAITING |
+| R9 | `./build.sh` clean | No regressions in screenshot flows | ⏳ AWAITING |
 
 ## Issues Found
 None. FLAG resolved (see above).
@@ -66,6 +64,6 @@ None. FLAG resolved (see above).
 Low. All Space-key transitions correct. Regression paths intact. Coordinate math verified correct for multi-monitor. No new retained objects.
 
 ## Recommendation
-**STATIC: PASS — 25/25 (FLAG resolved by Leader coordinate verification).**
-**RUNTIME: Awaiting human confirmation of 10 items.**
+**STATIC: PASS — 24/24 (FLAG resolved by Leader coordinate verification).**
+**RUNTIME: Awaiting human confirmation of 9 items.**
 **To proceed to Task 8:** Human must confirm all Runtime checks pass and reply "Task 6 QA passed".

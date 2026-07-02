@@ -48,7 +48,7 @@
 | R6 | Select "Microphone" → close → reopen Settings | Audio picker shows "Microphone" | ✅ PASSED |
 | R7 | Tab / arrow keys in Video section | Focus moves correctly between pickers | ✅ PASSED |
 | R8 | Inspect all existing sections visually | No layout or functional regression | ✅ PASSED |
-| R9 | ⌃⇧X screenshot, ⌃⇧S scrolling | Both work normally | ✅ PASSED |
+| R9 | ⌃⇧X screenshot | Works normally | ✅ PASSED |
 | R10 | Window bottom edge | No clipping — window auto-grows to fit Video rows | ✅ PASSED |
 
 ## Issues Found

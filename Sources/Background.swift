@@ -12,9 +12,9 @@ import AppKit
 /// live editor preview and the baked export.
 enum Background {
     case none
-    case white, light, dark, black           // solids
-    case lavender, sunset, ocean, forest, candy, midnight  // gradients
-    case solid(NSColor)                       // custom color from the picker
+    case white, light, dark, black
+    case lavender, sunset, ocean, forest, candy, midnight
+    case solid(NSColor)
 
     /// The fixed presets shown in the Background cluster (None + 10).
     static let presets: [Background] = [
@@ -129,13 +129,11 @@ enum Background {
 
         let innerRect = CGRect(x: pad, y: pad, width: iw, height: ih)
         let rounded = CGPath(roundedRect: innerRect, cornerWidth: radius, cornerHeight: radius, transform: nil)
-        // Soft drop shadow cast by the image onto the background.
         ctx.saveGState()
         ctx.setShadow(offset: CGSize(width: 0, height: -pad * 0.12), blur: pad * 0.5,
                       color: NSColor(white: 0, alpha: 0.35).cgColor)
         ctx.addPath(rounded); ctx.setFillColor(NSColor.black.cgColor); ctx.fillPath()
         ctx.restoreGState()
-        // The image itself, clipped to rounded corners.
         ctx.saveGState()
         ctx.addPath(rounded); ctx.clip()
         inner.draw(in: innerRect)
@@ -145,3 +143,4 @@ enum Background {
         return rep
     }
 }
+

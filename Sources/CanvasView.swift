@@ -18,7 +18,11 @@ final class CanvasView: NSView, NSTextFieldDelegate {
 
     var tool: Tool = .pencil {
         didSet {
-            if tool != .arrow { editingArrow = nil }
+            if tool != .text { commitText(); editingText = nil; textDrag = .none }
+            if !((tool == .arrow && editingCurve is CurvedArrowAnnotation) ||
+                 (tool == .line && editingCurve is CurvedLineAnnotation)) {
+                editingCurve = nil
+            }
             if tool != .zoom { editingZoom = nil }
             if tool != .overlay, editingOverlay != nil { editingOverlay = nil; onOverlaySelected?(nil) }
             if tool != .ruler { measureAxis = .none; measureAnchor = nil }
@@ -32,21 +36,16 @@ final class CanvasView: NSView, NSTextFieldDelegate {
     var onShortcut: ((String) -> Void)?
     var onCancel: (() -> Void)?
 
-    // Crop: a pending region (image space) drawn but not yet applied. The
-    // controller shows a confirm control and performs the actual crop/relayout.
     var pendingCrop: CGRect?
     private var cropStart: CGPoint?
-    var onCropBegin: (() -> Void)?    // a new crop drag started — hide any confirm UI
-    var onCropReady: (() -> Void)?    // a usable crop region was drawn — show confirm UI
-    var onCropConfirm: (() -> Void)?  // ↵ pressed with a pending crop — apply it
+    var onCropBegin: (() -> Void)?
+    var onCropReady: (() -> Void)?
+    var onCropConfirm: (() -> Void)?
 
-    // OCR: drag a region; on release its pixels are recognized (editor stays open).
     private var ocrStart: CGPoint?
     private var ocrRect: CGRect?
     var onOCR: ((CGImage) -> Void)?
 
-    // Zoom callout: drag a source region; on release an enlarged bubble is placed.
-    // The fresh callout stays selected so its bubble can be moved/resized.
     private var zoomStart: CGPoint?
     private var zoomRect: CGRect?
     private var editingZoom: ZoomAnnotation?
@@ -54,14 +53,9 @@ final class CanvasView: NSView, NSTextFieldDelegate {
     private var zoomDrag: ZoomDrag = .none
     private var zoomDragOffset: CGPoint = .zero
 
-    // Bendable arrow: the just-drawn arrow stays selected with a draggable apex
-    // handle so it can be curved; cleared when the tool changes (see `tool`).
-    private var editingArrow: CurvedArrowAnnotation?
-    private var draggingArrowHandle = false
+    private var editingCurve: CurvedAnnotation?
+    private var draggingCurveHandle = false
 
-    // Overlay image: the selected overlay (move whole / resize bottom-right knob),
-    // mirroring the zoom-callout editing model. `onOverlaySelected` lets the editor
-    // show/hide the opacity slider for the current selection.
     private var editingOverlay: ImageOverlayAnnotation?
     private enum OverlayDrag { case none, move, resize }
     private var overlayDrag: OverlayDrag = .none
@@ -69,9 +63,6 @@ final class CanvasView: NSView, NSTextFieldDelegate {
     var onOverlaySelected: ((ImageOverlayAnnotation?) -> Void)?
     var onPaste: (() -> Void)?
 
-    // Ruler / measure: an arrow key locks an axis and anchors at the cursor; moving
-    // extends an axis-aligned dimension line; a click imprints it. `lastMousePoint`
-    // (image space) is the live cursor, tracked on every mouse move.
     private enum MeasureAxis { case none, vertical, horizontal }
     private var measureAxis: MeasureAxis = .none
     private var measureAnchor: CGPoint?
@@ -86,28 +77,32 @@ final class CanvasView: NSView, NSTextFieldDelegate {
         measureAxis == .vertical ? CGPoint(x: a.x, y: p.y) : CGPoint(x: p.x, y: a.y)
     }
 
-    // Select tool: the currently-grabbed mark, plus whether a drag is moving the
-    // whole mark or resizing it from the bottom-right knob (top-left pinned). Move
-    // reuses `remap`; resize reuses `scale(by:around:)`.
     private var selected: Annotation?
     private enum SelectDrag { case none, move, resize }
     private var selectDrag: SelectDrag = .none
-    private var dragAnchor: CGPoint = .zero    // pinned corner during a resize
-    private var lastDragPoint: CGPoint = .zero // previous cursor sample (move delta / resize ratio)
+    private var dragAnchor: CGPoint = .zero
+    private var lastDragPoint: CGPoint = .zero
 
     private var annotations: [Annotation] = []
     private var redoStack: [Annotation] = []
     private var live: Annotation?
     private var counter = 0
     var counterFormat: CounterFormat = .number {
-        didSet { if counterFormat != oldValue { counter = 0 } }   // restart the sequence
+        didSet { if counterFormat != oldValue { counter = 0 } }
     }
-    var currentEmoji = Logo.stampToken
+    var currentEmoji = "⭐️"
 
-    // Inline text editing state.
     private var textField: NSTextField?
-    private var textOrigin: CGPoint = .zero
     private var textImageFont: CGFloat = 18
+    /// While editing an existing mark, the wrap width is locked to its original so
+    /// the text keeps wrapping the same way; nil lets a new field grow to fit.
+    private var textLockedWidth: CGFloat?
+    /// A committed text mark that stays selected under the Text tool, so it can be
+    /// moved and resized in place (box + corner knob) without the Select tool.
+    private var editingText: TextAnnotation?
+    private enum TextDrag { case none, move, resize }
+    private var textDrag: TextDrag = .none
+    private var textDragOffset: CGPoint = .zero
 
     private var bitmap: NSBitmapImageRep?
     private func rebuildBitmap() {
@@ -128,9 +123,7 @@ final class CanvasView: NSView, NSTextFieldDelegate {
 
     override var acceptsFirstResponder: Bool { true }
 
-    // ⌘V pastes an image as an overlay; handled here (it's not a toolbar button).
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
-        // Skip while a text annotation is being typed so ⌘V pastes into the field.
         if textField == nil,
            event.modifierFlags.intersection([.command, .option, .control]) == [.command],
            event.charactersIgnoringModifiers?.lowercased() == "v" {
@@ -138,8 +131,6 @@ final class CanvasView: NSView, NSTextFieldDelegate {
         }
         return super.performKeyEquivalent(with: event)
     }
-
-    // MARK: Drag-and-drop (drop an image file onto the canvas → overlay)
 
     override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
         CanvasView.cgImage(from: sender.draggingPasteboard) != nil ? .copy : []
@@ -207,15 +198,11 @@ final class CanvasView: NSView, NSTextFieldDelegate {
                                        owner: self, userInfo: nil))
     }
     override func mouseMoved(with event: NSEvent) {
-        // Controls layered over the canvas (crop ✓/✕, the opacity slider, the text
-        // field) sit inside our tracking area; let them own their cursor instead of
-        // forcing the crosshair over the top of them.
         if let hit = window?.contentView?.hitTest(event.locationInWindow), hit !== self {
             return
         }
         lastMousePoint = imagePoint(event)
         if tool == .ruler, measureAxis != .none { needsDisplay = true }
-        // Grab cursor when the zoom bubble is movable under the pointer.
         if tool == .zoom, let ez = editingZoom {
             let p = imagePoint(event), hr = 12 / displayScale
             let knob = CGPoint(x: ez.dest.maxX, y: ez.dest.minY)
@@ -230,10 +217,19 @@ final class CanvasView: NSView, NSTextFieldDelegate {
                 NSCursor.openHand.set(); return
             }
         }
+        if tool == .text, textField == nil, let t = editingText {
+            let p = imagePoint(event), hr = 12 / displayScale
+            if hypot(t.bounds.maxX - p.x, t.bounds.minY - p.y) < hr {
+                NSCursor.openHand.set(); return
+            }
+            if t.bounds.contains(p) {
+                NSCursor.pointingHand.set(); return
+            }
+        }
         if tool == .select {
             let p = imagePoint(event), hr = 12 / displayScale
-            if let s = selected, s.resizable, hypot(s.bounds.maxX - p.x, s.bounds.minY - p.y) < hr {
-                NSCursor.openHand.set(); return   // over the resize knob
+            if annotations.contains(where: { $0.resizable && hypot($0.bounds.maxX - p.x, $0.bounds.minY - p.y) < hr }) {
+                NSCursor.openHand.set(); return
             }
             (annotations.contains { $0.hit(p) } ? NSCursor.openHand : NSCursor.arrow).set()
             return
@@ -241,29 +237,30 @@ final class CanvasView: NSView, NSTextFieldDelegate {
         NSCursor.crosshair.set()
     }
 
-    // Plain letter keys switch tools (modifier combos like ⌘C are handled by the
-    // toolbar buttons; while typing text the field is first responder, so these
-    // never fire mid-typing).
     override func keyDown(with event: NSEvent) {
         if tool == .ruler {
             switch event.keyCode {
-            case 126, 125:   // ↑ / ↓ → measure vertically, anchored at the cursor
+            case 126, 125:
                 measureAxis = .vertical; measureAnchor = lastMousePoint; needsDisplay = true; return
-            case 123, 124:   // ← / → → measure horizontally
+            case 123, 124:
                 measureAxis = .horizontal; measureAnchor = lastMousePoint; needsDisplay = true; return
-            case 53 where measureAxis != .none:   // Esc cancels the in-progress measurement
+            case 53 where measureAxis != .none:
                 measureAxis = .none; measureAnchor = nil; needsDisplay = true; return
             default: break
             }
         }
-        if event.keyCode == 53 { onCancel?(); return } // Esc cancels the capture
-        if pendingCrop != nil, event.keyCode == 36 || event.keyCode == 76 { // ↵ / ⌤ applies a crop
+        if event.keyCode == 53 { onCancel?(); return }
+        if pendingCrop != nil, event.keyCode == 36 || event.keyCode == 76 {
             onCropConfirm?(); return
         }
-        // ⌫ / ⌦ deletes the mark grabbed by the Select tool.
         if tool == .select, let s = selected, event.keyCode == 51 || event.keyCode == 117 {
             if let idx = annotations.firstIndex(where: { $0 === s }) { annotations.remove(at: idx) }
             selected = nil; selectDrag = .none; redoStack.removeAll(); onChange?(); needsDisplay = true
+            return
+        }
+        if tool == .text, textField == nil, let t = editingText, event.keyCode == 51 || event.keyCode == 117 {
+            if let idx = annotations.firstIndex(where: { $0 === t }) { annotations.remove(at: idx) }
+            editingText = nil; textDrag = .none; redoStack.removeAll(); onChange?(); needsDisplay = true
             return
         }
         let mods = event.modifierFlags.intersection([.command, .control, .option])
@@ -279,23 +276,19 @@ final class CanvasView: NSView, NSTextFieldDelegate {
         return CGPoint(x: v.x / displayScale, y: v.y / displayScale)
     }
 
-    // MARK: Mouse
-
     override func mouseDown(with event: NSEvent) {
-        commitText() // finish any in-progress text first
+        let didCommit = commitText()
         let p = imagePoint(event)
         switch tool {
         case .pencil:  let a = PencilAnnotation(style: style); a.add(p); live = a
         case .marker:  let a = MarkerAnnotation(style: style); a.add(p); live = a
-        case .line:    live = LineAnnotation(start: p, style: style)
-        case .arrow:
-            // Grab the apex handle of the selected arrow to bend it; otherwise
-            // start a new (straight) arrow.
-            if let ea = editingArrow, hypot(ea.apex.x - p.x, ea.apex.y - p.y) < 11 / displayScale {
-                draggingArrowHandle = true
+        case .line, .arrow:
+            if let ec = editingCurve, hypot(ec.apex.x - p.x, ec.apex.y - p.y) < 11 / displayScale {
+                draggingCurveHandle = true
             } else {
-                editingArrow = nil
-                live = CurvedArrowAnnotation(start: p, style: style)
+                editingCurve = nil
+                live = tool == .arrow ? CurvedArrowAnnotation(start: p, style: style)
+                                      : CurvedLineAnnotation(start: p, style: style)
             }
         case .rect:    live = RectAnnotation(start: p, style: style)
         case .ellipse: live = EllipseAnnotation(start: p, style: style)
@@ -315,7 +308,28 @@ final class CanvasView: NSView, NSTextFieldDelegate {
             live = CounterAnnotation(center: p, label: counterFormat.label(counter + 1),
                                      color: style.color, radius: r)
         case .text:
-            beginTextEditing(viewPoint: convert(event.locationInWindow, from: nil))
+            let hr = 12 / displayScale
+            if event.clickCount >= 2, let hit = annotations.reversed()
+                .first(where: { ($0 as? TextAnnotation)?.hit(p) ?? false }) as? TextAnnotation {
+                beginEditing(hit)
+            } else if let t = editingText, hypot(t.bounds.maxX - p.x, t.bounds.minY - p.y) < hr {
+                textDrag = .resize
+                dragAnchor = CGPoint(x: t.bounds.minX, y: t.bounds.maxY)
+                lastDragPoint = p
+                NSCursor.closedHand.push()
+            } else if let hit = annotations.reversed()
+                .first(where: { ($0 as? TextAnnotation)?.hit(p) ?? false }) as? TextAnnotation {
+                editingText = hit
+                textDrag = .move
+                textDragOffset = CGPoint(x: p.x - hit.origin.x, y: p.y - hit.origin.y)
+                NSCursor.closedHand.push()
+            } else if didCommit {
+                // Clicking away finished typing: keep the box shown for resizing,
+                // rather than immediately opening a fresh field.
+            } else {
+                editingText = nil
+                beginTextEditing(viewPoint: convert(event.locationInWindow, from: nil))
+            }
         case .eyedropper:
             if let c = sample(p) { style.color = c; onColorPicked?(c) }
         case .eraser:
@@ -325,14 +339,14 @@ final class CanvasView: NSView, NSTextFieldDelegate {
         case .crop:
             cropStart = p
             pendingCrop = CGRect(origin: p, size: .zero)
-            onCropBegin?()  // hide any stale confirm UI while a fresh region is drawn
+            onCropBegin?()
         case .ocr:
             ocrStart = p
             ocrRect = CGRect(origin: p, size: .zero)
         case .zoom:
             if let ez = editingZoom {
                 let hr = 12 / displayScale
-                let knob = CGPoint(x: ez.dest.maxX, y: ez.dest.minY)   // bottom-right corner
+                let knob = CGPoint(x: ez.dest.maxX, y: ez.dest.minY)
                 if hypot(knob.x - p.x, knob.y - p.y) < hr {
                     zoomDrag = .resize; NSCursor.closedHand.push()
                 } else if ez.dest.contains(p) {
@@ -350,24 +364,28 @@ final class CanvasView: NSView, NSTextFieldDelegate {
         case .overlay:
             let hr = 12 / displayScale
             if let eo = editingOverlay,
-               hypot(eo.rect.maxX - p.x, eo.rect.minY - p.y) < hr {   // bottom-right knob
+               hypot(eo.rect.maxX - p.x, eo.rect.minY - p.y) < hr {
                 overlayDrag = .resize; NSCursor.closedHand.push()
             } else if let eo = editingOverlay, eo.rect.contains(p) {
                 overlayDrag = .move
                 overlayDragOffset = CGPoint(x: p.x - eo.rect.minX, y: p.y - eo.rect.minY)
                 NSCursor.closedHand.push()
             } else {
-                // Click elsewhere selects the topmost overlay under the point, else deselects.
                 let hit = annotations.reversed().first { ($0 as? ImageOverlayAnnotation)?.rect.contains(p) ?? false }
                 editingOverlay = hit as? ImageOverlayAnnotation
                 onOverlaySelected?(editingOverlay)
             }
         case .select:
             let hr = 12 / displayScale
-            if let s = selected, s.resizable,
-               hypot(s.bounds.maxX - p.x, s.bounds.minY - p.y) < hr {   // bottom-right knob
+            if event.clickCount >= 2, let hit = annotations.reversed()
+                .first(where: { ($0 as? TextAnnotation)?.hit(p) ?? false }) as? TextAnnotation {
+                beginEditing(hit)
+            } else if let corner = annotations.reversed().first(where: {
+                $0.resizable && hypot($0.bounds.maxX - p.x, $0.bounds.minY - p.y) < hr
+            }) {
+                selected = corner
                 selectDrag = .resize
-                dragAnchor = CGPoint(x: s.bounds.minX, y: s.bounds.maxY)  // pin the top-left corner
+                dragAnchor = CGPoint(x: corner.bounds.minX, y: corner.bounds.maxY)
                 lastDragPoint = p
                 NSCursor.closedHand.push()
             } else if let hit = annotations.reversed().first(where: { $0.hit(p) }) {
@@ -380,11 +398,10 @@ final class CanvasView: NSView, NSTextFieldDelegate {
                 selectDrag = .none
             }
         case .ruler:
-            // Imprint the live measurement (if any), then re-anchor here for chaining.
             if measureAxis != .none, let a = measureAnchor {
                 let end = measureEnd(at: p, from: a)
                 if hypot(end.x - a.x, end.y - a.y) >= 2 {
-                    annotations.append(MeasureAnnotation(start: a, end: end, pixelsPerPoint: pixelsPerPoint, style: style))
+                    annotations.append(MeasureAnnotation(start: a, end: end, style: style))
                     redoStack.removeAll(); onChange?()
                 }
                 measureAnchor = p
@@ -395,22 +412,22 @@ final class CanvasView: NSView, NSTextFieldDelegate {
 
     override func mouseDragged(with event: NSEvent) {
         let p = imagePoint(event)
-        if tool == .ruler {   // ruler uses move + click, not drag; just track the cursor
+        if tool == .ruler {
             lastMousePoint = p
             if measureAxis != .none { needsDisplay = true }
             return
         }
-        if draggingArrowHandle, let ea = editingArrow {
-            ea.bend(through: p); needsDisplay = true; return
+        if draggingCurveHandle, let ec = editingCurve {
+            ec.bend(through: p); needsDisplay = true; return
         }
         if zoomDrag == .move, let ez = editingZoom {
             ez.dest.origin = CGPoint(x: p.x - zoomDragOffset.x, y: p.y - zoomDragOffset.y)
             needsDisplay = true; return
         }
         if zoomDrag == .resize, let ez = editingZoom {
-            let anchorX = ez.dest.minX, top = ez.dest.maxY     // keep top-left fixed
+            let anchorX = ez.dest.minX, top = ez.dest.maxY
             let newW = max(24 / displayScale, p.x - anchorX)
-            let newH = newW * (ez.source.height / max(1, ez.source.width))   // lock to source aspect
+            let newH = newW * (ez.source.height / max(1, ez.source.width))
             ez.dest = CGRect(x: anchorX, y: top - newH, width: newW, height: newH)
             needsDisplay = true; return
         }
@@ -419,10 +436,28 @@ final class CanvasView: NSView, NSTextFieldDelegate {
             needsDisplay = true; return
         }
         if overlayDrag == .resize, let eo = editingOverlay {
-            let anchorX = eo.rect.minX, top = eo.rect.maxY     // keep top-left fixed
+            let anchorX = eo.rect.minX, top = eo.rect.maxY
             let newW = max(24 / displayScale, p.x - anchorX)
-            let newH = newW * eo.aspect                        // aspect-locked
+            let newH = newW * eo.aspect
             eo.rect = CGRect(x: anchorX, y: top - newH, width: newW, height: newH)
+            needsDisplay = true; return
+        }
+        if textDrag == .move, let t = editingText {
+            t.origin = CGPoint(x: p.x - textDragOffset.x, y: p.y - textDragOffset.y)
+            needsDisplay = true; return
+        }
+        if textDrag == .resize, let t = editingText {
+            let prev = hypot(lastDragPoint.x - dragAnchor.x, lastDragPoint.y - dragAnchor.y)
+            let cur = hypot(p.x - dragAnchor.x, p.y - dragAnchor.y)
+            if prev > 0.5 {
+                let f = cur / prev
+                let b = t.bounds
+                let minSide = 8 / displayScale
+                if f >= 1 || (b.width * f >= minSide && b.height * f >= minSide) {
+                    t.scale(by: f, around: dragAnchor)
+                    lastDragPoint = p
+                }
+            }
             needsDisplay = true; return
         }
         if selectDrag == .move, let s = selected {
@@ -431,7 +466,6 @@ final class CanvasView: NSView, NSTextFieldDelegate {
             lastDragPoint = p; needsDisplay = true; return
         }
         if selectDrag == .resize, let s = selected {
-            // Uniform scale from the change in cursor distance to the pinned corner.
             let prev = hypot(lastDragPoint.x - dragAnchor.x, lastDragPoint.y - dragAnchor.y)
             let cur = hypot(p.x - dragAnchor.x, p.y - dragAnchor.y)
             if prev > 0.5 {
@@ -464,29 +498,31 @@ final class CanvasView: NSView, NSTextFieldDelegate {
             return
         }
         if let a = live as? FreehandAnnotation { a.add(p) }
-        else if let a = live as? CurvedArrowAnnotation { a.end = p; a.straighten() }
+        else if let a = live as? CurvedAnnotation { a.end = p; a.straighten() }
         else if let a = live as? TwoPointAnnotation { a.end = p }
         else if let a = live as? CounterAnnotation { a.center = p }
-        else if let a = live as? EmojiAnnotation {       // drag out from the drop point to size it
+        else if let a = live as? EmojiAnnotation {
             a.size = max(24, hypot(p.x - a.center.x, p.y - a.center.y) * 1.8)
         }
         needsDisplay = true
     }
 
     override func mouseUp(with event: NSEvent) {
-        if draggingArrowHandle {
-            draggingArrowHandle = false; onChange?(); needsDisplay = true; return
+        if draggingCurveHandle {
+            draggingCurveHandle = false; onChange?(); needsDisplay = true; return
+        }
+        if textDrag != .none {
+            textDrag = .none; NSCursor.pop(); onChange?(); needsDisplay = true; return
         }
         if zoomDrag != .none {
             zoomDrag = .none; NSCursor.pop(); onChange?(); needsDisplay = true; return
         }
         if overlayDrag != .none {
             overlayDrag = .none; NSCursor.pop()
-            onOverlaySelected?(editingOverlay)   // reposition the opacity slider after a move/resize
+            onOverlaySelected?(editingOverlay)
             onChange?(); needsDisplay = true; return
         }
         if selectDrag != .none {
-            // Blur / zoom cache pixels from where they sat — re-sample at the new spot.
             if let b = selected as? BlurAnnotation { b.patch = gaussianBlur(b.rect) }
             if let z = selected as? ZoomAnnotation { z.patch = croppedCGImage(rect: z.source) }
             selectDrag = .none; NSCursor.pop()
@@ -506,7 +542,7 @@ final class CanvasView: NSView, NSTextFieldDelegate {
             if let pc = pendingCrop, pc.width >= 5, pc.height >= 5 {
                 onCropReady?()
             } else {
-                pendingCrop = nil; onCropBegin?()  // too small — discard, keep confirm hidden
+                pendingCrop = nil; onCropBegin?()
             }
             needsDisplay = true
             return
@@ -514,7 +550,7 @@ final class CanvasView: NSView, NSTextFieldDelegate {
         if tool == .ocr {
             ocrStart = nil
             if let r = ocrRect, r.width >= 5, r.height >= 5, let cg = croppedCGImage(rect: r) {
-                onOCR?(cg)   // recognize off the editor; the editor stays open
+                onOCR?(cg)
             }
             ocrRect = nil
             needsDisplay = true
@@ -524,8 +560,7 @@ final class CanvasView: NSView, NSTextFieldDelegate {
         if let a = live {
             annotations.append(a)
             if a is CounterAnnotation { counter += 1 }
-            // Keep a fresh arrow selected so its apex handle can bend it.
-            if let ca = a as? CurvedArrowAnnotation { editingArrow = ca }
+            if let cc = a as? CurvedAnnotation { editingCurve = cc }
             redoStack.removeAll()
             live = nil
             onChange?()
@@ -543,56 +578,126 @@ final class CanvasView: NSView, NSTextFieldDelegate {
         let dw = src.width * mag, dh = src.height * mag
         let gap: CGFloat = 24
         var dx = src.maxX + gap
-        if dx + dw > W { dx = src.minX - gap - dw }          // not enough room right → go left
-        dx = max(0, min(W - dw, dx))                          // clamp into image
+        if dx + dw > W { dx = src.minX - gap - dw }
+        dx = max(0, min(W - dw, dx))
         let dy = max(0, min(H - dh, src.midY - dh / 2))
         return CGRect(x: dx, y: dy, width: dw, height: dh)
     }
 
-    // MARK: Text editing
-
-    private func beginTextEditing(viewPoint: CGPoint) {
-        let screenFont = max(14, style.lineWidth * 6) * displayScale
-        let h = screenFont + 8
-        let field = NSTextField(frame: NSRect(x: viewPoint.x, y: viewPoint.y - h, width: 260, height: h))
-        field.font = .systemFont(ofSize: screenFont, weight: .semibold)
-        field.textColor = style.color
+    /// A borderless, wrapping, brand-bordered field used to type/edit an annotation.
+    private func makeTextField(frame: NSRect, font: NSFont, color: NSColor) -> NSTextField {
+        let field = NSTextField(frame: frame)
+        field.font = font
+        field.textColor = color
         field.backgroundColor = .clear
         field.drawsBackground = false
         field.isBordered = false
         field.focusRingType = .none
+        field.usesSingleLineMode = false
+        field.lineBreakMode = .byWordWrapping
+        field.cell?.wraps = true
+        field.cell?.isScrollable = false
+        field.maximumNumberOfLines = 0
         field.placeholderString = "Text…"
         field.delegate = self
+        field.wantsLayer = true
+        field.layer?.borderColor = Theme.lavender.withAlphaComponent(0.9).cgColor
+        field.layer?.borderWidth = 1
+        field.layer?.cornerRadius = 3
+        return field
+    }
+
+    private func beginTextEditing(viewPoint: CGPoint) {
+        let screenFont = max(14, style.lineWidth * 6) * displayScale
+        let h = screenFont + 8
+        let field = makeTextField(frame: NSRect(x: viewPoint.x, y: viewPoint.y - h, width: 120, height: h),
+                                  font: .systemFont(ofSize: screenFont, weight: .semibold), color: style.color)
         addSubview(field)
         window?.makeFirstResponder(field)
-
         textField = field
-        textOrigin = CGPoint(x: viewPoint.x / displayScale, y: (viewPoint.y - h) / displayScale + 4)
         textImageFont = screenFont / displayScale
+        textLockedWidth = nil
+        fitTextField(field)
+    }
+
+    /// Re-open the editor on an existing text mark (double-click) pre-filled with
+    /// its wording; the mark is lifted out and re-committed when editing finishes.
+    private func beginEditing(_ mark: TextAnnotation) {
+        editingText = nil; selected = nil; selectDrag = .none; textDrag = .none
+        if let idx = annotations.firstIndex(where: { $0 === mark }) { annotations.remove(at: idx) }
+        let scale = displayScale
+        let frame = NSRect(x: mark.origin.x * scale, y: mark.origin.y * scale,
+                           width: mark.maxWidth * scale, height: mark.boxHeight * scale)
+        let field = makeTextField(frame: frame,
+                                  font: .systemFont(ofSize: mark.fontSize * scale, weight: .semibold),
+                                  color: mark.color)
+        field.stringValue = mark.text
+        addSubview(field)
+        window?.makeFirstResponder(field)
+        field.selectText(nil)
+        textField = field
+        textImageFont = mark.fontSize
+        textLockedWidth = mark.maxWidth * scale
+        fitTextField(field)
+        redoStack.removeAll(); onChange?(); needsDisplay = true
+    }
+
+    func controlTextDidChange(_ obj: Notification) {
+        if let field = textField { fitTextField(field) }
+    }
+
+    /// Size the live text field to its content, capped at the canvas edge, so long
+    /// text wraps onto more lines (the field grows downward) instead of clipping.
+    private func fitTextField(_ field: NSTextField) {
+        let shown = field.stringValue.isEmpty ? (field.placeholderString ?? "") : field.stringValue
+        let font = field.font ?? .systemFont(ofSize: 14)
+        let cap = max(120, bounds.width - field.frame.minX - 8)
+        let width: CGFloat
+        if let locked = textLockedWidth {
+            width = min(locked, cap)
+        } else {
+            let natural = ceil(NSAttributedString(string: shown, attributes: [.font: font]).size().width) + 16
+            width = min(natural, cap)
+        }
+        let cellH = field.cell?.cellSize(forBounds: NSRect(x: 0, y: 0, width: width,
+                                                           height: .greatestFiniteMagnitude)).height ?? field.frame.height
+        let height = ceil(max(font.ascender - font.descender, cellH))
+        let top = field.frame.maxY
+        field.frame = NSRect(x: field.frame.minX, y: top - height, width: width, height: height)
+        // Lay the typed text flush to the box edge (no line-fragment padding/inset)
+        // so it sits exactly where the committed annotation draws it.
+        if let editor = field.currentEditor() as? NSTextView {
+            editor.textContainerInset = .zero
+            editor.textContainer?.lineFragmentPadding = 0
+        }
     }
 
     func controlTextDidEndEditing(_ obj: Notification) { commitText() }
 
-    private func commitText() {
-        guard let field = textField else { return }
+    @discardableResult
+    private func commitText() -> Bool {
+        guard let field = textField else { return false }
         let text = field.stringValue
         let color = field.textColor ?? style.color
+        let f = field.frame
         textField = nil
         field.removeFromSuperview()
-        if !text.isEmpty {
-            annotations.append(TextAnnotation(text: text, origin: textOrigin,
-                                              fontSize: textImageFont, color: color))
-            redoStack.removeAll(); onChange?()
-            needsDisplay = true
-        }
-        window?.makeFirstResponder(self) // restore so tool shortcuts work again
+        window?.makeFirstResponder(self)
+        guard !text.isEmpty else { return false }
+        let origin = CGPoint(x: f.minX / displayScale, y: f.minY / displayScale)
+        let mark = TextAnnotation(text: text, origin: origin, fontSize: textImageFont,
+                                  color: color, maxWidth: f.width / displayScale,
+                                  boxHeight: f.height / displayScale)
+        annotations.append(mark)
+        editingText = mark
+        redoStack.removeAll(); onChange?()
+        needsDisplay = true
+        return true
     }
-
-    // MARK: Sampling / redaction
 
     private func sample(_ p: CGPoint) -> NSColor? {
         guard let bmp = bitmap else { return nil }
-        let x = Int(p.x), y = Int(image.size.height - p.y) // flip to top-left origin
+        let x = Int(p.x), y = Int(image.size.height - p.y)
         guard x >= 0, y >= 0, x < bmp.pixelsWide, y < bmp.pixelsHigh else { return nil }
         return bmp.colorAt(x: x, y: y)
     }
@@ -604,7 +709,7 @@ final class CanvasView: NSView, NSTextFieldDelegate {
         let sx = CGFloat(cg.width) / image.size.width
         let sy = CGFloat(cg.height) / image.size.height
         let pr = CGRect(x: rect.minX * sx,
-                        y: (image.size.height - rect.maxY) * sy,   // flip Y for CGImage
+                        y: (image.size.height - rect.maxY) * sy,
                         width: rect.width * sx,
                         height: rect.height * sy).integral
         guard pr.width >= 1, pr.height >= 1, let crop = cg.cropping(to: pr) else { return nil }
@@ -626,17 +731,14 @@ final class CanvasView: NSView, NSTextFieldDelegate {
         return CIContext().createCGImage(out, from: CGRect(origin: .zero, size: size))
     }
 
-    // MARK: Edit
-
     func undo() { clearSelections(); if let a = annotations.popLast() { redoStack.append(a); onChange?(); needsDisplay = true } }
     func redo() { clearSelections(); if let a = redoStack.popLast() { annotations.append(a); onChange?(); needsDisplay = true } }
 
     private func clearSelections() {
-        editingArrow = nil; editingZoom = nil; selected = nil; selectDrag = .none
+        editingCurve = nil; editingZoom = nil; selected = nil; selectDrag = .none
+        editingText = nil; textDrag = .none
         if editingOverlay != nil { editingOverlay = nil; onOverlaySelected?(nil) }
     }
-
-    // MARK: Render
 
     override func draw(_ dirtyRect: NSRect) {
         guard let ctx = NSGraphicsContext.current?.cgContext else { return }
@@ -646,25 +748,25 @@ final class CanvasView: NSView, NSTextFieldDelegate {
         for a in annotations { a.draw(in: ctx) }
         live?.draw(in: ctx)
         if let pc = pendingCrop { drawCropOverlay(pc, in: ctx) }
-        if let o = ocrRect { drawCropOverlay(o, in: ctx) }   // same dim+outline for the OCR region
-        if let z = zoomRect {                                 // live zoom source while dragging
+        if let o = ocrRect { drawCropOverlay(o, in: ctx) }
+        if let z = zoomRect {
             ctx.setStrokeColor(style.color.cgColor)
             ctx.setLineWidth(1.5 / displayScale)
             ctx.stroke(z)
         }
-        if tool == .arrow, let ea = editingArrow {            // draggable apex handle
-            let r = 6 / displayScale, c = ea.apex
+        if tool == .arrow || tool == .line, let ec = editingCurve {
+            let r = 6 / displayScale, c = ec.apex
             let box = CGRect(x: c.x - r, y: c.y - r, width: r * 2, height: r * 2)
             ctx.setFillColor(NSColor(white: 1, alpha: 0.95).cgColor); ctx.fillEllipse(in: box)
             ctx.setStrokeColor(style.color.cgColor); ctx.setLineWidth(1.5 / displayScale); ctx.strokeEllipse(in: box)
         }
-        if tool == .zoom, let ez = editingZoom {              // move (whole bubble) + resize knob
+        if tool == .zoom, let ez = editingZoom {
             let r = 6 / displayScale
             let knob = CGRect(x: ez.dest.maxX - r, y: ez.dest.minY - r, width: r * 2, height: r * 2)
             ctx.setFillColor(NSColor(white: 1, alpha: 0.95).cgColor); ctx.fillEllipse(in: knob)
             ctx.setStrokeColor(style.color.cgColor); ctx.setLineWidth(1.5 / displayScale); ctx.strokeEllipse(in: knob)
         }
-        if tool == .overlay, let eo = editingOverlay {        // selection outline + resize knob
+        if tool == .overlay, let eo = editingOverlay {
             ctx.setStrokeColor(Theme.lavender.cgColor); ctx.setLineWidth(1.5 / displayScale)
             ctx.stroke(eo.rect)
             let r = 6 / displayScale
@@ -672,7 +774,16 @@ final class CanvasView: NSView, NSTextFieldDelegate {
             ctx.setFillColor(NSColor(white: 1, alpha: 0.95).cgColor); ctx.fillEllipse(in: knob)
             ctx.setStrokeColor(Theme.lavender.cgColor); ctx.setLineWidth(1.5 / displayScale); ctx.strokeEllipse(in: knob)
         }
-        if tool == .select, let s = selected {                // selection outline + (sized marks) resize knob
+        if tool == .text, textField == nil, let t = editingText {
+            let b = t.bounds
+            ctx.setStrokeColor(Theme.lavender.cgColor); ctx.setLineWidth(1.5 / displayScale)
+            ctx.stroke(b)
+            let r = 6 / displayScale
+            let knob = CGRect(x: b.maxX - r, y: b.minY - r, width: r * 2, height: r * 2)
+            ctx.setFillColor(NSColor(white: 1, alpha: 0.95).cgColor); ctx.fillEllipse(in: knob)
+            ctx.setStrokeColor(Theme.lavender.cgColor); ctx.setLineWidth(1.5 / displayScale); ctx.strokeEllipse(in: knob)
+        }
+        if tool == .select, let s = selected {
             let b = s.bounds
             ctx.setStrokeColor(Theme.lavender.cgColor); ctx.setLineWidth(1.5 / displayScale)
             ctx.stroke(b)
@@ -683,9 +794,9 @@ final class CanvasView: NSView, NSTextFieldDelegate {
                 ctx.setStrokeColor(Theme.lavender.cgColor); ctx.setLineWidth(1.5 / displayScale); ctx.strokeEllipse(in: knob)
             }
         }
-        if tool == .ruler, measureAxis != .none, let a = measureAnchor {   // live dimension line
+        if tool == .ruler, measureAxis != .none, let a = measureAnchor {
             MeasureAnnotation(start: a, end: measureEnd(at: lastMousePoint, from: a),
-                              pixelsPerPoint: pixelsPerPoint, style: style).draw(in: ctx)
+                              style: style).draw(in: ctx)
         }
         ctx.restoreGState()
     }
@@ -704,8 +815,6 @@ final class CanvasView: NSView, NSTextFieldDelegate {
         ctx.stroke(r.insetBy(dx: 0.75 / displayScale, dy: 0.75 / displayScale))
     }
 
-    // MARK: Transforms (rotate / crop)
-
     /// Swap in a transformed base image and move every annotation through `remap`
     /// so the marks stay aligned and individually editable. The caller resizes /
     /// repositions the view. Scalar sizes (line width, font, radius) are
@@ -721,11 +830,11 @@ final class CanvasView: NSView, NSTextFieldDelegate {
         for a in all { a.remap(remap) }
         for a in all {
             if let s = a as? SpotlightAnnotation { s.fullSize = image.size }
-            if let b = a as? BlurAnnotation { b.patch = gaussianBlur(b.rect) } // patch was tied to old pixels
+            if let b = a as? BlurAnnotation { b.patch = gaussianBlur(b.rect) }
             if let z = a as? ZoomAnnotation { z.patch = croppedCGImage(rect: z.source) }
         }
         live = nil
-        editingArrow = nil
+        editingCurve = nil
         editingZoom = nil
         selected = nil; selectDrag = .none
         if editingOverlay != nil { editingOverlay = nil; onOverlaySelected?(nil) }
@@ -750,7 +859,6 @@ final class CanvasView: NSView, NSTextFieldDelegate {
         NSGraphicsContext.saveGraphicsState(); NSGraphicsContext.current = gctx
         let ctx = gctx.cgContext
         let W = image.size.width, H = image.size.height
-        // (x,y) -> (H - y, x) for left/CCW, (y, W - x) for right/CW.
         let m = left ? CGAffineTransform(a: 0, b: 1, c: -1, d: 0, tx: H, ty: 0)
                      : CGAffineTransform(a: 0, b: -1, c: 1, d: 0, tx: 0, ty: W)
         ctx.concatenate(m)
@@ -776,7 +884,6 @@ final class CanvasView: NSView, NSTextFieldDelegate {
         NSGraphicsContext.saveGraphicsState(); NSGraphicsContext.current = gctx
         let ctx = gctx.cgContext
         let W = image.size.width, H = image.size.height
-        // (x,y) -> (W - x, y) horizontally, (x, H - y) vertically.
         let m = horizontal ? CGAffineTransform(a: -1, b: 0, c: 0, d: 1, tx: W, ty: 0)
                            : CGAffineTransform(a: 1, b: 0, c: 0, d: -1, tx: 0, ty: H)
         ctx.concatenate(m)
@@ -796,18 +903,11 @@ final class CanvasView: NSView, NSTextFieldDelegate {
                         width: rect.width * sx, height: rect.height * sy).integral
         guard pr.width >= 1, pr.height >= 1, let crop = cg.cropping(to: pr) else { return nil }
         let rep = NSBitmapImageRep(cgImage: crop)
-        rep.size = NSSize(width: rect.width, height: rect.height)  // keep point size → displayScale stays constant
+        rep.size = NSSize(width: rect.width, height: rect.height)
         let img = NSImage(size: rep.size); img.addRepresentation(rep)
         return img
     }
 
-    // Non-destructive resize: the pristine, full-resolution image captured before
-    // the current run of resizes, plus how far we've scaled from it. Every resample
-    // derives from this rep — never from an already-resampled (and so degraded)
-    // image — so shrinking then enlarging returns to full sharpness instead of
-    // upsampling blur. Re-captured whenever the image changed underneath us (a
-    // crop/rotate, detected by identity) or new annotations need baking (a non-empty
-    // list), which keeps the invalidation self-contained here.
     private var resampleSource: NSBitmapImageRep?
     private var resampleSourceImage: NSImage?
     private var resampleCumulative: CGFloat = 1
@@ -820,7 +920,6 @@ final class CanvasView: NSView, NSTextFieldDelegate {
     /// The caller relays out.
     func bakeResample(scale: CGFloat) {
         guard scale > 0, abs(scale - 1) > 0.001 else { return }
-        // Reuse the retained source only while it still matches the live state.
         if resampleSource == nil || resampleSourceImage !== image || !annotations.isEmpty {
             guard let flat = flatten() else { return }
             resampleSource = flat
@@ -839,8 +938,6 @@ final class CanvasView: NSView, NSTextFieldDelegate {
         guard let gctx = NSGraphicsContext(bitmapImageRep: rep) else { return }
         NSGraphicsContext.saveGraphicsState(); NSGraphicsContext.current = gctx
         gctx.cgContext.interpolationQuality = .high
-        // Draw in point space (the rep scales it up to `newW`×`newH` pixels), so the
-        // full-resolution source resamples without first collapsing to 1×.
         src.draw(in: CGRect(x: 0, y: 0, width: newPointSize.width, height: newPointSize.height))
         NSGraphicsContext.restoreGraphicsState()
 
@@ -848,7 +945,7 @@ final class CanvasView: NSView, NSTextFieldDelegate {
         image = img
         resampleSourceImage = img
         resampleCumulative = cumulative
-        annotations.removeAll(); redoStack.removeAll(); live = nil; editingArrow = nil; editingZoom = nil
+        annotations.removeAll(); redoStack.removeAll(); live = nil; editingCurve = nil; editingZoom = nil
         selected = nil; selectDrag = .none
         if editingOverlay != nil { editingOverlay = nil; onOverlaySelected?(nil) }
         measureAxis = .none; measureAnchor = nil
@@ -900,3 +997,4 @@ final class CanvasView: NSView, NSTextFieldDelegate {
         return rep
     }
 }
+

@@ -78,7 +78,7 @@ Find the menu entry for `ShortcutAction.record` and update its title from `"Reco
 - On macOS 13: ⌃⇧R opens ⇧⌘5 toolbar (graceful fallback).
 - Menu item label reads `"Record Video"` with the ⌃⇧R key glyph.
 - Rebinding ⌃⇧R in Settings → Shortcuts still works; the new binding triggers `VideoRecordController.shared.begin()`.
-- ⌃⇧X (screenshot) and ⌃⇧S (scrolling) are completely unaffected.
+- ⌃⇧X (screenshot) is completely unaffected.
 - `./build.sh` compiles clean.
 
 ---

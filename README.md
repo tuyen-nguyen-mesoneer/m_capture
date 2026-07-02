@@ -29,7 +29,7 @@ on-device, with no subscriptions, cloud services, or accounts.
 - **Global hotkeys** — `⌃⇧X` for a screenshot, `⌃⇧R` to record; both fully rebindable.
 - **Region or full screen** — drag to select a region, or press **Space** to capture the whole screen in a single click. Multi-monitor aware.
 - **Self-timer** — a 3, 5, or 10-second delay with a menu-bar countdown, plus an optional mouse cursor and shutter sound.
-- **Recording** — hands off to the native macOS recorder (the `⇧⌘5` toolbar).
+- **Recording** — drag a region and record it in-app to an MP4 (HEVC), with a floating timer/size bar and pause/stop; optionally mixes in system and/or microphone audio.
 - **Configurable after-capture action** — open the editor, save directly to disk, or copy to the clipboard.
 - **Launch at login** — start automatically with the system.
 
@@ -55,28 +55,23 @@ on-device, with no subscriptions, cloud services, or accounts.
 ## Install
 
 1. Download the latest **`m_capture.dmg`** from [**Releases**](https://github.com/tuyen-nguyen-mesoneer/m_capture/releases) and open it.
-2. Drag **m_capture.app** into your home **Applications** folder (`~/Applications`) —
-   not the system `/Applications`, which can trigger app-blocking admin prompts. Create
-   it if needed.
-3. Because the app is not notarized, clear the quarantine flag before the first
-   launch — run this in Terminal, then open the app normally:
-
-   ```sh
-   cd ~/Applications && xattr -dr com.apple.quarantine m_capture.app
-   ```
-
-   Prefer not to use Terminal? Open the app once, then go to **System Settings →
-   Privacy & Security**, find the *"m_capture was blocked"* notice near the bottom,
-   and click **Open Anyway → Open** (macOS 14 and earlier: **Right-click → Open**).
+2. **Double-click m_capture** in the disk image. Because the app isn't notarized, macOS
+   blocks it the first time — go to **System Settings → Privacy & Security**, find the
+   *"m_capture was blocked"* notice, and click **Open Anyway → Open**. You only do this once.
+3. It then **installs itself into your home Applications folder** (`~/Applications`) and
+   reopens from there — no dragging, and the menu-bar **m.** icon appears. You can eject
+   the disk image.
 4. Grant **Screen Recording** permission when prompted (see [Permissions](#permissions)).
 
 To build it yourself instead, see [Build from source](#build-from-source).
 
 ## Updates & feedback
 
-**m_capture** checks GitHub Releases for newer builds — automatically once a day, and
-on demand via **Check for Updates** in the menu. It never installs updates on its
-own; it directs you to the new DMG and leaves the upgrade under your control.
+**m_capture** checks GitHub Releases for newer builds — silently once a day, and on
+demand via **Check for Updates** in the menu. A newer version downloads and installs
+itself in place; it runs the next time you launch (**Check for Updates** offers to
+relaunch right away). Living in `~/Applications` means updates apply without admin
+prompts and your Screen Recording permission carries over.
 
 To report an issue, use **Report a Bug** in the menu — it opens a
 [pre-filled GitHub issue](https://github.com/tuyen-nguyen-mesoneer/m_capture/issues/new)

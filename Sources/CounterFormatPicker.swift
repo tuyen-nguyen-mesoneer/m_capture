@@ -10,9 +10,9 @@ final class CounterFormatPicker: NSObject {
     private let onPick: (CounterFormat) -> Void
     private let onClose: () -> Void
     private var current: CounterFormat
-    private var rowViews: [NSView] = []        // for keyboard/pointer highlight
-    private var focusIndex = 0                  // arrow-key selection
-    private var hoverIndex = -1                 // pointer hover
+    private var rowViews: [NSView] = []
+    private var focusIndex = 0
+    private var hoverIndex = -1
 
     private static let rows: [(CounterFormat, String, String)] = [
         (.number, "1 2 3", "Numbers"),
@@ -37,17 +37,16 @@ final class CounterFormatPicker: NSObject {
         let panelW = container.frame.width, panelH = container.frame.height
         let vf = (button.window?.screen ?? NSScreen.main)?.visibleFrame ?? .zero
         let anchor = button.window?.convertToScreen(button.convert(button.bounds, to: nil))
-        // Center horizontally on the button; clear the panel vertically.
         var x = (anchor?.midX ?? vf.midX) - panelW / 2
         x = min(max(vf.minX + 8, x), vf.maxX - panelW - 8)
         let block = avoid ?? anchor ?? .zero
-        var y = block.maxY + 10                                   // above the panel
-        if y + panelH > vf.maxY - 8 { y = block.minY - panelH - 10 }   // no room → below
+        var y = block.maxY + 10
+        if y + panelH > vf.maxY - 8 { y = block.minY - panelH - 10 }
         y = min(max(vf.minY + 8, y), vf.maxY - panelH - 8)
         win.setFrameOrigin(NSPoint(x: x, y: y))
         NSApp.activate(ignoringOtherApps: true)
         win.makeKeyAndOrderFront(nil)
-        win.makeFirstResponder(container)   // so ↑/↓/↵/esc work
+        win.makeFirstResponder(container)
         window = win
         NotificationCenter.default.addObserver(self, selector: #selector(resigned),
                                                name: NSWindow.didResignKeyNotification, object: win)
@@ -55,17 +54,15 @@ final class CounterFormatPicker: NSObject {
 
     private func handleKey(_ code: UInt16) {
         switch code {
-        case 125: focusIndex = min(Self.rows.count - 1, focusIndex + 1); updateHighlight()   // ↓
-        case 126: focusIndex = max(0, focusIndex - 1); updateHighlight()                      // ↑
-        case 36, 76: choose(focusIndex)                                                       // ↵ / ⌤
-        case 53: close()                                                                      // esc
+        case 125: focusIndex = min(Self.rows.count - 1, focusIndex + 1); updateHighlight()
+        case 126: focusIndex = max(0, focusIndex - 1); updateHighlight()
+        case 36, 76: choose(focusIndex)
+        case 53: close()
         default: break
         }
     }
     private func updateHighlight() {
         for (i, v) in rowViews.enumerated() {
-            // Neutral fill marks "where am I" (keyboard or pointer); the lavender ✓
-            // separately marks the applied format, so the two never read as rival selections.
             let active = (i == focusIndex || i == hoverIndex)
             v.layer?.backgroundColor = active ? Theme.hoverFill.cgColor : NSColor.clear.cgColor
         }
@@ -85,8 +82,8 @@ final class CounterFormatPicker: NSObject {
     /// rows with small text.
     func buildContent() -> NSView {
         let pad: CGFloat = 8, rowH: CGFloat = 28, rowGap: CGFloat = 2, w: CGFloat = 146
-        let inset: CGFloat = 10          // text inset inside each row
-        let capH: CGFloat = 16, capGap: CGFloat = 13   // caption + divider + gap before rows
+        let inset: CGFloat = 10
+        let capH: CGFloat = 16, capGap: CGFloat = 13
         let panelW = w + pad * 2
         let rowsH = CGFloat(Self.rows.count) * rowH + CGFloat(Self.rows.count - 1) * rowGap
         let panelH = pad + capH + capGap + rowsH + pad
@@ -95,7 +92,7 @@ final class CounterFormatPicker: NSObject {
         rowViews = []
         let container = KeyNavView(frame: NSRect(x: 0, y: 0, width: panelW, height: panelH))
         container.onKey = { [weak self] in self?.handleKey($0) }
-        Theme.stylePanel(container, cornerRadius: 12)
+        Theme.stylePanel(container)
 
         let cap = NSTextField(labelWithString: "")
         Theme.styleEyebrow(cap, "Counter format")
@@ -116,7 +113,7 @@ final class CounterFormatPicker: NSObject {
             return t
         }
         let contentTop = panelH - pad - capH - capGap
-        let sampleColW: CGFloat = 46   // fixed column so the names line up
+        let sampleColW: CGFloat = 46
         for (i, row) in Self.rows.enumerated() {
             let (fmt, sample, name) = row
             let y = contentTop - CGFloat(i + 1) * rowH - CGFloat(i) * rowGap
@@ -144,7 +141,7 @@ final class CounterFormatPicker: NSObject {
             btn.title = ""; btn.isBordered = false; btn.isTransparent = true
             btn.target = self; btn.action = #selector(pick(_:)); btn.tag = i
             btn.onHover = { [weak self] inside in self?.hover(i, inside) }
-            rowView.addSubview(btn)   // on top → catches clicks + hover; labels show beneath
+            rowView.addSubview(btn)
             container.addSubview(rowView)
         }
         return container
@@ -180,3 +177,4 @@ private final class HoverButton: NSButton {
     override func mouseEntered(with event: NSEvent) { onHover?(true) }
     override func mouseExited(with event: NSEvent) { onHover?(false) }
 }
+

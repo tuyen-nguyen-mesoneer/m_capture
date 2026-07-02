@@ -55,8 +55,6 @@ enum Logo {
     /// Gradient brand tile with a centered white "m." — for the About window.
     static func image(size: CGFloat) -> NSImage {
         NSImage(size: NSSize(width: size, height: size), flipped: false) { rect in
-            // mesoneer's "m." mark is a sharp square (no rounding); the diagonal glow
-            // runs lighter top-right → deep bottom-left. Sampled from their webclip icon.
             let tile = NSBezierPath(rect: rect)
             NSGradient(starting: Theme.logoTileTop, ending: Theme.logoTileBottom)?.draw(in: tile, angle: 225)
 
@@ -88,3 +86,4 @@ enum Logo {
         return img
     }
 }
+

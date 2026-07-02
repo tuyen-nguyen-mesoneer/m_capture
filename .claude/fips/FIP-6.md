@@ -91,7 +91,6 @@ case .fullScreen:
 - Click or ↵ in full-screen mode: `onComplete` called with a rect equal to `screen.frame`.
 - Esc cancels from full-screen mode (existing `onCancel` path unchanged).
 - **Regression — screenshot flow (`allowsWindowMode: true, allowsFullScreenMode: false`):** Space still cycles `region ↔ window` exactly as before. No hint label shown. No behaviour change.
-- **Regression — scroll capture (`allowsWindowMode: false, allowsFullScreenMode: false`):** Space has no effect (existing behaviour). No hint label. No behaviour change.
 - `./build.sh` compiles clean.
 
 ---
@@ -120,4 +119,4 @@ No new files. No other files touched.
 - Loupe / magnifier changes
 - Any recording logic
 - `VideoRecordController` calling this (Task 5 already accounts for it)
-- Changes to `ScreenshotController` or `ScrollCaptureController` callers
+- Changes to `ScreenshotController` callers

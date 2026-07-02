@@ -2,11 +2,7 @@
 // SPDX-License-Identifier: MIT
 import AppKit
 
-// MARK: - Types
-
 private enum CaptureMode { case region, screen }
-
-// MARK: - OverlayWindow
 
 final class OverlayWindow: NSWindow {
     var onComplete: ((CGRect) -> Void)?
@@ -41,8 +37,6 @@ final class OverlayWindow: NSWindow {
     override var canBecomeMain: Bool { true }
 }
 
-// MARK: - SelectionView
-
 /// Dims the screen with a transparent "hole" for the current selection, plus a
 /// window-capture mode (Space to toggle).
 final class SelectionView: NSView {
@@ -52,7 +46,6 @@ final class SelectionView: NSView {
     private var captureMode: CaptureMode = .region
     private let allowsFullScreenMode: Bool
 
-    // Region-selection state.
     private var startPoint: CGPoint?
     private var currentPoint: CGPoint?
     private var trackingAreaRef: NSTrackingArea?
@@ -78,8 +71,6 @@ final class SelectionView: NSView {
         addTrackingArea(t); trackingAreaRef = t
     }
 
-    // MARK: Events
-
     private var selectionRect: CGRect? {
         guard let a = startPoint, let b = currentPoint else { return nil }
         return CGRect(x: min(a.x, b.x), y: min(a.y, b.y),
@@ -87,7 +78,7 @@ final class SelectionView: NSView {
     }
 
     override func mouseDown(with event: NSEvent) {
-        if captureMode == .screen {        // a click anywhere grabs the whole screen
+        if captureMode == .screen {
             onComplete?(CGRect(origin: .zero, size: bounds.size))
             return
         }
@@ -105,17 +96,14 @@ final class SelectionView: NSView {
     }
 
     override func keyDown(with event: NSEvent) {
-        if event.keyCode == 53 { onCancel?(); return } // Esc
-        // Space toggles between region selection and whole-screen capture (when permitted).
+        if event.keyCode == 53 { onCancel?(); return }
         if event.keyCode == 49, allowsFullScreenMode {
             captureMode = (captureMode == .region) ? .screen : .region
             startPoint = nil; currentPoint = nil
-            modeCursor.set(); needsDisplay = true; return   // reflect the new mode immediately
+            modeCursor.set(); needsDisplay = true; return
         }
         super.keyDown(with: event)
     }
-
-    // MARK: Drawing
 
     override func draw(_ dirtyRect: NSRect) {
         guard let ctx = NSGraphicsContext.current?.cgContext else { return }
@@ -129,8 +117,6 @@ final class SelectionView: NSView {
         drawModePill()
     }
 
-    // MARK: Region mode
-
     /// One consistent chip background: raised surface, hairline border, radius 5.
     private func fillChip(_ box: CGRect) {
         let path = NSBezierPath(roundedRect: box, xRadius: 5, yRadius: 5)
@@ -143,7 +129,7 @@ final class SelectionView: NSView {
         ctx.setBlendMode(.clear)
         ctx.fill(r)
         ctx.setBlendMode(.normal)
-        let lw: CGFloat = 2          // unified with window mode
+        let lw: CGFloat = 2
         ctx.setStrokeColor(Theme.lavender.cgColor)
         ctx.setLineWidth(lw)
         ctx.stroke(r.insetBy(dx: lw / 2, dy: lw / 2))
@@ -164,10 +150,7 @@ final class SelectionView: NSView {
         text.draw(at: CGPoint(x: box.minX + pad, y: box.minY + pad / 2), withAttributes: attrs)
     }
 
-    // MARK: Screen mode
-
     private func drawScreenMode(_ ctx: CGContext) {
-        // Undim the whole screen and frame it; a click anywhere captures it.
         let r = bounds
         ctx.setBlendMode(.clear); ctx.fill(r); ctx.setBlendMode(.normal)
         let lw: CGFloat = 2
@@ -186,12 +169,10 @@ final class SelectionView: NSView {
         text.draw(at: CGPoint(x: box.minX + pad, y: box.minY + pad / 2), withAttributes: attrs)
     }
 
-    // MARK: Mode pill
-
     private func drawModePill() {
         let label = captureMode == .region ? "Region  (Space for Screen)" : "Screen  (Space for Region)"
         let attrs: [NSAttributedString.Key: Any] = [
-            .font: Theme.font(11, .regular), .foregroundColor: Theme.textPrimary,   // a quiet hint
+            .font: Theme.font(11, .regular), .foregroundColor: Theme.textPrimary,
         ]
         let ts = label.size(withAttributes: attrs)
         let pad: CGFloat = 6

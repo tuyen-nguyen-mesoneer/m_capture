@@ -1,0 +1,113 @@
+name: Release
+
+# Builds and publishes a signed m_capture.dmg whenever a version tag (e.g. 1.0.2) is pushed.
+#
+# The DMG is signed with the shared "m_capture-release" identity, imported from two
+# repository/organization secrets so any member can cut a release just by pushing a tag —
+# nobody needs the signing key on their own Mac:
+#   • RELEASE_CERT_P12_BASE64 — the m_capture-release cert exported as a .p12, base64-encoded
+#                               (base64 -i m_capture-release.p12 | pbcopy)
+#   • RELEASE_CERT_PASSWORD   — the password set when exporting that .p12
+# See CONTRIBUTING.md > Releasing for the one-time cert setup.
+
+on:
+  push:
+    tags:
+      - '[0-9]*'   # version tags like 1.0.2 — no "v" prefix
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to release, e.g. 1.0.2 (created at the current commit if it does not exist)'
+        required: true
+
+permissions:
+  contents: write   # create the GitHub Release and upload the DMG asset
+
+jobs:
+  release:
+    runs-on: macos-14   # Apple Silicon, matches the arm64 build produced by build.sh
+    env:
+      TAG: ${{ github.event.inputs.tag || github.ref_name }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Refuse to release without the signing secret
+        env:
+          RELEASE_CERT_P12_BASE64: ${{ secrets.RELEASE_CERT_P12_BASE64 }}
+        run: |
+          if [ -z "$RELEASE_CERT_P12_BASE64" ]; then
+            echo "::error::RELEASE_CERT_P12_BASE64 is not set — refusing to ship an ad-hoc-signed release."
+            echo "Add the secret (see CONTRIBUTING.md > Releasing) and re-run."
+            exit 1
+          fi
+
+      - name: Check the tag matches build.sh VERSION
+        run: |
+          # A tag/VERSION mismatch ships a DMG whose bundle version differs from the
+          # release tag — the updater would download it, then refuse to install (the
+          # extracted build isn't newer). Catch it here.
+          VERSION="$(grep -E '^VERSION=' build.sh | head -1 | cut -d'"' -f2)"
+          TAG_VERSION="${TAG#v}"
+          echo "build.sh VERSION=$VERSION   tag=$TAG (version $TAG_VERSION)"
+          if [ "$VERSION" != "$TAG_VERSION" ]; then
+            echo "::error::Tag $TAG does not match build.sh VERSION $VERSION. Bump VERSION before tagging (CONTRIBUTING.md > Releasing)."
+            exit 1
+          fi
+
+      - name: Import the m_capture-release signing certificate
+        env:
+          RELEASE_CERT_P12_BASE64: ${{ secrets.RELEASE_CERT_P12_BASE64 }}
+          RELEASE_CERT_PASSWORD: ${{ secrets.RELEASE_CERT_PASSWORD }}
+        run: |
+          CERT_PATH="$RUNNER_TEMP/m_capture-release.p12"
+          KEYCHAIN_PATH="$RUNNER_TEMP/release.keychain-db"
+          KEYCHAIN_PASS="$(openssl rand -base64 24)"
+          echo "KEYCHAIN_PATH=$KEYCHAIN_PATH" >> "$GITHUB_ENV"   # for the cleanup step
+
+          echo -n "$RELEASE_CERT_P12_BASE64" | base64 --decode -o "$CERT_PATH"
+
+          security create-keychain -p "$KEYCHAIN_PASS" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASS" "$KEYCHAIN_PATH"
+          security import "$CERT_PATH" -P "$RELEASE_CERT_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          # Let codesign use the private key without an interactive prompt.
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASS" "$KEYCHAIN_PATH" >/dev/null
+          # Make the keychain visible to `security find-identity` / codesign (build.sh greps it).
+          security list-keychain -d user -s "$KEYCHAIN_PATH"
+          rm -f "$CERT_PATH"
+
+          # Fail loudly if the expected identity isn't present — otherwise build.sh would
+          # fall back to ad-hoc and silently ship a grant-resetting "release".
+          if ! security find-identity -p codesigning | grep -q "m_capture-release"; then
+            echo "::error::'m_capture-release' identity not found after import. Check the cert name (must be 'm_capture-release') and the password."
+            security find-identity -p codesigning || true
+            exit 1
+          fi
+
+      - name: Build signed DMG
+        run: ./build.sh
+
+      - name: Verify the DMG was produced
+        run: |
+          test -f m_capture.dmg || { echo "::error::build.sh did not produce m_capture.dmg"; exit 1; }
+          ls -lh m_capture.dmg
+
+      - name: Publish the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="${TAG#v}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists — uploading the DMG to it."
+            gh release upload "$TAG" m_capture.dmg --clobber
+          else
+            gh release create "$TAG" m_capture.dmg --title "m_capture $VERSION" --generate-notes
+          fi
+
+      - name: Clean up the signing keychain
+        if: always()
+        run: |
+          if [ -n "${KEYCHAIN_PATH:-}" ]; then
+            security delete-keychain "$KEYCHAIN_PATH" 2>/dev/null || true
+          fi
