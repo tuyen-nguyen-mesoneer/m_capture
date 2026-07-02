@@ -505,8 +505,8 @@
       <div class="istep">
         <div class="n">2</div>
         <div>
-          <h3 data-i18n="install.2.h">Open and run it</h3>
-          <p data-i18n="install.2.p">Double-click <strong>m_capture</strong>. Because it isn't notarized, macOS blocks it the first time — in <strong>System Settings → Privacy &amp; Security</strong> click <strong>Open Anyway → Open</strong>. It then installs itself into <code>~/Applications</code> and reopens from there.</p>
+          <h3 data-i18n="install.2.h">Move it to Applications</h3>
+          <p data-i18n="install.2.p">Drag <strong>m_capture</strong> into your <code>~/Applications</code> folder. Because it isn't notarized, macOS would block it on first launch — open <strong>Terminal</strong> and run <code>cd ~/Applications &amp;&amp; xattr -dr com.apple.quarantine m_capture.app</code>, then double-click <strong>m_capture</strong> to launch it.</p>
         </div>
       </div>
 
@@ -677,7 +677,7 @@
       </details>
       <details>
         <summary><span data-i18n="faq.3.q">Why does macOS block it on first launch?</span><span class="pm" aria-hidden="true"></span></summary>
-        <p data-i18n="faq.3.a">It isn't notarized by Apple yet. Clear the quarantine flag or use <strong>Open Anyway</strong> — see <a href="#install">Get started</a> above.</p>
+        <p data-i18n="faq.3.a">It isn't notarized by Apple yet. Move it into <code>~/Applications</code> and clear the quarantine flag from <strong>Terminal</strong> — see <a href="#install">Get started</a> above.</p>
       </details>
       <details>
         <summary><span data-i18n="faq.4.q">Where are my captures saved?</span><span class="pm" aria-hidden="true"></span></summary>
@@ -789,8 +789,8 @@
       "install.h2": "Installing m_capture",
       "install.1.h": "Download the DMG",
       "install.1.p": "Download the latest <a href='https://github.com/tuyen-nguyen-mesoneer/m_capture/releases/latest/download/m_capture.dmg'>m_capture.dmg</a> from <a href='https://github.com/tuyen-nguyen-mesoneer/m_capture/releases'>Releases</a> and open it.",
-      "install.2.h": "Open and run it",
-      "install.2.p": "Double-click <strong>m_capture</strong>. Because it isn't notarized, macOS blocks it the first time — in <strong>System Settings → Privacy & Security</strong> click <strong>Open Anyway → Open</strong>. It then installs itself into <code>~/Applications</code> and reopens from there.",
+      "install.2.h": "Move it to Applications",
+      "install.2.p": "Drag <strong>m_capture</strong> into your <code>~/Applications</code> folder. Because it isn't notarized, macOS would block it on first launch — open <strong>Terminal</strong> and run <code>cd ~/Applications &amp;&amp; xattr -dr com.apple.quarantine m_capture.app</code>, then double-click <strong>m_capture</strong> to launch it.",
       "install.3.h": "Grant Screen Recording",
       "install.3.p": "On first capture, macOS asks for <strong>Screen Recording</strong> permission. Approve m_capture under <strong>System Settings → Privacy & Security → Screen Recording</strong> and relaunch.",
       "rel.eyebrow": "Changelog",
@@ -820,7 +820,7 @@
       "faq.2.q": "Which macOS versions are supported?",
       "faq.2.a": "macOS 13 (Ventura) and later. It runs quietly in the menu bar with no Dock icon.",
       "faq.3.q": "Why does macOS block it on first launch?",
-      "faq.3.a": "It isn't notarized by Apple yet. Clear the quarantine flag or use <strong>Open Anyway</strong> — see <a href='#install'>Get started</a> above.",
+      "faq.3.a": "It isn't notarized by Apple yet. Move it into <code>~/Applications</code> and clear the quarantine flag from <strong>Terminal</strong> — see <a href='#install'>Get started</a> above.",
       "faq.4.q": "Where are my captures saved?",
       "faq.4.a": "To your chosen folder (the Desktop by default) and the clipboard. Set the format and location in Settings.",
       "faq.5.q": "Does it send my screenshots anywhere?",
@@ -886,8 +886,8 @@
       "install.h2": "m_capture installieren",
       "install.1.h": "DMG herunterladen",
       "install.1.p": "Lade die neueste <a href='https://github.com/tuyen-nguyen-mesoneer/m_capture/releases/latest/download/m_capture.dmg'>m_capture.dmg</a> von <a href='https://github.com/tuyen-nguyen-mesoneer/m_capture/releases'>Releases</a> und öffne sie.",
-      "install.2.h": "Öffnen und starten",
-      "install.2.p": "Doppelklicke auf <strong>m_capture</strong>. Da die App nicht notarisiert ist, blockiert macOS sie beim ersten Mal — klicke in <strong>Systemeinstellungen → Datenschutz & Sicherheit</strong> auf <strong>Trotzdem öffnen → Öffnen</strong>. Die App installiert sich dann selbst in <code>~/Applications</code> und öffnet sich von dort neu.",
+      "install.2.h": "In Applications verschieben",
+      "install.2.p": "Ziehe <strong>m_capture</strong> in deinen Ordner <code>~/Applications</code>. Da die App nicht notarisiert ist, würde macOS sie beim ersten Start blockieren — öffne das <strong>Terminal</strong> und führe <code>cd ~/Applications &amp;&amp; xattr -dr com.apple.quarantine m_capture.app</code> aus, dann doppelklicke auf <strong>m_capture</strong>, um sie zu starten.",
       "install.3.h": "Bildschirmaufnahme erlauben",
       "install.3.p": "Bei der ersten Aufnahme fragt macOS nach der Berechtigung zur <strong>Bildschirmaufnahme</strong>. Erteile sie unter <strong>Systemeinstellungen → Datenschutz & Sicherheit → Bildschirmaufnahme</strong> und starte neu.",
       "rel.eyebrow": "Änderungen",
@@ -917,7 +917,7 @@
       "faq.2.q": "Welche macOS-Versionen werden unterstützt?",
       "faq.2.a": "macOS 13 (Ventura) und neuer. Läuft dezent in der Menüleiste, ohne Dock-Symbol.",
       "faq.3.q": "Warum blockiert macOS die App beim ersten Start?",
-      "faq.3.a": "Sie ist noch nicht von Apple notarisiert. Entferne das Quarantäne-Flag oder nutze <strong>Trotzdem öffnen</strong> — siehe <a href='#install'>Erste Schritte</a> oben.",
+      "faq.3.a": "Sie ist noch nicht von Apple notarisiert. Verschiebe sie nach <code>~/Applications</code> und entferne das Quarantäne-Flag im <strong>Terminal</strong> — siehe <a href='#install'>Erste Schritte</a> oben.",
       "faq.4.q": "Wo werden meine Aufnahmen gespeichert?",
       "faq.4.a": "In deinem gewählten Ordner (standardmäßig Schreibtisch) und in der Zwischenablage. Format und Ort legst du in den Einstellungen fest.",
       "faq.5.q": "Werden meine Screenshots irgendwohin gesendet?",

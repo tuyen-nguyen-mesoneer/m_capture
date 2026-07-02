@@ -55,12 +55,15 @@ on-device, with no subscriptions, cloud services, or accounts.
 ## Install
 
 1. Download the latest **`m_capture.dmg`** from [**Releases**](https://github.com/tuyen-nguyen-mesoneer/m_capture/releases) and open it.
-2. **Double-click m_capture** in the disk image. Because the app isn't notarized, macOS
-   blocks it the first time — go to **System Settings → Privacy & Security**, find the
-   *"m_capture was blocked"* notice, and click **Open Anyway → Open**. You only do this once.
-3. It then **installs itself into your home Applications folder** (`~/Applications`) and
-   reopens from there — no dragging, and the menu-bar **m.** icon appears. You can eject
-   the disk image.
+2. **Drag m_capture into your home Applications folder** (`~/Applications`). Because the
+   app isn't notarized, macOS would block it on first launch — open **Terminal** and clear
+   the download quarantine:
+
+   ```sh
+   cd ~/Applications && xattr -dr com.apple.quarantine m_capture.app
+   ```
+3. **Double-click m_capture** to launch it — the menu-bar **m.** icon appears, and you can
+   eject the disk image.
 4. Grant **Screen Recording** permission when prompted (see [Permissions](#permissions)).
 
 To build it yourself instead, see [Build from source](#build-from-source).

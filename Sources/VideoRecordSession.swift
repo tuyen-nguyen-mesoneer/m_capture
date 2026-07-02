@@ -463,9 +463,7 @@ extension VideoRecordSession: SCStreamOutput {
             case .audio:
                 guard let input = audioInput else { return }
                 append(buffer, to: input)
-            case .microphone:
-                break  // AVCaptureSession handles mic; SCStream mic type unused here
-            @unknown default:
+            default:
                 break
             }
         }
