@@ -57,6 +57,9 @@ final class VideoRecordBar: NSObject {
         let contentRight = barSize.width - sidePad          // 324
         let statusRowY: CGFloat = 53, statusRowH: CGFloat = 18
         let buttonRowY: CGFloat = 13, buttonRowH: CGFloat = 28
+        // Every status-row item (dot, labels, badge) centres on this line so the
+        // differently-sized fonts share one vertical midline instead of drifting.
+        let rowCenter = statusRowY + statusRowH / 2
 
         // ── Row 1: status line ─────────────────────────────────────────────
 
@@ -73,19 +76,22 @@ final class VideoRecordBar: NSObject {
         // "REC" eyebrow — the mesoneer accent-label move.
         let recLabel = NSTextField(labelWithString: "")
         Theme.styleEyebrow(recLabel, "REC", size: 11)
-        recLabel.frame = NSRect(x: 30, y: statusRowY, width: 34, height: statusRowH)
+        let recH = recLabel.intrinsicContentSize.height
+        recLabel.frame = NSRect(x: 30, y: rowCenter - recH / 2, width: 34, height: recH)
         card.addSubview(recLabel)
 
         // Timer — monospaced digits so the width doesn't jitter each tick.
         timerLabel.font = NSFont.monospacedDigitSystemFont(ofSize: 13, weight: .semibold)
         timerLabel.textColor = Theme.textPrimary
-        timerLabel.frame = NSRect(x: 72, y: statusRowY, width: 72, height: statusRowH)
+        let timerH = timerLabel.intrinsicContentSize.height
+        timerLabel.frame = NSRect(x: 72, y: rowCenter - timerH / 2, width: 72, height: timerH)
         card.addSubview(timerLabel)
 
         // File-size estimate — quiet secondary text.
         sizeLabel.font = Theme.font(11, .medium)
         sizeLabel.textColor = Theme.textSecondary
-        sizeLabel.frame = NSRect(x: 152, y: statusRowY, width: 80, height: statusRowH)
+        let sizeH = sizeLabel.intrinsicContentSize.height
+        sizeLabel.frame = NSRect(x: 152, y: rowCenter - sizeH / 2, width: 80, height: sizeH)
         card.addSubview(sizeLabel)
 
         // Quality chip — right-aligned to the content margin.

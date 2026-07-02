@@ -12,7 +12,7 @@ enum Tool {
 
 /// Displays the captured image (scaled to fit) and the annotations on top.
 /// Annotation coordinates are kept in full-resolution image space.
-final class CanvasView: NSView, NSTextFieldDelegate {
+final class CanvasView: NSView, NSTextViewDelegate {
     private(set) var image: NSImage
     let displayScale: CGFloat
 
@@ -92,7 +92,7 @@ final class CanvasView: NSView, NSTextFieldDelegate {
     }
     var currentEmoji = "⭐️"
 
-    private var textField: NSTextField?
+    private var textView: AnnotationTextView?
     private var textImageFont: CGFloat = 18
     /// While editing an existing mark, the wrap width is locked to its original so
     /// the text keeps wrapping the same way; nil lets a new field grow to fit.
@@ -124,7 +124,7 @@ final class CanvasView: NSView, NSTextFieldDelegate {
     override var acceptsFirstResponder: Bool { true }
 
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
-        if textField == nil,
+        if textView == nil,
            event.modifierFlags.intersection([.command, .option, .control]) == [.command],
            event.charactersIgnoringModifiers?.lowercased() == "v" {
             onPaste?(); return true
@@ -217,7 +217,7 @@ final class CanvasView: NSView, NSTextFieldDelegate {
                 NSCursor.openHand.set(); return
             }
         }
-        if tool == .text, textField == nil, let t = editingText {
+        if tool == .text, textView == nil, let t = editingText {
             let p = imagePoint(event), hr = 12 / displayScale
             if hypot(t.bounds.maxX - p.x, t.bounds.minY - p.y) < hr {
                 NSCursor.openHand.set(); return
@@ -258,7 +258,7 @@ final class CanvasView: NSView, NSTextFieldDelegate {
             selected = nil; selectDrag = .none; redoStack.removeAll(); onChange?(); needsDisplay = true
             return
         }
-        if tool == .text, textField == nil, let t = editingText, event.keyCode == 51 || event.keyCode == 117 {
+        if tool == .text, textView == nil, let t = editingText, event.keyCode == 51 || event.keyCode == 117 {
             if let idx = annotations.firstIndex(where: { $0 === t }) { annotations.remove(at: idx) }
             editingText = nil; textDrag = .none; redoStack.removeAll(); onChange?(); needsDisplay = true
             return
@@ -304,7 +304,7 @@ final class CanvasView: NSView, NSTextFieldDelegate {
         case .spotlight:
             let a = SpotlightAnnotation(start: p, style: style); a.fullSize = image.size; live = a
         case .counter:
-            let r = max(9, style.lineWidth * 2.5)
+            let r = max(12, style.lineWidth * 3)
             live = CounterAnnotation(center: p, label: counterFormat.label(counter + 1),
                                      color: style.color, radius: r)
         case .text:
@@ -360,7 +360,7 @@ final class CanvasView: NSView, NSTextFieldDelegate {
                 zoomStart = p; zoomRect = CGRect(origin: p, size: .zero)
             }
         case .emoji:
-            live = EmojiAnnotation(center: p, emoji: currentEmoji, size: 36)
+            live = EmojiAnnotation(center: p, emoji: currentEmoji, size: 54)
         case .overlay:
             let hr = 12 / displayScale
             if let eo = editingOverlay,
@@ -584,40 +584,62 @@ final class CanvasView: NSView, NSTextFieldDelegate {
         return CGRect(x: dx, y: dy, width: dw, height: dh)
     }
 
-    /// A borderless, wrapping, brand-bordered field used to type/edit an annotation.
-    private func makeTextField(frame: NSRect, font: NSFont, color: NSColor) -> NSTextField {
-        let field = NSTextField(frame: frame)
-        field.font = font
-        field.textColor = color
-        field.backgroundColor = .clear
-        field.drawsBackground = false
-        field.isBordered = false
-        field.focusRingType = .none
-        field.usesSingleLineMode = false
-        field.lineBreakMode = .byWordWrapping
-        field.cell?.wraps = true
-        field.cell?.isScrollable = false
-        field.maximumNumberOfLines = 0
-        field.placeholderString = "Text…"
-        field.delegate = self
-        field.wantsLayer = true
-        field.layer?.borderColor = Theme.lavender.withAlphaComponent(0.9).cgColor
-        field.layer?.borderWidth = 1
-        field.layer?.cornerRadius = 3
-        return field
+    /// Snapshot the editor's rich text as characters + per-range foreground colors
+    /// (the font is dropped — the annotation re-applies its own uniformly at draw).
+    /// Any range with no explicit color falls back to the current draw color.
+    private func capturedText(from tv: NSTextView) -> NSAttributedString {
+        let src: NSAttributedString = tv.textStorage ?? NSAttributedString(string: tv.string)
+        let out = NSMutableAttributedString(string: src.string)
+        let full = NSRange(location: 0, length: out.length)
+        guard full.length > 0 else { return out }
+        out.addAttribute(.foregroundColor, value: style.color, range: full)
+        src.enumerateAttribute(.foregroundColor, in: full) { value, range, _ in
+            if let color = value as? NSColor, NSMaxRange(range) <= out.length {
+                out.addAttribute(.foregroundColor, value: color, range: range)
+            }
+        }
+        return out
+    }
+
+    /// A borderless, transparent, brand-bordered text view for typing/editing an
+    /// annotation. A real `NSTextView` (not `NSTextField`) so it holds per-range
+    /// colors and honors `typingAttributes` — text typed after a color change takes
+    /// the new color while earlier text keeps its own.
+    private func makeTextView(frame: NSRect, font: NSFont, color: NSColor) -> AnnotationTextView {
+        let tv = AnnotationTextView(frame: frame)
+        tv.isRichText = true
+        tv.drawsBackground = false
+        tv.backgroundColor = .clear
+        tv.isHorizontallyResizable = false
+        tv.isVerticallyResizable = false
+        tv.textContainerInset = .zero
+        tv.textContainer?.lineFragmentPadding = 0
+        tv.textContainer?.widthTracksTextView = true
+        tv.textContainer?.heightTracksTextView = true
+        tv.font = font
+        tv.textColor = color
+        tv.insertionPointColor = Theme.lavender
+        tv.typingAttributes = [.font: font, .foregroundColor: color]
+        tv.colorForNewText = { [weak self] in self?.style.color ?? color }
+        tv.delegate = self
+        tv.wantsLayer = true
+        tv.layer?.borderColor = Theme.lavender.withAlphaComponent(0.9).cgColor
+        tv.layer?.borderWidth = 1
+        tv.layer?.cornerRadius = 3
+        return tv
     }
 
     private func beginTextEditing(viewPoint: CGPoint) {
-        let screenFont = max(14, style.lineWidth * 6) * displayScale
+        let screenFont = max(20, style.lineWidth * 6) * displayScale
         let h = screenFont + 8
-        let field = makeTextField(frame: NSRect(x: viewPoint.x, y: viewPoint.y - h, width: 120, height: h),
-                                  font: .systemFont(ofSize: screenFont, weight: .semibold), color: style.color)
-        addSubview(field)
-        window?.makeFirstResponder(field)
-        textField = field
+        let tv = makeTextView(frame: NSRect(x: viewPoint.x, y: viewPoint.y - h, width: 120, height: h),
+                              font: .systemFont(ofSize: screenFont, weight: .semibold), color: style.color)
+        addSubview(tv)
+        window?.makeFirstResponder(tv)
+        textView = tv
         textImageFont = screenFont / displayScale
         textLockedWidth = nil
-        fitTextField(field)
+        fitTextView(tv)
     }
 
     /// Re-open the editor on an existing text mark (double-click) pre-filled with
@@ -628,30 +650,47 @@ final class CanvasView: NSView, NSTextFieldDelegate {
         let scale = displayScale
         let frame = NSRect(x: mark.origin.x * scale, y: mark.origin.y * scale,
                            width: mark.maxWidth * scale, height: mark.boxHeight * scale)
-        let field = makeTextField(frame: frame,
-                                  font: .systemFont(ofSize: mark.fontSize * scale, weight: .semibold),
-                                  color: mark.color)
-        field.stringValue = mark.text
-        addSubview(field)
-        window?.makeFirstResponder(field)
-        field.selectText(nil)
-        textField = field
+        let screenFont = NSFont.systemFont(ofSize: mark.fontSize * scale, weight: .semibold)
+        let baseColor = (mark.attributed.length > 0
+            ? mark.attributed.attribute(.foregroundColor, at: 0, effectiveRange: nil) as? NSColor
+            : nil) ?? style.color
+        let tv = makeTextView(frame: frame, font: screenFont, color: baseColor)
+        // Restore the rich text at screen scale, keeping each range's color.
+        let rich = NSMutableAttributedString(attributedString: mark.attributed)
+        rich.addAttribute(.font, value: screenFont, range: NSRange(location: 0, length: rich.length))
+        tv.textStorage?.setAttributedString(rich)
+        addSubview(tv)
+        window?.makeFirstResponder(tv)
+        tv.selectAll(nil)
+        textView = tv
         textImageFont = mark.fontSize
         textLockedWidth = mark.maxWidth * scale
-        fitTextField(field)
+        fitTextView(tv)
         redoStack.removeAll(); onChange?(); needsDisplay = true
     }
 
-    func controlTextDidChange(_ obj: Notification) {
-        if let field = textField { fitTextField(field) }
+    func textDidChange(_ notification: Notification) {
+        if let tv = textView { fitTextView(tv) }
     }
 
-    /// Size the live text field to its content, capped at the canvas edge, so long
-    /// text wraps onto more lines (the field grows downward) instead of clipping.
-    private func fitTextField(_ field: NSTextField) {
-        let shown = field.stringValue.isEmpty ? (field.placeholderString ?? "") : field.stringValue
-        let font = field.font ?? .systemFont(ofSize: 14)
-        let cap = max(120, bounds.width - field.frame.minX - 8)
+    /// Return commits; Shift-Return inserts a line break; Esc commits too (matching
+    /// clicking away). Anything else falls through to normal text editing.
+    func textView(_ tv: NSTextView, doCommandBy selector: Selector) -> Bool {
+        if selector == #selector(NSResponder.insertNewline(_:))
+            || selector == #selector(NSResponder.cancelOperation(_:)) {
+            commitText()
+            return true
+        }
+        return false
+    }
+
+    /// Size the live editor to its content, capped at the canvas edge, so long text
+    /// wraps onto more lines (the box grows downward) instead of clipping. Mirrors
+    /// `TextAnnotation`'s own height math so the box matches the committed mark.
+    private func fitTextView(_ tv: AnnotationTextView) {
+        let shown = tv.string.isEmpty ? tv.placeholder : tv.string
+        let font = tv.font ?? .systemFont(ofSize: 14)
+        let cap = max(120, bounds.width - tv.frame.minX - 8)
         let width: CGFloat
         if let locked = textLockedWidth {
             width = min(locked, cap)
@@ -659,34 +698,27 @@ final class CanvasView: NSView, NSTextFieldDelegate {
             let natural = ceil(NSAttributedString(string: shown, attributes: [.font: font]).size().width) + 16
             width = min(natural, cap)
         }
-        let cellH = field.cell?.cellSize(forBounds: NSRect(x: 0, y: 0, width: width,
-                                                           height: .greatestFiniteMagnitude)).height ?? field.frame.height
-        let height = ceil(max(font.ascender - font.descender, cellH))
-        let top = field.frame.maxY
-        field.frame = NSRect(x: field.frame.minX, y: top - height, width: width, height: height)
-        // Lay the typed text flush to the box edge (no line-fragment padding/inset)
-        // so it sits exactly where the committed annotation draws it.
-        if let editor = field.currentEditor() as? NSTextView {
-            editor.textContainerInset = .zero
-            editor.textContainer?.lineFragmentPadding = 0
-        }
+        let para = NSMutableParagraphStyle(); para.lineBreakMode = .byWordWrapping
+        let measured = NSAttributedString(string: shown, attributes: [.font: font, .paragraphStyle: para])
+            .boundingRect(with: CGSize(width: width, height: .greatestFiniteMagnitude),
+                          options: [.usesLineFragmentOrigin, .usesFontLeading]).height
+        let height = ceil(max(font.ascender - font.descender, measured))
+        let top = tv.frame.maxY
+        tv.frame = NSRect(x: tv.frame.minX, y: top - height, width: width, height: height)
     }
-
-    func controlTextDidEndEditing(_ obj: Notification) { commitText() }
 
     @discardableResult
     private func commitText() -> Bool {
-        guard let field = textField else { return false }
-        let text = field.stringValue
-        let color = field.textColor ?? style.color
-        let f = field.frame
-        textField = nil
-        field.removeFromSuperview()
+        guard let tv = textView else { return false }
+        let attributed = capturedText(from: tv)
+        let f = tv.frame
+        textView = nil
+        tv.removeFromSuperview()
         window?.makeFirstResponder(self)
-        guard !text.isEmpty else { return false }
+        guard !attributed.string.isEmpty else { return false }
         let origin = CGPoint(x: f.minX / displayScale, y: f.minY / displayScale)
-        let mark = TextAnnotation(text: text, origin: origin, fontSize: textImageFont,
-                                  color: color, maxWidth: f.width / displayScale,
+        let mark = TextAnnotation(attributed: attributed, origin: origin, fontSize: textImageFont,
+                                  maxWidth: f.width / displayScale,
                                   boxHeight: f.height / displayScale)
         annotations.append(mark)
         editingText = mark
@@ -734,6 +766,30 @@ final class CanvasView: NSView, NSTextFieldDelegate {
     func undo() { clearSelections(); if let a = annotations.popLast() { redoStack.append(a); onChange?(); needsDisplay = true } }
     func redo() { clearSelections(); if let a = redoStack.popLast() { annotations.append(a); onChange?(); needsDisplay = true } }
 
+    /// Restyle the mark the user is currently working with — the Select-tool
+    /// selection, or a text mark still active under the Text tool — so choosing a
+    /// color repaints a placed mark in place. Like move/resize, this edits the
+    /// mark directly rather than pushing an undo step. Also tracks a live text
+    /// field mid-edit so the color applies as you type.
+    func recolorSelection(_ c: NSColor) {
+        // While editing, color only the highlighted characters (⌘A / Ctrl-A selects
+        // all first); with nothing selected, set the color for text typed next.
+        if let tv = textView {
+            let range = tv.selectedRange()
+            if range.length > 0 {
+                tv.setTextColor(c, range: range)            // just the highlighted characters
+            } else {
+                tv.typingAttributes[.foregroundColor] = c   // color for text typed next
+            }
+            needsDisplay = true
+            return
+        }
+        // Not editing: recolor the whole selected mark (Select tool).
+        guard let target = selected ?? editingText else { return }
+        target.recolor(c)
+        onChange?(); needsDisplay = true
+    }
+
     private func clearSelections() {
         editingCurve = nil; editingZoom = nil; selected = nil; selectDrag = .none
         editingText = nil; textDrag = .none
@@ -774,7 +830,7 @@ final class CanvasView: NSView, NSTextFieldDelegate {
             ctx.setFillColor(NSColor(white: 1, alpha: 0.95).cgColor); ctx.fillEllipse(in: knob)
             ctx.setStrokeColor(Theme.lavender.cgColor); ctx.setLineWidth(1.5 / displayScale); ctx.strokeEllipse(in: knob)
         }
-        if tool == .text, textField == nil, let t = editingText {
+        if tool == .text, textView == nil, let t = editingText {
             let b = t.bounds
             ctx.setStrokeColor(Theme.lavender.cgColor); ctx.setLineWidth(1.5 / displayScale)
             ctx.stroke(b)
@@ -995,6 +1051,48 @@ final class CanvasView: NSView, NSTextFieldDelegate {
         }
         NSGraphicsContext.restoreGraphicsState()
         return rep
+    }
+}
+
+/// The live text-annotation editor. A rich `NSTextView` so one mark can mix colors
+/// and text typed after a color change takes the new color. Adds ⌘A / Ctrl-A
+/// "select all" (this menu-bar agent has no Edit menu to supply it) and draws a
+/// placeholder while empty.
+final class AnnotationTextView: NSTextView {
+    var placeholder = "Text…"
+    /// Color for newly typed text. NSTextView otherwise re-derives the typing color
+    /// from the character next to the insertion point, which silently drops a
+    /// mid-typing color change — so we force the current color on every insertion.
+    var colorForNewText: (() -> NSColor)?
+
+    override func insertText(_ string: Any, replacementRange: NSRange) {
+        // Insert typed text as an attributed run carrying the current color, rather
+        // than relying on `typingAttributes` — NSTextView otherwise re-derives the
+        // color from the neighboring character, silently dropping a color change.
+        let plain = (string as? NSAttributedString)?.string ?? (string as? String) ?? ""
+        guard let color = colorForNewText?() else {
+            super.insertText(string, replacementRange: replacementRange); return
+        }
+        var attrs: [NSAttributedString.Key: Any] = [.foregroundColor: color]
+        if let font { attrs[.font] = font }
+        super.insertText(NSAttributedString(string: plain, attributes: attrs), replacementRange: replacementRange)
+    }
+
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        let mods = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        if event.keyCode == 0, mods == .command || mods == .control {   // A
+            selectAll(nil)
+            return true
+        }
+        return super.performKeyEquivalent(with: event)
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+        guard string.isEmpty, let font = self.font else { return }
+        placeholder.draw(at: NSPoint(x: 0, y: 0),
+                         withAttributes: [.font: font,
+                                          .foregroundColor: NSColor.white.withAlphaComponent(0.5)])
     }
 }
 

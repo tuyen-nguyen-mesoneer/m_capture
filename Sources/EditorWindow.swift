@@ -121,6 +121,11 @@ private final class BrandSlider: NSSlider {
 final class EditorWindowController: NSObject {
     private static var open: [EditorWindowController] = []
 
+    /// Whether any editor is on screen. Callers that flip the app's activation
+    /// policy (e.g. the selection overlay) check this before reverting to
+    /// `.accessory`, so they don't demote the app out from under a live editor.
+    static var hasOpenWindows: Bool { !open.isEmpty }
+
     private let window: KeyableWindow
     private let canvas: CanvasView
     private var toolButtons: [Tool: ToolButton] = [:]
@@ -219,7 +224,7 @@ final class EditorWindowController: NSObject {
         canvas.onPaste = { [weak self] in self?.pasteOverlay() }
         selectTool(.pencil)
         selectSwatch(0)
-        canvas.style.lineWidth = 4
+        canvas.style.lineWidth = 6
 
         EditorWindowController.open.append(self)
         NSApp.setActivationPolicy(.regular)
@@ -639,6 +644,7 @@ final class EditorWindowController: NSObject {
     private func selectSwatch(_ index: Int) {
         guard index < palette.count else { return }
         canvas.style.color = palette[index].0
+        canvas.recolorSelection(palette[index].0)
         currentSwatch = index
         for (i, b) in swatchButtons.enumerated() { b.selectedState = (i == index) }
         plusButton?.selectedState = false
@@ -687,6 +693,7 @@ final class EditorWindowController: NSObject {
             colorPicker = ColorPickerPanel(
                 onPick: { [weak self] c in
                     self?.canvas.style.color = c
+                    self?.canvas.recolorSelection(c)
                     self?.currentSwatch = nil
                     self?.deselectSwatches()
                     self?.plusButton?.selectedState = true

@@ -33,6 +33,13 @@ final class VideoRecordController {
         let mouse = NSEvent.mouseLocation
         let keyScreen = NSScreen.screens.first { $0.frame.contains(mouse) }
             ?? NSScreen.main ?? NSScreen.screens[0]
+        // Promote to `.regular` so the overlay — and, later, the recording bar —
+        // can hold keyboard focus (Esc/Space, Esc/Return to stop). A background
+        // `.accessory` agent can't reliably become active, so key events would
+        // never arrive. Stays `.regular` through recording; reverted on cancel
+        // (below) and when recording stops. The Dock icon is hidden behind the
+        // full-screen overlay.
+        NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
         for screen in NSScreen.screens {
             let win = OverlayWindow(screen: screen, allowsWindowMode: false, allowsFullScreenMode: true)
@@ -43,9 +50,17 @@ final class VideoRecordController {
                 self?.dismissOverlays()
                 self?.requestMicThenStart(region: global, screen: screen)
             }
-            win.onCancel = { [weak self] in self?.dismissOverlays() }
+            win.onCancel = { [weak self] in
+                self?.dismissOverlays()
+                self?.revertActivationPolicyIfIdle()
+            }
             overlays.append(win)
-            if screen == keyScreen { win.makeKeyAndOrderFront(nil) } else { win.orderFront(nil) }
+            if screen == keyScreen {
+                win.makeKeyAndOrderFront(nil)
+                win.makeFirstResponder(win.contentView)
+            } else {
+                win.orderFront(nil)
+            }
         }
     }
 
@@ -54,6 +69,13 @@ final class VideoRecordController {
     private func dismissOverlays() {
         overlays.forEach { $0.orderOut(nil) }
         overlays.removeAll()
+    }
+
+    /// Drop back to a background agent once nothing on screen needs the Dock
+    /// presence / keyboard focus. Guarded so we don't demote the app while an
+    /// editor is still open.
+    private func revertActivationPolicyIfIdle() {
+        if !EditorWindowController.hasOpenWindows { NSApp.setActivationPolicy(.accessory) }
     }
 
     /// If the configured audio source includes the mic, request permission first.
@@ -147,6 +169,7 @@ final class VideoRecordController {
         updateTimer?.cancel()
         updateTimer = nil
         bar?.close()
+        revertActivationPolicyIfIdle()
         guard let session = session, let url = currentURL else { return }
         self.session = nil
         self.bar = nil
@@ -178,6 +201,7 @@ final class VideoRecordController {
         updateTimer?.cancel(); updateTimer = nil
         bar?.close(); bar = nil
         session = nil; currentURL = nil; isPaused = false
+        revertActivationPolicyIfIdle()
 
         let isPermission = !ScreenRecordingPermission.isGranted
         if isPermission {

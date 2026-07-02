@@ -35,6 +35,14 @@ final class OverlayWindow: NSWindow {
 
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { true }
+
+    /// Show the crosshair from the first frame: the view's initial cursor set (in
+    /// `viewDidMoveToWindow`) runs before the window is key and can be overridden,
+    /// leaving the default arrow until the pointer first moves.
+    override func becomeKey() {
+        super.becomeKey()
+        selectionView.applyModeCursor()
+    }
 }
 
 /// Dims the screen with a transparent "hole" for the current selection, plus a
@@ -61,6 +69,11 @@ final class SelectionView: NSView {
 
     private var modeCursor: NSCursor { captureMode == .region ? .crosshair : .pointingHand }
     override func cursorUpdate(with event: NSEvent) { modeCursor.set() }
+
+    /// Re-assert the mode cursor. The `viewDidMoveToWindow` set can be discarded
+    /// by the system before the window is key/active, so the owning window calls
+    /// this on `becomeKey` to guarantee the crosshair from the first frame.
+    func applyModeCursor() { modeCursor.set() }
 
     override func updateTrackingAreas() {
         super.updateTrackingAreas()

@@ -21,6 +21,9 @@ protocol Annotation: AnyObject {
     /// default scales geometry via `remap`; marks with a size scalar (text,
     /// counter, emoji) override to also scale that scalar.
     func scale(by f: CGFloat, around anchor: CGPoint)
+    /// Restyle the mark's stroke/text color in place (Select-tool color change).
+    /// No-op for marks without a color (emoji, image overlay).
+    func recolor(_ c: NSColor)
 }
 extension Annotation {
     func hit(_ p: CGPoint) -> Bool { false }
@@ -28,6 +31,7 @@ extension Annotation {
     func scale(by f: CGFloat, around a: CGPoint) {
         remap { CGPoint(x: a.x + ($0.x - a.x) * f, y: a.y + ($0.y - a.y) * f) }
     }
+    func recolor(_ c: NSColor) {}
 }
 
 private func contrasting(_ c: NSColor) -> NSColor {
@@ -38,10 +42,11 @@ private func contrasting(_ c: NSColor) -> NSColor {
 
 class FreehandAnnotation: Annotation {
     private(set) var points: [CGPoint] = []
-    let style: DrawStyle
+    var style: DrawStyle
     init(style: DrawStyle) { self.style = style }
     func add(_ p: CGPoint) { points.append(p) }
     func remap(_ f: (CGPoint) -> CGPoint) { points = points.map(f) }
+    func recolor(_ c: NSColor) { style.color = c }
     var strokeWidth: CGFloat { style.lineWidth }
     var resizable: Bool { false }
     var bounds: CGRect {
@@ -90,8 +95,9 @@ final class MarkerAnnotation: FreehandAnnotation {
 class TwoPointAnnotation: Annotation {
     var start: CGPoint
     var end: CGPoint
-    let style: DrawStyle
+    var style: DrawStyle
     init(start: CGPoint, style: DrawStyle) { self.start = start; self.end = start; self.style = style }
+    func recolor(_ c: NSColor) { style.color = c }
     var rect: CGRect {
         CGRect(x: min(start.x, end.x), y: min(start.y, end.y),
                width: abs(end.x - start.x), height: abs(end.y - start.y))
@@ -111,10 +117,11 @@ class CurvedAnnotation: Annotation {
     var start: CGPoint
     var end: CGPoint
     var control: CGPoint
-    let style: DrawStyle
+    var style: DrawStyle
     init(start: CGPoint, style: DrawStyle) {
         self.start = start; self.end = start; self.control = start; self.style = style
     }
+    func recolor(_ c: NSColor) { style.color = c }
     /// Midpoint of the straight start–end line.
     var lineMid: CGPoint { CGPoint(x: (start.x + end.x) / 2, y: (start.y + end.y) / 2) }
     /// Point the curve passes through at t=0.5 — where the drag handle sits.
@@ -314,39 +321,54 @@ final class SpotlightAnnotation: TwoPointAnnotation {
 }
 
 final class TextAnnotation: Annotation {
-    let text: String
+    /// Rich text carrying the typed characters and each range's foreground color,
+    /// so one mark can mix colors. Font, weight and wrapping are applied uniformly
+    /// at draw from `fontSize`, so per-range colors survive font changes and resize.
+    var attributed: NSAttributedString
     var origin: CGPoint
     var fontSize: CGFloat
-    let color: NSColor
     /// Wrap width in image space: long text flows onto multiple lines instead of
     /// running off the canvas. Scales with the font so resizing stays proportional.
     var maxWidth: CGFloat
     /// Height of the text box; the text is centered vertically within it to match
     /// the live editor. Scales with the font on resize.
     var boxHeight: CGFloat
-    init(text: String, origin: CGPoint, fontSize: CGFloat, color: NSColor,
+    init(attributed: NSAttributedString, origin: CGPoint, fontSize: CGFloat,
          maxWidth: CGFloat, boxHeight: CGFloat) {
-        self.text = text; self.origin = origin; self.fontSize = fontSize
-        self.color = color; self.maxWidth = max(1, maxWidth); self.boxHeight = max(1, boxHeight)
+        self.attributed = attributed; self.origin = origin; self.fontSize = fontSize
+        self.maxWidth = max(1, maxWidth); self.boxHeight = max(1, boxHeight)
     }
-    private var attrs: [NSAttributedString.Key: Any] {
+    var text: String { attributed.string }
+    /// The stored rich text with the current uniform font, weight and wrapping laid
+    /// over it, leaving each range's foreground color intact.
+    private func styled() -> NSAttributedString {
+        let m = NSMutableAttributedString(attributedString: attributed)
+        let full = NSRange(location: 0, length: m.length)
         let para = NSMutableParagraphStyle(); para.lineBreakMode = .byWordWrapping
-        return [.font: Theme.font(fontSize, .semibold), .foregroundColor: color, .paragraphStyle: para]
+        m.addAttributes([.font: Theme.font(fontSize, .semibold), .paragraphStyle: para], range: full)
+        return m
     }
     private var textHeight: CGFloat {
-        ceil(NSAttributedString(string: text, attributes: attrs).boundingRect(
+        ceil(styled().boundingRect(
             with: CGSize(width: maxWidth, height: .greatestFiniteMagnitude),
             options: [.usesLineFragmentOrigin, .usesFontLeading]).height)
     }
     var bounds: CGRect { CGRect(x: origin.x, y: origin.y, width: maxWidth, height: boxHeight) }
     func draw(in ctx: CGContext) {
         let dy = max(0, boxHeight - textHeight)
-        NSAttributedString(string: text, attributes: attrs).draw(
+        styled().draw(
             with: CGRect(x: origin.x, y: origin.y + dy, width: maxWidth, height: textHeight),
             options: [.usesLineFragmentOrigin, .usesFontLeading])
     }
     func hit(_ p: CGPoint) -> Bool { bounds.insetBy(dx: -6, dy: -6).contains(p) }
     func remap(_ f: (CGPoint) -> CGPoint) { origin = f(origin) }
+    /// Whole-mark recolor (Select tool) — paints every range one color. Per-range
+    /// coloring happens live in the text field while editing.
+    func recolor(_ c: NSColor) {
+        let m = NSMutableAttributedString(attributedString: attributed)
+        m.addAttribute(.foregroundColor, value: c, range: NSRange(location: 0, length: m.length))
+        attributed = m
+    }
     func scale(by f: CGFloat, around a: CGPoint) {
         origin = CGPoint(x: a.x + (origin.x - a.x) * f, y: a.y + (origin.y - a.y) * f)
         fontSize *= f
@@ -381,7 +403,7 @@ enum CounterFormat: CaseIterable {
 final class CounterAnnotation: Annotation {
     var center: CGPoint
     let label: String
-    let color: NSColor
+    var color: NSColor
     var radius: CGFloat
     init(center: CGPoint, label: String, color: NSColor, radius: CGFloat) {
         self.center = center; self.label = label; self.color = color; self.radius = radius
@@ -407,6 +429,7 @@ final class CounterAnnotation: Annotation {
     }
     func hit(_ p: CGPoint) -> Bool { box.contains(p) }
     func remap(_ f: (CGPoint) -> CGPoint) { center = f(center) }
+    func recolor(_ c: NSColor) { color = c }
     var bounds: CGRect { box }
     func scale(by f: CGFloat, around a: CGPoint) {
         center = CGPoint(x: a.x + (center.x - a.x) * f, y: a.y + (center.y - a.y) * f)

@@ -21,13 +21,24 @@ final class ScreenshotController {
         let keyScreen = NSScreen.screens.first { $0.frame.contains(mouse) }
             ?? NSScreen.main ?? NSScreen.screens[0]
 
+        // The overlay needs keyboard focus (Esc to cancel, Space to toggle mode),
+        // but as a background `.accessory` agent the app can't reliably become
+        // active — key events would never reach the overlay. Promote to `.regular`
+        // and activate, exactly as the editor does; `dismiss()` reverts. The Dock
+        // icon this surfaces is hidden behind the full-screen overlay anyway.
+        NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
         for screen in NSScreen.screens {
             let win = OverlayWindow(screen: screen)
             win.onComplete = { [weak self] viewRect in self?.finish(viewRect: viewRect, screen: screen) }
             win.onCancel = { [weak self] in self?.dismiss() }
             overlays.append(win)
-            if screen == keyScreen { win.makeKeyAndOrderFront(nil) } else { win.orderFront(nil) }
+            if screen == keyScreen {
+                win.makeKeyAndOrderFront(nil)
+                win.makeFirstResponder(win.contentView)
+            } else {
+                win.orderFront(nil)
+            }
         }
     }
 
@@ -42,6 +53,9 @@ final class ScreenshotController {
     private func dismiss() {
         overlays.forEach { $0.orderOut(nil) }
         overlays.removeAll()
+        // Drop back to a background agent unless an editor still needs the Dock
+        // presence (the capture path opens one right after this, which re-promotes).
+        if !EditorWindowController.hasOpenWindows { NSApp.setActivationPolicy(.accessory) }
     }
 
     /// Hand a fresh capture to the configured destination: the annotation editor
