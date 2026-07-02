@@ -41,7 +41,7 @@
   /* the mesoneer wordmark stays lowercase even inside an uppercased eyebrow */
   .eyebrow .lc{text-transform:none}
   h1,h2,h3{font-weight:700;letter-spacing:-.01em;line-height:1.15}
-  .chev{width:16px;height:16px;flex:none}
+  .chev{width:16px;height:16px;flex:none;transform:translateY(1px)}
 
   /* ---------- nav ---------- */
   nav{
@@ -389,7 +389,7 @@
       </a>
     </div>
     <div class="badges">
-      <span class="badge" data-i18n="badge.os">macOS 13+</span>
+      <span class="badge" data-i18n="badge.os">macOS 14+</span>
       <span class="badge" data-i18n="badge.swift">Swift + AppKit</span>
       <span class="badge" data-i18n="badge.deps">Zero dependencies</span>
       <span class="badge" data-i18n="badge.local">100% local</span>
@@ -615,6 +615,18 @@
     <div class="releases">
 
       <div class="release">
+        <span class="date" data-i18n="rel.4.date">Jul 2, 2026</span>
+        <span class="ver">v1.2.0</span>
+        <div>
+          <p class="note" data-i18n="rel.4.note">Multi-colour text — mix colours within one text box, select all with ⌘A, and recolour any mark you've already placed.<br>Bigger, bolder annotations by default, snappier Esc-to-cancel, and an instant crosshair.</p>
+          <a class="changelog" href="https://github.com/tuyen-nguyen-mesoneer/m_capture/releases/tag/1.2.0">
+            <span data-i18n="rel.changelog">See full changelog</span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+          </a>
+        </div>
+      </div>
+
+      <div class="release">
         <span class="date" data-i18n="rel.3.date">Jul 2, 2026</span>
         <span class="ver">v1.1.0</span>
         <div>
@@ -673,7 +685,7 @@
       </details>
       <details>
         <summary><span data-i18n="faq.2.q">Which macOS versions are supported?</span><span class="pm" aria-hidden="true"></span></summary>
-        <p data-i18n="faq.2.a">macOS 13 (Ventura) and later. It runs quietly in the menu bar with no Dock icon.</p>
+        <p data-i18n="faq.2.a">macOS 14 (Sonoma) and later. It runs quietly in the menu bar with no Dock icon.</p>
       </details>
       <details>
         <summary><span data-i18n="faq.3.q">Why does macOS block it on first launch?</span><span class="pm" aria-hidden="true"></span></summary>
@@ -745,7 +757,7 @@
       "hero.lede": "A lightweight menu-bar app for screenshots and screen recording. Press a hotkey, drag a region, annotate in place, then copy or save.",
       "cta.download": "Download for macOS",
       "cta.releases": "All releases",
-      "badge.os": "macOS 13+",
+      "badge.os": "macOS 14+",
       "badge.swift": "Swift + AppKit",
       "badge.deps": "Zero dependencies",
       "badge.local": "100% local",
@@ -802,6 +814,8 @@
       "rel.2.note": "Maintenance update — fixes a handful of minor bugs and rough edges across capture and the editor.",
       "rel.3.date": "Jul 2, 2026",
       "rel.3.note": "Video recording — capture any region to an MP4 with audio.<br>Automatic updates — new versions install in the background.",
+      "rel.4.date": "Jul 2, 2026",
+      "rel.4.note": "Multi-colour text — mix colours within one text box, select all with ⌘A, and recolour any mark you've already placed.<br>Bigger, bolder annotations by default, snappier Esc-to-cancel, and an instant crosshair.",
       "idea.eyebrow": "Feedback",
       "idea.h2": "Got an idea for m_capture?",
       "idea.p": "Missing a tool, a shortcut, an export format? Send it our way — every suggestion is read.",
@@ -818,7 +832,7 @@
       "faq.1.q": "Is m_capture free?",
       "faq.1.a": "Yes — m_capture is open source and MIT-licensed, free for anyone to use.",
       "faq.2.q": "Which macOS versions are supported?",
-      "faq.2.a": "macOS 13 (Ventura) and later. It runs quietly in the menu bar with no Dock icon.",
+      "faq.2.a": "macOS 14 (Sonoma) and later. It runs quietly in the menu bar with no Dock icon.",
       "faq.3.q": "Why does macOS block it on first launch?",
       "faq.3.a": "It isn't notarized by Apple yet. Move it into <code>~/Applications</code> and clear the quarantine flag from <strong>Terminal</strong> — see <a href='#install'>Get started</a> above.",
       "faq.4.q": "Where are my captures saved?",
@@ -842,7 +856,7 @@
       "hero.lede": "Eine schlanke Menüleisten-App für Screenshots und Bildschirmaufnahmen. Hotkey drücken, Bereich aufziehen, direkt annotieren, dann kopieren oder speichern.",
       "cta.download": "Für macOS herunterladen",
       "cta.releases": "Alle Releases",
-      "badge.os": "macOS 13+",
+      "badge.os": "macOS 14+",
       "badge.swift": "Swift + AppKit",
       "badge.deps": "Keine Abhängigkeiten",
       "badge.local": "100% lokal",
@@ -899,6 +913,8 @@
       "rel.2.note": "Wartungsupdate — behebt einige kleinere Fehler und Feinschliff bei Aufnahme und Editor.",
       "rel.3.date": "2. Juli 2026",
       "rel.3.note": "Videoaufnahme — nimm einen Bereich als MP4 mit Audio auf.<br>Automatische Updates — neue Versionen laden im Hintergrund.",
+      "rel.4.date": "2. Juli 2026",
+      "rel.4.note": "Mehrfarbiger Text — mische Farben in einem Textfeld, wähle mit ⌘A alles aus und färbe bereits platzierte Markierungen neu ein.<br>Größere, kräftigere Annotationen als Standard, flotteres Abbrechen mit Esc und ein sofortiges Fadenkreuz.",
       "idea.eyebrow": "Feedback",
       "idea.h2": "Eine Idee für m_capture?",
       "idea.p": "Fehlt ein Werkzeug, ein Tastaturkürzel, ein Exportformat? Schick es uns — jeder Vorschlag wird gelesen.",
@@ -915,7 +931,7 @@
       "faq.1.q": "Ist m_capture kostenlos?",
       "faq.1.a": "Ja — m_capture ist quelloffen und MIT-lizenziert, kostenlos für alle.",
       "faq.2.q": "Welche macOS-Versionen werden unterstützt?",
-      "faq.2.a": "macOS 13 (Ventura) und neuer. Läuft dezent in der Menüleiste, ohne Dock-Symbol.",
+      "faq.2.a": "macOS 14 (Sonoma) und neuer. Läuft dezent in der Menüleiste, ohne Dock-Symbol.",
       "faq.3.q": "Warum blockiert macOS die App beim ersten Start?",
       "faq.3.a": "Sie ist noch nicht von Apple notarisiert. Verschiebe sie nach <code>~/Applications</code> und entferne das Quarantäne-Flag im <strong>Terminal</strong> — siehe <a href='#install'>Erste Schritte</a> oben.",
       "faq.4.q": "Wo werden meine Aufnahmen gespeichert?",
@@ -967,7 +983,7 @@
     }catch(e){}
     var saved; try{ saved = localStorage.getItem('lang'); }catch(e){}
     if(saved === 'de' || saved === 'en') return saved;
-    return 'de';
+    return 'en';
   }
 
   document.querySelectorAll('[data-lang]').forEach(function(b){

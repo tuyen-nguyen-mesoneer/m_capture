@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- macOS **13.0** (Ventura) or later
+- macOS **14.0** (Sonoma) or later
 - **Xcode Command Line Tools** (`xcode-select --install`) — full Xcode not needed
 
 ## Build & run
@@ -47,7 +47,7 @@ is tied to the signing cert, and a different cert forces everyone to re-grant.
 
 1. Bump `VERSION` in `build.sh` and commit.
 2. Tag (no `v` prefix, equal to `VERSION`) and push:
-   `git tag 1.1.0 && git push origin 1.1.0`.
+   `git tag 1.2.0 && git push origin 1.2.0`.
 
 CI checks the tag matches `VERSION`, signs the DMG, and publishes the release. Users' apps
 download it, swap in place, and run the new version on next launch (a silent daily check, plus

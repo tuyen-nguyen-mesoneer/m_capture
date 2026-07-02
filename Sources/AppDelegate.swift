@@ -19,6 +19,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         buildMenu()
         reloadHotKeys()
 
+        // Enable launch-at-login by default on first run; the user's later toggle
+        // in Settings wins (this only runs once, and SMAppService is the source of
+        // truth after that).
+        let loginDefaultKey = "didApplyLoginItemDefault"
+        if !UserDefaults.standard.bool(forKey: loginDefaultKey) {
+            UserDefaults.standard.set(true, forKey: loginDefaultKey)
+            Settings.shared.launchAtLogin = true
+        }
+
         Updater.reconcileAfterRelaunch()
         Updater.checkInBackgroundIfDue()
 

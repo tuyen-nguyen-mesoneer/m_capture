@@ -198,8 +198,10 @@ final class Settings {
         set { d.set(newValue.rawValue, forKey: Key.format) }
     }
 
+    /// Copy to the clipboard when saving straight to a file (default on). Unset
+    /// reads as on; once the user toggles it, their choice is respected.
     var autoCopyOnSave: Bool {
-        get { d.bool(forKey: Key.autoCopy) }
+        get { d.object(forKey: Key.autoCopy) == nil ? true : d.bool(forKey: Key.autoCopy) }
         set { d.set(newValue, forKey: Key.autoCopy) }
     }
 
@@ -249,15 +251,15 @@ final class Settings {
         set { d.set(newValue.rawValue, forKey: Key.delay) }
     }
 
-    /// Padding amount for share-ready backgrounds (default medium).
+    /// Padding amount for share-ready backgrounds (default small).
     var paddingSize: PaddingSize {
-        get { d.string(forKey: Key.padding).flatMap(PaddingSize.init) ?? .medium }
+        get { d.string(forKey: Key.padding).flatMap(PaddingSize.init) ?? .small }
         set { d.set(newValue.rawValue, forKey: Key.padding) }
     }
 
-    /// Corner-rounding amount for share-ready backgrounds (default medium).
+    /// Corner-rounding amount for share-ready backgrounds (default square).
     var radiusSize: RadiusSize {
-        get { d.string(forKey: Key.radius).flatMap(RadiusSize.init) ?? .medium }
+        get { d.string(forKey: Key.radius).flatMap(RadiusSize.init) ?? .none }
         set { d.set(newValue.rawValue, forKey: Key.radius) }
     }
 
@@ -276,7 +278,7 @@ final class Settings {
     /// The background preset selected when the editor opens. Stored by preset
     /// name; custom colors aren't persistable here, so it's always a preset.
     var defaultBackground: Background {
-        get { Background.preset(named: d.string(forKey: Key.defaultBG) ?? "") ?? .lavender }
+        get { Background.preset(named: d.string(forKey: Key.defaultBG) ?? "") ?? .none }
         set { d.set(newValue.name, forKey: Key.defaultBG) }
     }
 

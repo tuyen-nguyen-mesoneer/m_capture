@@ -37,6 +37,9 @@ final class ToolButton: NSButton {
         self.action = action
         isBordered = false
         title = ""
+        // Never take first responder: clicking a tool tile (e.g. a color swatch to
+        // recolor selected text) must not end the canvas's text-field editing.
+        refusesFirstResponder = true
         wantsLayer = true
         let s = ToolButton.size(radius: radius)
         translatesAutoresizingMaskIntoConstraints = false
