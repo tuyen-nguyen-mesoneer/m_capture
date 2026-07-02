@@ -143,12 +143,21 @@ final class ScreenshotController {
         guard global.width >= 3, global.height >= 3 else { return }
         guard let displayID = screen.displayID else { return }
 
-        let scale = screen.backingScaleFactor
         let sourceRect = CGRect(x: viewRect.minX,
                                 y: screen.frame.height - viewRect.maxY,
                                 width: viewRect.width, height: viewRect.height)
-        let pixelWidth = Int((viewRect.width * scale).rounded())
-        let pixelHeight = Int((viewRect.height * scale).rounded())
+        // Capture at the display's true pixel density rather than assuming
+        // `backingScaleFactor` (2×). On scaled HiDPI modes the framebuffer has a
+        // different pixels-per-point ratio, so multiplying by 2× makes SCK up- or
+        // down-scale the grab and softens it. The current mode's pixel/point ratio
+        // is the exact native scale, so the region is captured 1:1.
+        var scaleX = screen.backingScaleFactor, scaleY = screen.backingScaleFactor
+        if let mode = CGDisplayCopyDisplayMode(displayID), mode.width > 0, mode.height > 0 {
+            scaleX = CGFloat(mode.pixelWidth) / CGFloat(mode.width)
+            scaleY = CGFloat(mode.pixelHeight) / CGFloat(mode.height)
+        }
+        let pixelWidth = Int((viewRect.width * scaleX).rounded())
+        let pixelHeight = Int((viewRect.height * scaleY).rounded())
         let showsCursor = Settings.shared.captureCursor
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.06) {

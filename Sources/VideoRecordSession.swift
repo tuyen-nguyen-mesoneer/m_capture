@@ -56,7 +56,14 @@ final class VideoRecordSession: NSObject, @unchecked Sendable {
 
         // SCStreamConfiguration — 30 fps, YUV pixels (required by HEVC), display-local sourceRect.
         let cfg = SCStreamConfiguration()
-        let scale = screen.backingScaleFactor
+        // Match the display's true pixel density (see ScreenshotController): on
+        // scaled HiDPI modes the framebuffer isn't a plain 2×, so recording at
+        // `backingScaleFactor` would soften the video.
+        var scaleX = screen.backingScaleFactor, scaleY = screen.backingScaleFactor
+        if let mode = CGDisplayCopyDisplayMode(displayID), mode.width > 0, mode.height > 0 {
+            scaleX = CGFloat(mode.pixelWidth) / CGFloat(mode.width)
+            scaleY = CGFloat(mode.pixelHeight) / CGFloat(mode.height)
+        }
         // sourceRect: display-local, top-left origin (SCK convention — differs from
         // the primary-height flip used for `screencapture -R`).
         cfg.sourceRect = CGRect(
@@ -65,8 +72,8 @@ final class VideoRecordSession: NSObject, @unchecked Sendable {
             width: region.width,
             height: region.height
         )
-        let pixelWidth  = Int(region.width  * scale)
-        let pixelHeight = Int(region.height * scale)
+        let pixelWidth  = Int(region.width  * scaleX)
+        let pixelHeight = Int(region.height * scaleY)
         cfg.width  = pixelWidth
         cfg.height = pixelHeight
         cfg.minimumFrameInterval = CMTime(value: 1, timescale: 30)
@@ -79,7 +86,7 @@ final class VideoRecordSession: NSObject, @unchecked Sendable {
         let writer = try AVAssetWriter(outputURL: outputURL, fileType: .mp4)
 
         // Video input: HEVC with bitrate scaled to the capture resolution.
-        let regionSize = CGSize(width: region.width * scale, height: region.height * scale)
+        let regionSize = CGSize(width: region.width * scaleX, height: region.height * scaleY)
         let videoSettings: [String: Any] = [
             AVVideoCodecKey: AVVideoCodecType.hevc,
             AVVideoWidthKey:  pixelWidth,
