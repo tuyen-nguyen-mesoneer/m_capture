@@ -4,7 +4,7 @@
 > annotate it in place, and copy or save the result. Built in **Swift + AppKit** with
 > **zero external dependencies**; all processing happens locally on your machine.
 
-![platform](https://img.shields.io/badge/platform-macOS%2013%2B-blue)
+![platform](https://img.shields.io/badge/platform-macOS%2014%2B-blue)
 ![language](https://img.shields.io/badge/Swift-5-orange)
 ![dependencies](https://img.shields.io/badge/dependencies-none-brightgreen)
 ![license](https://img.shields.io/badge/license-MIT-green)
