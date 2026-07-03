@@ -5,8 +5,8 @@ import AppKit
 /// Checks GitHub Releases for a newer build — no dependencies, just URLSession +
 /// JSONDecoder — and drives the install. Two entry points:
 ///
-/// - `checkInBackgroundIfDue()` — a silent once-a-day launch check that downloads and
-///   swaps the new build in place with no UI; it takes effect on the next launch.
+/// - `checkInBackground()` — a silent check on every launch that downloads and swaps
+///   the new build in place with no UI; it takes effect on the next launch.
 /// - `checkManually()` — the "Check for Updates" item; always reports an outcome and,
 ///   on a newer build, installs it and offers an immediate relaunch.
 ///
@@ -21,11 +21,9 @@ enum Updater {
     private static let repo = "tuyen-nguyen-mesoneer/m_capture"
     private static let releasesURL = URL(string: "https://api.github.com/repos/\(repo)/releases")!
     private static let releasesPage = "https://github.com/\(repo)/releases"
-    private static let checkInterval: TimeInterval = 24 * 60 * 60
 
-    private static let lastCheckKey = "updater.lastCheck"
     /// A build we've already swapped onto disk but haven't relaunched into yet. Kept so
-    /// the daily check doesn't see the just-installed release as "newer" and reinstall it.
+    /// the launch check doesn't see the just-installed release as "newer" and reinstall it.
     private static let pendingVersionKey = "updater.pendingVersion"
 
     private struct Release: Decodable {
@@ -88,14 +86,10 @@ enum Updater {
         }
     }
 
-    /// Silent launch check, throttled to once a day; on a newer build it downloads and
-    /// swaps with no UI. Any failure stays silent — the running version is untouched.
-    static func checkInBackgroundIfDue() {
-        let defaults = UserDefaults.standard
-        let now = Date().timeIntervalSince1970
-        guard now - defaults.double(forKey: lastCheckKey) >= checkInterval else { return }
+    /// Silent check run on every launch; on a newer build it downloads and swaps with no
+    /// UI. Any failure stays silent — the running version is untouched.
+    static func checkInBackground() {
         fetch { result in
-            defaults.set(now, forKey: lastCheckKey)
             guard case .success(let release) = result,
                   isNewer(release.tagName, than: effectiveCurrentVersion),
                   let dmg = dmgURL(for: release)
