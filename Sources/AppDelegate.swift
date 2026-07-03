@@ -29,7 +29,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         Updater.reconcileAfterRelaunch()
-        Updater.checkInBackgroundIfDue()
+        Updater.checkInBackground()
 
         if CommandLine.arguments.contains("--editor-demo") {
             DispatchQueue.main.async { [weak self] in self?.openEditorDemo() }
