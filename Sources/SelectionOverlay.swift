@@ -84,10 +84,14 @@ final class SelectionView: NSView {
         addTrackingArea(t); trackingAreaRef = t
     }
 
+    /// Snapped to `.integral`: raw mouse coordinates are sub-pixel, and a fractional
+    /// rect forces both ScreenCaptureKit's crop and the editor canvas's on-screen
+    /// position to sample/composite across a pixel boundary — softening the entire
+    /// capture, not just its edges (see `ScreenshotController.finish`).
     private var selectionRect: CGRect? {
         guard let a = startPoint, let b = currentPoint else { return nil }
         return CGRect(x: min(a.x, b.x), y: min(a.y, b.y),
-                      width: abs(a.x - b.x), height: abs(a.y - b.y))
+                      width: abs(a.x - b.x), height: abs(a.y - b.y)).integral
     }
 
     override func mouseDown(with event: NSEvent) {

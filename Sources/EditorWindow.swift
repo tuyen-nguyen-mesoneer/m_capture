@@ -168,8 +168,17 @@ final class EditorWindowController: NSObject {
         (.black, "Black"),
     ]
 
-    init(image: NSImage, selectionRect: CGRect, screen: NSScreen) {
-        let scale = image.size.width > 0 ? selectionRect.width / image.size.width : 1
+    /// - Parameter captureScale: The display's exact pixels-per-point density used to
+    ///   capture `image` (e.g. 2.0 on Retina, 1.0 on a plain external). The canvas's
+    ///   on-screen scale is `1 / captureScale` — an exact reciprocal of a known-good
+    ///   constant. Deriving it instead from `selectionRect.width / image.size.width`
+    ///   divides two independently-rounded numbers (a fractional trackpad-drag point
+    ///   width against an already-rounded pixel width): the ratio lands a hair off
+    ///   exact integers/halves, and that sub-percent error forces CoreGraphics to
+    ///   bilinear-resample the *entire* image on every redraw — invisible on a dense
+    ///   Retina panel, visibly soft on a 1x external display.
+    init(image: NSImage, selectionRect: CGRect, screen: NSScreen, captureScale: CGFloat = 1) {
+        let scale = captureScale > 0 ? 1 / captureScale : 1
         canvas = CanvasView(image: image, displayScale: scale)
         window = KeyableWindow(contentRect: screen.frame, styleMask: .borderless,
                                backing: .buffered, defer: false)

@@ -60,10 +60,14 @@ final class ScreenshotController {
 
     /// Hand a fresh capture to the configured destination: the annotation editor
     /// (default), a direct save to the output folder, or the clipboard only.
-    static func deliver(_ image: NSImage, selectionRect: CGRect, screen: NSScreen) {
+    /// `captureScale` is the exact pixels-per-point density `image` was captured at —
+    /// only the editor needs it, to size its live canvas without introducing rounding
+    /// error (see `EditorWindowController.init`).
+    static func deliver(_ image: NSImage, selectionRect: CGRect, screen: NSScreen, captureScale: CGFloat = 1) {
         switch Settings.shared.captureBehavior {
         case .editor:
-            _ = EditorWindowController(image: image, selectionRect: selectionRect, screen: screen)
+            _ = EditorWindowController(image: image, selectionRect: selectionRect, screen: screen,
+                                      captureScale: captureScale)
         case .save:
             saveToDisk(image)
             if Settings.shared.autoCopyOnSave { copyToPasteboard(image) }
@@ -108,29 +112,35 @@ final class ScreenshotController {
     /// and lets ScreenCaptureKit draw the pointer natively. (`CGWindowListCreateImage`
     /// was obsoleted in macOS 15, so SCK is the only in-process route.)
     ///
-    /// `sourceRect` is the region within the display in points, top-left origin;
-    /// `pixelWidth`/`pixelHeight` are the output size in native pixels.
+    /// `sourceRect` is the region within the display in points, top-left origin. The
+    /// output pixel size is `sourceRect × SCContentFilter.pointPixelScale` — SCK's own
+    /// pixels-per-point for this display — so the grab is 1:1 native with no up/down-
+    /// scaling on any display (plain 2×, fractional-HiDPI, or a 1× external alike).
+    /// Returns the exact scale alongside the image: the editor needs this same
+    /// authoritative value rather than re-deriving it from the selection rect (see
+    /// `EditorWindowController.init`).
     private static func captureRegion(displayID: CGDirectDisplayID, sourceRect: CGRect,
-                                      pixelWidth: Int, pixelHeight: Int,
-                                      showsCursor: Bool) async -> CGImage? {
+                                      showsCursor: Bool) async -> (cg: CGImage, scale: CGFloat)? {
         do {
             let content = try await SCShareableContent.current
             guard let display = content.displays.first(where: { $0.displayID == displayID }) else { return nil }
             let filter = SCContentFilter(display: display, excludingWindows: [])
+            let scale = CGFloat(filter.pointPixelScale)
             let config = SCStreamConfiguration()
             config.sourceRect = sourceRect
-            config.width = max(1, pixelWidth)
-            config.height = max(1, pixelHeight)
+            config.width = max(1, Int((sourceRect.width * scale).rounded()))
+            config.height = max(1, Int((sourceRect.height * scale).rounded()))
             config.showsCursor = showsCursor
             config.captureResolution = .best
-            return try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: config)
+            let cg = try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: config)
+            return (cg, scale)
         } catch {
             return nil
         }
     }
 
     /// Wrap a captured CGImage as a pixel-sized NSImage (scale 1), so the editor's
-    /// display-scale math (`selectionRect.width / image.size.width`) stays correct.
+    /// display-scale math stays correct.
     private static func image(from cg: CGImage) -> NSImage {
         NSImage(cgImage: cg, size: NSSize(width: cg.width, height: cg.height))
     }
@@ -146,31 +156,19 @@ final class ScreenshotController {
         let sourceRect = CGRect(x: viewRect.minX,
                                 y: screen.frame.height - viewRect.maxY,
                                 width: viewRect.width, height: viewRect.height)
-        // Capture at the display's true pixel density rather than assuming
-        // `backingScaleFactor` (2×). On scaled HiDPI modes the framebuffer has a
-        // different pixels-per-point ratio, so multiplying by 2× makes SCK up- or
-        // down-scale the grab and softens it. The current mode's pixel/point ratio
-        // is the exact native scale, so the region is captured 1:1.
-        var scaleX = screen.backingScaleFactor, scaleY = screen.backingScaleFactor
-        if let mode = CGDisplayCopyDisplayMode(displayID), mode.width > 0, mode.height > 0 {
-            scaleX = CGFloat(mode.pixelWidth) / CGFloat(mode.width)
-            scaleY = CGFloat(mode.pixelHeight) / CGFloat(mode.height)
-        }
-        let pixelWidth = Int((viewRect.width * scaleX).rounded())
-        let pixelHeight = Int((viewRect.height * scaleY).rounded())
         let showsCursor = Settings.shared.captureCursor
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.06) {
             ScreenshotController.playCaptureSoundIfEnabled()
             nonisolated(unsafe) let deliverScreen = screen
             Task {
-                let cg = await ScreenshotController.captureRegion(
-                    displayID: displayID, sourceRect: sourceRect,
-                    pixelWidth: pixelWidth, pixelHeight: pixelHeight, showsCursor: showsCursor)
+                let result = await ScreenshotController.captureRegion(
+                    displayID: displayID, sourceRect: sourceRect, showsCursor: showsCursor)
                 await MainActor.run {
-                    guard let cg else { ScreenshotController.handleEmptyCapture(); return }
-                    ScreenshotController.deliver(ScreenshotController.image(from: cg),
-                                                selectionRect: global, screen: deliverScreen)
+                    guard let result else { ScreenshotController.handleEmptyCapture(); return }
+                    ScreenshotController.deliver(ScreenshotController.image(from: result.cg),
+                                                selectionRect: global, screen: deliverScreen,
+                                                captureScale: result.scale)
                 }
             }
         }
