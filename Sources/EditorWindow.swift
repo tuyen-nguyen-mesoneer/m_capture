@@ -168,8 +168,17 @@ final class EditorWindowController: NSObject {
         (.black, "Black"),
     ]
 
-    init(image: NSImage, selectionRect: CGRect, screen: NSScreen) {
-        let scale = image.size.width > 0 ? selectionRect.width / image.size.width : 1
+    /// - Parameter captureScale: The display's exact pixels-per-point density used to
+    ///   capture `image` (e.g. 2.0 on Retina, 1.0 on a plain external). The canvas's
+    ///   on-screen scale is `1 / captureScale` — an exact reciprocal of a known-good
+    ///   constant. Deriving it instead from `selectionRect.width / image.size.width`
+    ///   divides two independently-rounded numbers (a fractional trackpad-drag point
+    ///   width against an already-rounded pixel width): the ratio lands a hair off
+    ///   exact integers/halves, and that sub-percent error forces CoreGraphics to
+    ///   bilinear-resample the *entire* image on every redraw — invisible on a dense
+    ///   Retina panel, visibly soft on a 1x external display.
+    init(image: NSImage, selectionRect: CGRect, screen: NSScreen, captureScale: CGFloat = 1) {
+        let scale = captureScale > 0 ? 1 / captureScale : 1
         canvas = CanvasView(image: image, displayScale: scale)
         window = KeyableWindow(contentRect: screen.frame, styleMask: .borderless,
                                backing: .buffered, defer: false)
@@ -1067,6 +1076,11 @@ final class EditorWindowController: NSObject {
         var fr = canvasFrame
         fr.origin.x = min(max(8 + pad, fr.origin.x), max(8 + pad, content.bounds.width - fr.width - 8 - pad))
         fr.origin.y = min(max(8 + pad, fr.origin.y), max(8 + pad, content.bounds.height - fr.height - 8 - pad))
+        // Keep the canvas origin on the device-pixel grid — a fractional origin resamples
+        // the whole canvas and softens it on 1× external displays (the padding clamp above
+        // can otherwise reintroduce a sub-pixel offset).
+        fr.origin.x.round()
+        fr.origin.y.round()
         canvas.frame = fr
         ring.frame = fr.insetBy(dx: -1, dy: -1)
         applyBackgroundPreview()
@@ -1125,9 +1139,12 @@ final class EditorWindowController: NSObject {
         guard let p = resizePreview, resizeBaseFrame.width > 0 else { return }
         let scale = p.frame.width / resizeBaseFrame.width
         p.removeFromSuperview(); resizePreview = nil
-        let newFrame = NSRect(x: resizeBaseFrame.minX, y: resizeBaseFrame.maxY - resizeBaseFrame.height * scale,
-                              width: resizeBaseFrame.width * scale, height: resizeBaseFrame.height * scale)
         canvas.bakeResample(scale: scale)
+        // Anchor the top-left corner (the drag handle is bottom-right) to the
+        // grid-aligned size the bake produced, so the canvas stays on the pixel grid.
+        let size = NSSize(width: canvas.frame.width.rounded(), height: canvas.frame.height.rounded())
+        let newFrame = NSRect(x: resizeBaseFrame.minX, y: resizeBaseFrame.maxY - size.height,
+                              width: size.width, height: size.height)
         relayout(canvasFrame: newFrame)
     }
 

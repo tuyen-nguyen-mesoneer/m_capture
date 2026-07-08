@@ -158,7 +158,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let sel = NSRect(x: f.minX + (f.width - size.width) / 2,
                          y: f.minY + (f.height - size.height) / 2,
                          width: size.width, height: size.height)
-        _ = EditorWindowController(image: image, selectionRect: sel, screen: screen)
+        _ = EditorWindowController(image: image, selectionRect: sel, screen: screen, captureScale: 1)
         NSApp.activate(ignoringOtherApps: true)
     }
 

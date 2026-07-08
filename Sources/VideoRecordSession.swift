@@ -19,8 +19,8 @@ final class VideoRecordSession: NSObject, @unchecked Sendable {
 
     /// - Parameters:
     ///   - region: Display-local rect in points, top-left origin (SCK convention).
-    ///   - screen: The screen being captured; used for `backingScaleFactor` and
-    ///     coordinate translation.
+    ///   - screen: The screen being captured; used for display-local coordinate
+    ///     translation of `region`.
     ///   - quality: HEVC bitrate preset.
     ///   - audioSource: Which audio streams to mix into the output file.
     ///   - outputURL: Destination `.mp4` file path; the file must not already exist.
@@ -56,14 +56,13 @@ final class VideoRecordSession: NSObject, @unchecked Sendable {
 
         // SCStreamConfiguration — 30 fps, YUV pixels (required by HEVC), display-local sourceRect.
         let cfg = SCStreamConfiguration()
-        // Match the display's true pixel density (see ScreenshotController): on
-        // scaled HiDPI modes the framebuffer isn't a plain 2×, so recording at
-        // `backingScaleFactor` would soften the video.
-        var scaleX = screen.backingScaleFactor, scaleY = screen.backingScaleFactor
-        if let mode = CGDisplayCopyDisplayMode(displayID), mode.width > 0, mode.height > 0 {
-            scaleX = CGFloat(mode.pixelWidth) / CGFloat(mode.width)
-            scaleY = CGFloat(mode.pixelHeight) / CGFloat(mode.height)
-        }
+        // Record at the display's true pixel density. `SCContentFilter.pointPixelScale`
+        // is ScreenCaptureKit's own pixels-per-point for this display, so sizing the
+        // output by it captures 1:1 with no up/down-scaling — correct on every display
+        // (plain 2×, fractional-HiDPI, and 1× externals alike). This is authoritative,
+        // unlike deriving the ratio from `CGDisplayMode`, whose point dimensions are
+        // ambiguous on some external monitors.
+        let scale = CGFloat(filter.pointPixelScale)
         // sourceRect: display-local, top-left origin (SCK convention — differs from
         // the primary-height flip used for `screencapture -R`).
         cfg.sourceRect = CGRect(
@@ -72,8 +71,8 @@ final class VideoRecordSession: NSObject, @unchecked Sendable {
             width: region.width,
             height: region.height
         )
-        let pixelWidth  = Int(region.width  * scaleX)
-        let pixelHeight = Int(region.height * scaleY)
+        let pixelWidth  = Int(region.width  * scale)
+        let pixelHeight = Int(region.height * scale)
         cfg.width  = pixelWidth
         cfg.height = pixelHeight
         cfg.minimumFrameInterval = CMTime(value: 1, timescale: 30)
@@ -86,7 +85,7 @@ final class VideoRecordSession: NSObject, @unchecked Sendable {
         let writer = try AVAssetWriter(outputURL: outputURL, fileType: .mp4)
 
         // Video input: HEVC with bitrate scaled to the capture resolution.
-        let regionSize = CGSize(width: region.width * scaleX, height: region.height * scaleY)
+        let regionSize = CGSize(width: region.width * scale, height: region.height * scale)
         let videoSettings: [String: Any] = [
             AVVideoCodecKey: AVVideoCodecType.hevc,
             AVVideoWidthKey:  pixelWidth,
