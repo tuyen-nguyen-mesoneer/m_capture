@@ -28,9 +28,19 @@ final class ScreenshotController {
         // icon this surfaces is hidden behind the full-screen overlay anyway.
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
+        let coordinator = OverlayCoordinator()
         for screen in NSScreen.screens {
-            let win = OverlayWindow(screen: screen)
-            win.onComplete = { [weak self] viewRect in self?.finish(viewRect: viewRect, screen: screen) }
+            let win = OverlayWindow(screen: screen, coordinator: coordinator)
+            win.onComplete = { [weak self] viewRect in
+                self?.finish(viewRect: viewRect, screen: screen, showsCursor: Settings.shared.captureCursor)
+            }
+            win.onCompleteScreen = { [weak self] in
+                // Whole-screen grab: never draw the cursor — it's only ever the tool's
+                // capture badge here, which would otherwise bake into the shot.
+                self?.finish(viewRect: CGRect(origin: .zero, size: screen.frame.size),
+                             screen: screen, showsCursor: false)
+            }
+            win.onCompleteWindow = { [weak self] windowID in self?.finishWindow(windowID: windowID) }
             win.onCancel = { [weak self] in self?.dismiss() }
             overlays.append(win)
             if screen == keyScreen {
@@ -53,6 +63,10 @@ final class ScreenshotController {
     private func dismiss() {
         overlays.forEach { $0.orderOut(nil) }
         overlays.removeAll()
+        // Reset the pointer to the default arrow: the overlay's custom capture cursor
+        // otherwise lingers (nothing moves the mouse in the brief pre-capture delay) and
+        // gets baked into the shot when `showsCursor` is on.
+        NSCursor.arrow.set()
         // Drop back to a background agent unless an editor still needs the Dock
         // presence (the capture path opens one right after this, which re-promotes).
         if !EditorWindowController.hasOpenWindows { NSApp.setActivationPolicy(.accessory) }
@@ -145,7 +159,53 @@ final class ScreenshotController {
         NSImage(cgImage: cg, size: NSSize(width: cg.width, height: cg.height))
     }
 
-    private func finish(viewRect: CGRect, screen: NSScreen) {
+    /// Grab a single on-screen window in-process, following the same in-process
+    /// ScreenCaptureKit path as `captureRegion` but with a window filter
+    /// (`desktopIndependentWindow`) so occluding windows are excluded and only the
+    /// target window's pixels are captured. Returns the image plus the window's AppKit
+    /// global frame and hosting screen, which the editor uses to place its live canvas.
+    private static func captureWindow(windowID: CGWindowID, showsCursor: Bool)
+        async -> (cg: CGImage, scale: CGFloat, globalRect: CGRect, screen: NSScreen)? {
+        do {
+            let content = try await SCShareableContent.current
+            guard let scWindow = content.windows.first(where: { $0.windowID == windowID }) else { return nil }
+            let filter = SCContentFilter(desktopIndependentWindow: scWindow)
+            let scale = CGFloat(filter.pointPixelScale)
+            let config = SCStreamConfiguration()
+            config.width = max(1, Int((scWindow.frame.width * scale).rounded()))
+            config.height = max(1, Int((scWindow.frame.height * scale).rounded()))
+            config.showsCursor = showsCursor
+            config.captureResolution = .best
+            let cg = try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: config)
+            // SCWindow.frame is CG global (top-left). Flip into AppKit space and pick the
+            // screen it mostly lives on for the editor backdrop.
+            let appKit = WindowList.appKitRect(fromCG: scWindow.frame)
+            let screen = NSScreen.screens.first { $0.frame.intersects(appKit) } ?? NSScreen.main ?? NSScreen.screens[0]
+            return (cg, scale, appKit, screen)
+        } catch {
+            return nil
+        }
+    }
+
+    private func finishWindow(windowID: CGWindowID) {
+        dismiss()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.06) {
+            ScreenshotController.playCaptureSoundIfEnabled()
+            Task {
+                // Never draw the cursor for a window grab — it's only ever the tool's
+                // capture badge, which would otherwise bake into the shot.
+                let result = await ScreenshotController.captureWindow(windowID: windowID, showsCursor: false)
+                await MainActor.run {
+                    guard let result else { ScreenshotController.handleEmptyCapture(); return }
+                    ScreenshotController.deliver(ScreenshotController.image(from: result.cg),
+                                                selectionRect: result.globalRect, screen: result.screen,
+                                                captureScale: result.scale)
+                }
+            }
+        }
+    }
+
+    private func finish(viewRect: CGRect, screen: NSScreen, showsCursor: Bool) {
         let global = CGRect(x: screen.frame.minX + viewRect.minX,
                             y: screen.frame.minY + viewRect.minY,
                             width: viewRect.width, height: viewRect.height)
@@ -156,7 +216,6 @@ final class ScreenshotController {
         let sourceRect = CGRect(x: viewRect.minX,
                                 y: screen.frame.height - viewRect.maxY,
                                 width: viewRect.width, height: viewRect.height)
-        let showsCursor = Settings.shared.captureCursor
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.06) {
             ScreenshotController.playCaptureSoundIfEnabled()

@@ -393,7 +393,7 @@ final class EditorWindowController: NSObject {
     /// it off the backdrop (the shadow, not the edge, is what carries the contrast).
     /// Square corners + `Theme.border` match the Settings / About panels.
     private func cardFit(_ inner: NSView) -> NSView {
-        let pad: CGFloat = 8, radius: CGFloat = 0
+        let pad: CGFloat = 5, radius: CGFloat = 0
         let size = NSSize(width: inner.frame.width + pad * 2, height: inner.frame.height + pad * 2)
         let c = DraggablePanel(frame: NSRect(origin: .zero, size: size))
         c.wantsLayer = true
@@ -439,8 +439,8 @@ final class EditorWindowController: NSObject {
     /// the selection is too small or too large to scatter cleanly). The group has
     /// no background slab of its own — the cards stand on their own gradient fill.
     private func makePanel(_ rows: [[NSView]]) -> NSView {
-        let pad: CGFloat = 10, hgap: CGFloat = 8, vgap: CGFloat = 8
-        let innerPad: CGFloat = 7
+        let pad: CGFloat = 7, hgap: CGFloat = 6, vgap: CGFloat = 6
+        let innerPad: CGFloat = 5
         let all = rows.flatMap { $0 }
         let cardW = (all.map { $0.frame.width }.max() ?? 0) + innerPad * 2
         let cardH = (all.map { $0.frame.height }.max() ?? 0) + innerPad * 2
@@ -1003,9 +1003,10 @@ final class EditorWindowController: NSObject {
 
     private func attemptClose() {
         let choice = BrandAlert(title: "Discard capture?",
-                                message: "Your screenshot and any edits will be discarded and can't be recovered.",
+                                message: "Your screenshot and edits will be deleted permanently.",
                                 titles: ["Keep Editing", "Discard"],
-                                primary: 0, cancel: 0).runModal()
+                                primary: 0, cancel: 0,
+                                icon: "trash.fill", destructive: [1]).runModal()
         if choice == 1 { close() }
     }
     private func close() { colorPicker?.close(); bgColorPicker?.close(); window.close() }

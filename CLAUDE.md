@@ -47,6 +47,9 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
 - `BrandAlert.swift` — mesoneer-styled modal alert (the brand counterpart to
   `NSAlert`): About-style panel chrome + brand buttons, run modally and returning the
   clicked button index; used by `Updater` for the update / up-to-date / error dialogs.
+- `BrandCursor.swift` — mesoneer-styled pointer cursors built from SF Symbols (brand-
+  purple glyph + soft white halo, no background chip); shared by the capture overlay's
+  camera/video cursors and the editor's per-tool cursors.
 - `Theme.swift` — brand palette + fonts; the single styling source.
 - `Logo.swift` — the "m." logo / menu-bar glyph, drawn in code.
 - `ScreenshotController.swift` — selection-overlay windows; grabs the rect
@@ -57,12 +60,24 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
   silently producing nothing.
 - `Permissions.swift` — `ScreenRecordingPermission`: `CGPreflightScreenCaptureAccess`
   check + the guidance alert / System Settings deep link when Screen Recording is off.
-- `SelectionOverlay.swift` — the dim drag-to-select overlay; **Space** toggles
-  Region ↔ Screen mode; draws the cutout, size readout, and mode hint.
+- `SelectionOverlay.swift` — the dim drag-to-select overlay; **Space** cycles
+  Region → Window → Screen mode; draws the cutout, size readout, mode hint, and a
+  lavender hover tint over the Window/Screen capture target. An `OverlayCoordinator`
+  is shared across every display's overlay so mode-cycling and capture work on any
+  connected screen, not just the one under the initial cursor. Window mode
+  hover-highlights the window under the pointer (via `WindowList`) and captures it on
+  mouse-up (release) over it; the completion reports either a rect or a `CGWindowID`.
+  Cursors are mesoneer-styled (`BrandCursor`) — camera for screenshots, video for
+  recording.
+- `WindowList.swift` — synchronous on-screen window enumeration + hit-testing
+  (`CGWindowListCopyWindowInfo`) that drives the overlay's window-pick mode, plus the
+  CoreGraphics↔AppKit global-coordinate flip helpers shared by the capture controllers.
 - `VideoRecordController.swift` — the screen-recording flow (macOS 14+): reuses the
-  region overlay, then drives `VideoRecordSession`, the floating `VideoRecordBar`, and a
-  1 Hz update tick; requests mic permission first when the audio source needs it.
-- `VideoRecordSession.swift` — records the region via ScreenCaptureKit (`SCStream`),
+  selection overlay (region / window / screen), then drives `VideoRecordSession`, the
+  floating `VideoRecordBar`, and a 1 Hz update tick; requests mic permission first when
+  the audio source needs it.
+- `VideoRecordSession.swift` — records a `Target` (display region or a single window)
+  via ScreenCaptureKit (`SCStream`),
   encoding HEVC video + AAC audio into an `.mp4` with `AVAssetWriter` (PTS-normalized on
   a serial `writeQueue`).
 - `VideoRecordBar.swift` — the floating recording HUD (live timer, size estimate, quality
@@ -146,6 +161,13 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
   ⌘C flattens and writes to the pasteboard.
 - Global hotkeys use Carbon `RegisterEventHotKey` (`HotKey.swift`) — no Accessibility
   permission needed.
+- **Overlay click-through on transparent holes.** The selection overlay is a
+  non-opaque window, and a non-opaque `NSWindow` passes mouse clicks straight
+  *through* any fully-transparent (alpha 0) pixels to the app underneath — keyboard
+  and `.activeAlways` tracking (hover) still work, so it looks interactive while
+  clicks silently hit the app below. Window/Screen modes therefore punch their bright
+  "hole" with a hair of opacity (`punchHole`, alpha 0.02) instead of a true `.clear`,
+  so the window still hit-tests the click. Don't restore a fully-clear cutout.
 
 ## Conventions
 

@@ -43,7 +43,17 @@ final class BrandPopUpButton: NSPopUpButton {
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
-    override func resetCursorRects() { addCursorRect(bounds, cursor: .pointingHand) }
+    /// `NSControl.isEnabled` has no built-in effect here since `mouseDown` is fully
+    /// overridden below — dim the whole control (title, bezel, chevron together) and
+    /// block interaction explicitly.
+    override var isEnabled: Bool {
+        didSet { alphaValue = isEnabled ? 1 : 0.4 }
+    }
+
+    override func resetCursorRects() {
+        guard isEnabled else { return }
+        addCursorRect(bounds, cursor: .pointingHand)
+    }
 
     /// Match the height of the brand text fields/checkboxes around it.
     override var intrinsicContentSize: NSSize {
@@ -64,7 +74,7 @@ final class BrandPopUpButton: NSPopUpButton {
     override func selectItem(withTitle title: String) { super.selectItem(withTitle: title); refreshTitle() }
 
     override func mouseDown(with event: NSEvent) {
-        guard list == nil else { return }
+        guard isEnabled, list == nil else { return }
         let l = BrandPopUpList(button: self,
                                onSelect: { [weak self] idx in
                                    guard let self else { return }

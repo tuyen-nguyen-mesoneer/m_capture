@@ -413,13 +413,13 @@
       <div class="card">
         <div class="ic"><svg viewBox="0 0 24 24"><path d="M3 8V6a3 3 0 0 1 3-3h2M16 3h2a3 3 0 0 1 3 3v2M21 16v2a3 3 0 0 1-3 3h-2M8 21H6a3 3 0 0 1-3-3v-2"/><rect x="9" y="9" width="6" height="6" rx="1"/></svg></div>
         <h3 data-i18n="feat.7.h">Instant capture</h3>
-        <p data-i18n="feat.7.p">Drag any region with a live size readout, or tap Space for the whole screen — fired by a global hotkey and fully multi-monitor aware.</p>
+        <p data-i18n="feat.7.p">Drag any region with a live size readout, or press Space to grab a whole window or the entire screen — fired by a global hotkey and fully multi-monitor aware.</p>
       </div>
 
       <div class="card">
         <div class="ic"><svg viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4"/><circle cx="12" cy="10.5" r="2.6"/></svg></div>
         <h3 data-i18n="feat.8.h">Screen recording</h3>
-        <p data-i18n="feat.8.p">Press a hotkey, drag a region, and record it straight to an MP4 — with a floating timer, pause/stop, and optional system or microphone audio.</p>
+        <p data-i18n="feat.8.p">Press a hotkey, then record a region, a single window, or the whole screen straight to an MP4 — with a floating timer, pause/stop, and optional system or microphone audio.</p>
       </div>
 
       <div class="card">
@@ -613,6 +613,18 @@
       <h2 data-i18n="rel.h2">Release notes</h2>
     </div>
     <div class="releases">
+
+      <div class="release">
+        <span class="date" data-i18n="rel.8.date">Jul 10, 2026</span>
+        <span class="ver">v1.3.0</span>
+        <div>
+          <p class="note" data-i18n="rel.8.note">Quick window &amp; screen capture — press Space to grab a whole<br>window or the entire screen, for both screenshots and recordings.</p>
+          <a class="changelog" href="https://github.com/tuyen-nguyen-mesoneer/m_capture/releases/tag/1.3.0">
+            <span data-i18n="rel.changelog">See full changelog</span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+          </a>
+        </div>
+      </div>
 
       <div class="release">
         <span class="date" data-i18n="rel.7.date">Jul 8, 2026</span>
@@ -820,9 +832,9 @@
       "feat.6.h": "Rebindable hotkeys",
       "feat.6.p": "Global shortcuts for screenshot and record, fully rebindable in Settings. Choose your save folder, format, quality and auto-copy.",
       "feat.7.h": "Instant capture",
-      "feat.7.p": "Drag any region with a live size readout, or tap Space for the whole screen — fired by a global hotkey and fully multi-monitor aware.",
+      "feat.7.p": "Drag any region with a live size readout, or press Space to grab a whole window or the entire screen — fired by a global hotkey and fully multi-monitor aware.",
       "feat.8.h": "Screen recording",
-      "feat.8.p": "Press a hotkey, drag a region, and record it straight to an MP4 — with a floating timer, pause/stop, and optional system or microphone audio.",
+      "feat.8.p": "Press a hotkey, then record a region, a single window, or the whole screen straight to an MP4 — with a floating timer, pause/stop, and optional system or microphone audio.",
       "feat.9.h": "Private & lightweight",
       "feat.9.p": "No accounts, no cloud, no telemetry — every capture stays on your Mac. Built in Swift with zero dependencies, quietly in the menu bar.",
       "how.eyebrow": "How it works",
@@ -858,6 +870,8 @@
       "rel.6.note": "Faster updates — m_capture now checks for a new version at<br>every launch, so fixes reach you sooner.",
       "rel.7.date": "Jul 8, 2026",
       "rel.7.note": "Sharper region captures — screenshots and recordings from a<br>dragged selection are now pixel-aligned instead of soft.",
+      "rel.8.date": "Jul 10, 2026",
+      "rel.8.note": "Quick window &amp; screen capture — press Space to grab a whole<br>window or the entire screen, for both screenshots and recordings.",
       "idea.eyebrow": "Feedback",
       "idea.h2": "Got an idea for m_capture?",
       "idea.p": "Missing a tool, a shortcut, an export format? Send it our way — every suggestion is read.",
@@ -925,9 +939,9 @@
       "feat.6.h": "Frei belegbare Hotkeys",
       "feat.6.p": "Globale Shortcuts für Screenshot und Aufnahme, in den Einstellungen frei belegbar. Wähl Speicherort, Format, Qualität und Auto-Kopie.",
       "feat.7.h": "Sofort aufnehmen",
-      "feat.7.p": "Zieh einen Bereich mit Live-Größenanzeige auf oder tipp Space für den ganzen Bildschirm — per globalem Hotkey und voll Multi-Monitor-fähig.",
+      "feat.7.p": "Zieh einen Bereich mit Live-Größenanzeige auf oder drück Space für ein ganzes Fenster oder den ganzen Bildschirm — per globalem Hotkey und voll Multi-Monitor-fähig.",
       "feat.8.h": "Bildschirmaufnahme",
-      "feat.8.p": "Hotkey drücken, einen Bereich ziehen und ihn direkt als MP4 aufnehmen — mit schwebendem Timer, Pause/Stopp und optional System- oder Mikrofon-Audio.",
+      "feat.8.p": "Hotkey drücken und dann einen Bereich, ein einzelnes Fenster oder den ganzen Bildschirm direkt als MP4 aufnehmen — mit schwebendem Timer, Pause/Stopp und optional System- oder Mikrofon-Audio.",
       "feat.9.h": "Privat & schlank",
       "feat.9.p": "Kein Konto, keine Cloud, keine Telemetrie — alles bleibt auf deinem Mac. In Swift gebaut, ohne Abhängigkeiten.",
       "how.eyebrow": "So funktioniert's",
@@ -963,6 +977,8 @@
       "rel.6.note": "Schnellere Updates — m_capture sucht jetzt bei jedem Start<br>nach einer neuen Version, damit Fixes schneller ankommen.",
       "rel.7.date": "8. Juli 2026",
       "rel.7.note": "Schärfere Bereichsaufnahmen — Screenshots und Aufnahmen aus<br>einer gezogenen Auswahl sind jetzt pixelgenau statt unscharf.",
+      "rel.8.date": "10. Juli 2026",
+      "rel.8.note": "Schnelle Fenster- &amp; Bildschirmaufnahme — mit Space ein ganzes<br>Fenster oder den ganzen Bildschirm greifen, für Screenshots und Videos.",
       "idea.eyebrow": "Feedback",
       "idea.h2": "Eine Idee für m_capture?",
       "idea.p": "Fehlt ein Werkzeug, ein Tastaturkürzel, ein Exportformat? Schick es uns — jeder Vorschlag wird gelesen.",

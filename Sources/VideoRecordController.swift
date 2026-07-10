@@ -41,14 +41,24 @@ final class VideoRecordController {
         // full-screen overlay.
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
+        let coordinator = OverlayCoordinator()
         for screen in NSScreen.screens {
-            let win = OverlayWindow(screen: screen, allowsWindowMode: false, allowsFullScreenMode: true)
+            let win = OverlayWindow(screen: screen, coordinator: coordinator,
+                                    allowsWindowMode: true, allowsFullScreenMode: true, recording: true)
             win.onComplete = { [weak self] rect in
                 let global = CGRect(x: screen.frame.minX + rect.minX,
                                     y: screen.frame.minY + rect.minY,
                                     width: rect.width, height: rect.height)
                 self?.dismissOverlays()
-                self?.requestMicThenStart(region: global, screen: screen)
+                self?.requestMicThenStart(target: .region(rect: global, screen: screen), barScreen: screen)
+            }
+            win.onCompleteScreen = { [weak self] in
+                self?.dismissOverlays()
+                self?.requestMicThenStart(target: .region(rect: screen.frame, screen: screen), barScreen: screen)
+            }
+            win.onCompleteWindow = { [weak self] windowID in
+                self?.dismissOverlays()
+                self?.requestMicThenStart(target: .window(windowID), barScreen: Self.screen(forWindow: windowID))
             }
             win.onCancel = { [weak self] in
                 self?.dismissOverlays()
@@ -69,6 +79,9 @@ final class VideoRecordController {
     private func dismissOverlays() {
         overlays.forEach { $0.orderOut(nil) }
         overlays.removeAll()
+        // Reset the pointer to the default arrow so the overlay's custom capture cursor
+        // isn't left showing (and isn't baked into the first recorded frames).
+        NSCursor.arrow.set()
     }
 
     /// Drop back to a background agent once nothing on screen needs the Dock
@@ -78,9 +91,21 @@ final class VideoRecordController {
         if !EditorWindowController.hasOpenWindows { NSApp.setActivationPolicy(.accessory) }
     }
 
+    /// Resolve the screen a picked window mostly lives on, for placing the record bar.
+    /// Uses the synchronous window list (the capture itself re-resolves via SCK).
+    private static func screen(forWindow windowID: CGWindowID) -> NSScreen {
+        let pid = ProcessInfo.processInfo.processIdentifier
+        if let win = WindowList.onScreen(excludingPID: pid).first(where: { $0.id == windowID }) {
+            let appKit = WindowList.appKitRect(fromCG: win.frame)
+            if let s = NSScreen.screens.first(where: { $0.frame.intersects(appKit) }) { return s }
+        }
+        return NSScreen.main ?? NSScreen.screens[0]
+    }
+
     /// If the configured audio source includes the mic, request permission first.
     /// Always bounces back to the main thread before starting the session.
-    private func requestMicThenStart(region: CGRect, screen: NSScreen) {
+    /// `barScreen` is where the floating record bar is placed.
+    private func requestMicThenStart(target: VideoRecordSession.Target, barScreen: NSScreen) {
         let audioSource = Settings.shared.videoAudioSource
         if audioSource.capturesMic {
             AVCaptureDevice.requestAccess(for: .audio) { [weak self] granted in
@@ -97,16 +122,18 @@ final class VideoRecordController {
                         alert.informativeText = "m_capture doesn't have permission to use the microphone. Recording will continue without mic audio."
                         alert.runModal()
                     }
-                    self?.startRecording(region: region, screen: screen, audioSource: effective)
+                    self?.startRecording(target: target, barScreen: barScreen, audioSource: effective)
                 }
             }
         } else {
-            startRecording(region: region, screen: screen, audioSource: audioSource)
+            startRecording(target: target, barScreen: barScreen, audioSource: audioSource)
         }
     }
 
-    private func startRecording(region: CGRect, screen: NSScreen, audioSource: VideoAudioSource) {
-        guard region.width >= 20, region.height >= 20 else { return }
+    private func startRecording(target: VideoRecordSession.Target, barScreen: NSScreen, audioSource: VideoAudioSource) {
+        // Region captures below a usable size are almost always accidental clicks;
+        // window captures have no such floor.
+        if case let .region(rect, _) = target, rect.width < 20 || rect.height < 20 { return }
 
         let qualityLetter: String
         switch Settings.shared.videoQuality {
@@ -117,17 +144,17 @@ final class VideoRecordController {
 
         // Phase 2a — show bar FIRST so its windowNumber is available before SCStream begins.
         let recordBar = VideoRecordBar(quality: qualityLetter)
-        recordBar.show(near: screen)
+        recordBar.show(near: barScreen)
         bar = recordBar
 
         // Phase 2b — compute output URL with a forced .mp4 extension.
         let url = videoURL()
         currentURL = url
 
-        // Phase 2c — create session with the bar excluded from capture.
+        // Phase 2c — create session with the bar excluded from capture. (Window
+        // targets ignore the exclusion list — a window filter never captures the bar.)
         let recordSession = VideoRecordSession(
-            region: region,
-            screen: screen,
+            target: target,
             quality: Settings.shared.videoQuality,
             audioSource: audioSource,
             outputURL: url,

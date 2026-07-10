@@ -16,7 +16,9 @@ final class SettingsWindowController: NSObject {
     private var prefixField: NSTextField!
     private var formatPopup: NSPopUpButton!
     private var paddingPopup: NSPopUpButton!
+    private var paddingRow: NSView!
     private var radiusPopup: NSPopUpButton!
+    private var radiusRow: NSView!
     private var defaultBGPopup: NSPopUpButton!
     private var autoCopyCheck: NSButton!
     private var cursorCheck: NSButton!
@@ -72,7 +74,11 @@ final class SettingsWindowController: NSObject {
         formatPopup = popup(ImageFormat.allCases.map { $0.label }, #selector(formatChanged))
 
         paddingPopup = popup(PaddingSize.allCases.map { $0.label }, #selector(paddingChanged))
+        paddingRow = row("Padding", paddingPopup,
+                         tip: "How much space surrounds the screenshot inside a share-ready background frame. Only applies when a background is selected.")
         radiusPopup = popup(RadiusSize.allCases.map { $0.label }, #selector(radiusChanged))
+        radiusRow = row("Corner radius", radiusPopup,
+                        tip: "How rounded the screenshot's corners are when a background frame is applied (Square = no rounding). Only applies when a background is selected.")
         defaultBGPopup = popup(bgPresets.map { $0.name }, #selector(defaultBGChanged))
         autoCopyCheck = checkbox("Also copy to clipboard when saving", #selector(autoCopyToggled))
 
@@ -96,12 +102,10 @@ final class SettingsWindowController: NSObject {
             saveRow(pathLabel, choose),
             row("Filename prefix", prefixField),
             row("Format", formatPopup),
-            row("Padding", paddingPopup,
-                tip: "How much space surrounds the screenshot inside a share-ready background frame."),
-            row("Corner radius", radiusPopup,
-                tip: "How rounded the screenshot's corners are when a background frame is applied (Square = no rounding)."),
             row("Background", defaultBGPopup,
                 tip: "The background frame pre-selected when the editor opens; you can still change it per capture."),
+            paddingRow,
+            radiusRow,
             checkRow(autoCopyCheck),
             sectionHeader("Video"),
             row("Quality", videoQualityPopup),
@@ -354,6 +358,7 @@ final class SettingsWindowController: NSObject {
         paddingPopup.selectItem(at: PaddingSize.allCases.firstIndex(of: s.paddingSize) ?? 1)
         radiusPopup.selectItem(at: RadiusSize.allCases.firstIndex(of: s.radiusSize) ?? 2)
         defaultBGPopup.selectItem(at: bgPresets.firstIndex { $0.name == s.defaultBackground.name } ?? 0)
+        updateBackgroundDependentRowsEnabled()
         autoCopyCheck.state = s.autoCopyOnSave ? .on : .off
         cursorCheck.state = s.captureCursor ? .on : .off
         soundCheck.state = s.playSound ? .on : .off
@@ -454,6 +459,18 @@ final class SettingsWindowController: NSObject {
 
     @objc private func defaultBGChanged() {
         Settings.shared.defaultBackground = bgPresets[defaultBGPopup.indexOfSelectedItem]
+        updateBackgroundDependentRowsEnabled()
+    }
+
+    /// Padding and corner radius only have an effect when a background frame is
+    /// selected — grey out and disable both rows (and their controls) when the
+    /// default background is "None".
+    private func updateBackgroundDependentRowsEnabled() {
+        let enabled = !bgPresets[defaultBGPopup.indexOfSelectedItem].isNone
+        for (row, popup) in [(paddingRow, paddingPopup), (radiusRow, radiusPopup)] {
+            row?.alphaValue = enabled ? 1 : 0.4
+            popup?.isEnabled = enabled
+        }
     }
 
     @objc private func autoCopyToggled() {
