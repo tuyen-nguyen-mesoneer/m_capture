@@ -52,6 +52,34 @@ final class ScreenshotController {
         }
     }
 
+    /// Grabs the screen under the mouse immediately, with no overlay and no
+    /// capture delay — for a transient UI state (a tooltip, a hover menu) that
+    /// would vanish the moment the user has to drag a selection.
+    func captureQuickScreen() {
+        guard ScreenRecordingPermission.isGranted else {
+            ScreenRecordingPermission.handleDenied()
+            return
+        }
+        let mouse = NSEvent.mouseLocation
+        let screen = NSScreen.screens.first { $0.frame.contains(mouse) }
+            ?? NSScreen.main ?? NSScreen.screens[0]
+        guard let displayID = screen.displayID else { return }
+
+        let sourceRect = CGRect(origin: .zero, size: screen.frame.size)
+        ScreenshotController.playCaptureSoundIfEnabled()
+        nonisolated(unsafe) let deliverScreen = screen
+        Task {
+            let result = await ScreenshotController.captureRegion(
+                displayID: displayID, sourceRect: sourceRect, showsCursor: Settings.shared.captureCursor)
+            await MainActor.run {
+                guard let result else { ScreenshotController.handleEmptyCapture(); return }
+                ScreenshotController.deliver(ScreenshotController.image(from: result.cg),
+                                            selectionRect: deliverScreen.frame, screen: deliverScreen,
+                                            captureScale: result.scale)
+            }
+        }
+    }
+
     /// The system screenshot shutter sound, played when the user enables it
     /// (the in-process capture is otherwise silent).
     private static func playCaptureSoundIfEnabled() {

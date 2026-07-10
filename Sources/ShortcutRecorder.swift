@@ -4,7 +4,7 @@ import AppKit
 import Carbon.HIToolbox
 
 extension Shortcut {
-    /// A human-readable glyph string, e.g. `⌃⇧X`.
+    /// A human-readable glyph string, e.g. `⌃⇧S`.
     var displayString: String { Shortcut.modifierGlyphs(modifiers) + Shortcut.keyName(keyCode) }
 
     /// `⌃⌥⇧⌘` glyphs for a Carbon modifier mask, in the conventional order.
@@ -121,6 +121,7 @@ final class HotKeyField: NSView {
 
     private func startRecording() {
         recording = true
+        HotKey.isSuppressed = true
         window?.makeFirstResponder(self)
         monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .flagsChanged]) { [weak self] ev in
             guard let self, self.recording else { return ev }
@@ -144,8 +145,12 @@ final class HotKeyField: NSView {
     private func stopRecording() {
         if let m = monitor { NSEvent.removeMonitor(m); monitor = nil }
         recording = false
+        HotKey.isSuppressed = false
     }
 
-    deinit { if let m = monitor { NSEvent.removeMonitor(m) } }
+    deinit {
+        if let m = monitor { NSEvent.removeMonitor(m) }
+        if recording { HotKey.isSuppressed = false }
+    }
 }
 

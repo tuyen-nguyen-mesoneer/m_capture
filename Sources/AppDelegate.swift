@@ -82,6 +82,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let s = Settings.shared
         hotKeys.append(HotKey(s.shortcut(.screenshot)) { [weak self] in self?.takeScreenshot() })
         hotKeys.append(HotKey(s.shortcut(.record)) { [weak self] in self?.record() })
+        hotKeys.append(HotKey(s.shortcut(.quickScreen)) { ScreenshotController.shared.captureQuickScreen() })
         buildMenu()
     }
 
