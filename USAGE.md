@@ -26,8 +26,8 @@ also have global hotkeys (`⌃⇧X` / `⌃⇧R`) that fire directly, without ope
 
 | Menu item             | Hotkey | What it does                                                                                                                    |
 |-----------------------|:------:|---------------------------------------------------------------------------------------------------------------------------------|
-| **Screenshot**        | `⌃⇧X`  | Dim the screen, drag to select a region, open the editor.                                                                       |
-| **Record**            | `⌃⇧R`  | Open the native macOS capture toolbar (the ⇧⌘5 launcher).                                                                       |
+| **Screenshot**        | `⌃⇧X`  | Dim the screen; drag a region, or press **Space** to pick a window or the whole screen; open the editor.                        |
+| **Record**            | `⌃⇧R`  | Dim the screen; pick a region, a window, or the whole screen; record it in-app to an MP4.                                       |
 | **Library**           |   —    | Open the save folder in Finder.                                                                                                 |
 | **Settings**          |   —    | Shortcuts, capture delay, save location, format, backgrounds, more.                                                             |
 | **About**             |   —    | Show the About panel (version + license).                                                                                       |
@@ -41,10 +41,14 @@ also have global hotkeys (`⌃⇧X` / `⌃⇧R`) that fire directly, without ope
 
 1. Press `⌃⇧X`. The screen dims and the cursor becomes a crosshair.
 2. **Drag** to select a region. A live cutout shows the area bright with a
-   `width × height` label. Press **Space** to switch to **Screen mode** — the
-   whole screen is framed and a single click captures it (Space again returns to
-   region selection).
-3. Release — the [editor](#the-annotation-editor) opens with your capture.
+   `width × height` label. Press **Space** to cycle modes — the cursor switches to a
+   camera glyph for the other two: **Window** — hover over a window to wash it in a
+   light purple tint so the target is obvious, then release the mouse over it to
+   capture just that window; and **Screen** — the whole display is tinted and a
+   single click captures it. Space again returns to region selection. All three
+   modes work on every connected display, not just the one you started on.
+3. Release — the [editor](#the-annotation-editor) opens with your capture, its
+   cursor switching to match whichever tool is active (pencil by default).
 4. Annotate, then **Copy** (`⌘C`) or **Save** (`⌘S`). `Esc` cancels.
 
 <p align="center">
@@ -61,8 +65,21 @@ filename format, location, image format and auto-copy are all configurable in
 
 ## Recording
 
-**Record** (`⌃⇧R`) opens the built-in macOS capture toolbar (the **⇧⌘5** launcher),
-reopening in its last-used mode. `m_capture` adds no recording UI of its own.
+1. Press `⌃⇧R`. The screen dims — the same overlay as a screenshot, with a video
+   glyph on the cursor in Window/Screen mode so it's clear you're about to record,
+   not just capture a still.
+2. Choose what to record: **drag** a region, or press **Space** to cycle to
+   **Window** (hover a window to tint it, release the mouse over it to record just
+   that window) or **Screen** (the display is tinted; click to record it whole). All
+   three work on any connected display.
+3. Recording starts with a floating bar showing a live timer, the estimated file
+   size, and a quality badge, plus **pause/resume** and **stop** — drag anywhere on
+   the bar's background to move it out of the way (the cursor shows an open hand).
+4. **Stop** finalises the `.mp4` (HEVC video, optional AAC audio) into your save
+   folder and reveals it in Finder.
+
+Quality and the audio source (system, microphone, or both) live in
+**Settings → Capture**.
 
 ---
 

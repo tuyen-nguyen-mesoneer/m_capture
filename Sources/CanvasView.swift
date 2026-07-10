@@ -27,6 +27,7 @@ final class CanvasView: NSView, NSTextViewDelegate {
             if tool != .overlay, editingOverlay != nil { editingOverlay = nil; onOverlaySelected?(nil) }
             if tool != .ruler { measureAxis = .none; measureAnchor = nil }
             if tool != .select { selected = nil; selectDrag = .none }
+            window?.invalidateCursorRects(for: self)
             needsDisplay = true
         }
     }
@@ -188,13 +189,84 @@ final class CanvasView: NSView, NSTextViewDelegate {
         eo.opacity = max(0, min(1, value))
         needsDisplay = true
     }
-    override func resetCursorRects() { addCursorRect(bounds, cursor: .crosshair) }
+    /// The pointer cursor for the current tool — a mesoneer-styled glyph matching the
+    /// active tool (pencil, shapes, text, …) instead of a bare crosshair. `select`
+    /// falls back to the arrow (its hover states are handled in `mouseMoved`).
+    private var toolCursor: NSCursor {
+        guard let name = Self.symbolName(for: tool) else { return .arrow }
+        return Self.brandCursor(named: name, tipHotspot: Self.usesTipHotspot(tool))
+    }
+
+    /// Tools whose "point" is at the glyph's lower-left tip rather than its centre.
+    private static func usesTipHotspot(_ tool: Tool) -> Bool {
+        switch tool {
+        case .pencil, .marker, .eraser, .eyedropper: return true
+        default: return false
+        }
+    }
+
+    /// SF Symbol name representing each tool's cursor — filled variants for clear,
+    /// legible glyphs. `nil` → no glyph (use arrow). Symbols with no filled form keep
+    /// their solid line drawing; unavailable names fall back to the crosshair.
+    private static func symbolName(for tool: Tool) -> String? {
+        switch tool {
+        case .pencil:      return "pencil"
+        case .marker:      return "highlighter"
+        case .line:        return "line.diagonal"
+        case .arrow:       return "arrowshape.right.fill"
+        case .rect, .roundedRect: return "rectangle.fill"
+        case .ellipse:     return "circle.fill"
+        case .triangle:    return "triangle.fill"
+        case .diamond:     return "diamond.fill"
+        case .star:        return "star.fill"
+        case .checkmark:   return "checkmark.circle.fill"
+        case .pentagon:    return "pentagon.fill"
+        case .hexagon:     return "hexagon.fill"
+        case .octagon:     return "octagon.fill"
+        case .text:        return "character.textbox"
+        case .blur:        return "drop.fill"
+        case .counter:     return "number.circle.fill"
+        case .spotlight:   return "flashlight.on.fill"
+        case .eyedropper:  return "eyedropper.full"
+        case .eraser:      return "eraser.fill"
+        case .crop:        return "crop"
+        case .ocr:         return "text.viewfinder"
+        case .zoom:        return "plus.magnifyingglass"
+        case .emoji:       return "face.smiling.inverse"
+        case .overlay:     return "photo.fill"
+        case .ruler:       return "ruler.fill"
+        case .select:      return nil
+        }
+    }
+
+    private static var cursorCache: [String: NSCursor] = [:]
+
+    /// A mesoneer-styled tool cursor: the brand-purple glyph with a soft white halo for
+    /// contrast — no background chip. Cached per glyph.
+    private static func brandCursor(named name: String, tipHotspot: Bool) -> NSCursor {
+        let key = "\(name)#\(tipHotspot)"
+        if let c = cursorCache[key] { return c }
+        guard let cursor = BrandCursor.make(symbol: name, tipHotspot: tipHotspot) else { return .crosshair }
+        cursorCache[key] = cursor
+        return cursor
+    }
+
+    override func resetCursorRects() { addCursorRect(bounds, cursor: toolCursor) }
+
+    /// Assert the tool cursor whenever the pointer is over the canvas — this also
+    /// overrides any capture-overlay cursor (camera/video) that would otherwise linger
+    /// into the freshly opened editor for window/screen captures.
+    override func cursorUpdate(with event: NSEvent) { toolCursor.set() }
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if window != nil { toolCursor.set() }
+    }
 
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
         trackingAreas.forEach(removeTrackingArea)
         addTrackingArea(NSTrackingArea(rect: bounds,
-                                       options: [.mouseMoved, .activeInKeyWindow, .inVisibleRect],
+                                       options: [.mouseMoved, .cursorUpdate, .activeInKeyWindow, .inVisibleRect],
                                        owner: self, userInfo: nil))
     }
     override func mouseMoved(with event: NSEvent) {
@@ -234,7 +306,7 @@ final class CanvasView: NSView, NSTextViewDelegate {
             (annotations.contains { $0.hit(p) } ? NSCursor.openHand : NSCursor.arrow).set()
             return
         }
-        NSCursor.crosshair.set()
+        toolCursor.set()
     }
 
     override func keyDown(with event: NSEvent) {

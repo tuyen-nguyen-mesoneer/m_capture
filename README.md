@@ -27,9 +27,9 @@ on-device, with no subscriptions, cloud services, or accounts.
 
 **📸 Capture**
 - **Global hotkeys** — `⌃⇧X` for a screenshot, `⌃⇧R` to record; both fully rebindable.
-- **Region or full screen** — drag to select a region, or press **Space** to capture the whole screen in a single click. Multi-monitor aware.
+- **Region, window, or full screen** — drag to select a region, or press **Space** to grab a whole window (hover to wash it in a tint, release the mouse over it to capture) or the entire screen in a single click. Fully multi-monitor aware — every mode works on any connected display.
 - **Self-timer** — a 3, 5, or 10-second delay with a menu-bar countdown, plus an optional mouse cursor and shutter sound.
-- **Recording** — drag a region and record it in-app to an MP4 (HEVC), with a floating timer/size bar and pause/stop; optionally mixes in system and/or microphone audio.
+- **Recording** — record a region, a single window, or the whole screen in-app to an MP4 (HEVC), with a floating, draggable timer/size bar and pause/stop; optionally mixes in system and/or microphone audio.
 - **Configurable after-capture action** — open the editor, save directly to disk, or copy to the clipboard.
 - **Launch at login** — start automatically with the system.
 

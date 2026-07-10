@@ -198,12 +198,42 @@ private final class RecordBarWindow: NSWindow {
 /// Square brand card: the shared panel gradient behind the HUD content, no border —
 /// the same chrome as the About / Settings panels and the editor's floating cards.
 /// The window's drop shadow (not an edge stroke) lifts it off the backdrop.
+///
+/// Also lets the whole bar be dragged to reposition it: a borderless window has no
+/// title bar to grab, so a plain background click-drag moves the window (mirrors
+/// `PinnedWindow`'s drag handling). Clicks that land on the Pause/Stop buttons or the
+/// quality badge are unaffected — those subviews still get their own mouse events.
 private final class RecordCardView: NSView {
+    private var dragStartMouse: NSPoint = .zero
+    private var dragStartFrame: NSRect = .zero
+
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         Theme.applyPanelGradient(to: self)
     }
     required init?(coder: NSCoder) { fatalError() }
+
+    /// Open hand while hovering (draggable), closed hand while actually dragging —
+    /// the same convention `PinnedWindow` uses, so a bare borderless HUD still signals
+    /// it can be moved.
+    override func resetCursorRects() { addCursorRect(bounds, cursor: .openHand) }
+
+    override func mouseDown(with event: NSEvent) {
+        dragStartMouse = NSEvent.mouseLocation
+        dragStartFrame = window?.frame ?? .zero
+        NSCursor.closedHand.set()
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        NSCursor.openHand.set()
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        guard let win = window else { return }
+        let now = NSEvent.mouseLocation
+        win.setFrameOrigin(NSPoint(x: dragStartFrame.origin.x + (now.x - dragStartMouse.x),
+                                   y: dragStartFrame.origin.y + (now.y - dragStartMouse.y)))
+    }
 }
 
 // MARK: - Quality badge

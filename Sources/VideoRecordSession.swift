@@ -15,26 +15,32 @@ import ScreenCaptureKit
 @available(macOS 14, *)
 final class VideoRecordSession: NSObject, @unchecked Sendable {
 
+    // MARK: - Target
+
+    /// What the session captures. A display region uses a display filter with a
+    /// `sourceRect`; a window uses a `desktopIndependentWindow` filter that tracks the
+    /// window (and excludes anything occluding it) with no `sourceRect`.
+    enum Target {
+        case region(rect: CGRect, screen: NSScreen)
+        case window(CGWindowID)
+    }
+
     // MARK: - Initialiser
 
     /// - Parameters:
-    ///   - region: Display-local rect in points, top-left origin (SCK convention).
-    ///   - screen: The screen being captured; used for display-local coordinate
-    ///     translation of `region`.
+    ///   - target: The display region or window to capture.
     ///   - quality: HEVC bitrate preset.
     ///   - audioSource: Which audio streams to mix into the output file.
     ///   - outputURL: Destination `.mp4` file path; the file must not already exist.
     ///   - excludedWindowIDs: Window IDs to suppress from the capture (typically
-    ///     the recording bar). Defaults to empty; the caller adds its own windows
-    ///     after they exist.
-    init(region: CGRect,
-         screen: NSScreen,
+    ///     the recording bar). Only applies to region/display capture — a window
+    ///     filter already captures nothing but the target window. Defaults to empty.
+    init(target: Target,
          quality: VideoQuality,
          audioSource: VideoAudioSource,
          outputURL: URL,
          excludedWindowIDs: [CGWindowID] = []) {
-        self.region = region
-        self.screen = screen
+        self.target = target
         self.quality = quality
         self.audioSource = audioSource
         self.outputURL = outputURL
@@ -46,33 +52,50 @@ final class VideoRecordSession: NSObject, @unchecked Sendable {
     /// Configures SCStream and AVAssetWriter, then begins capture.
     /// Throws if Screen Recording permission is denied or writer setup fails.
     func start() async throws {
-        // Build SCContentFilter, excluding caller-supplied window IDs.
         let content = try await SCShareableContent.current
-        guard let scDisplay = content.displays.first(where: { $0.displayID == displayID }) else {
-            throw RecordError.noMatchingDisplay
-        }
-        let excluded = content.windows.filter { excludedWindowIDs.contains(CGWindowID($0.windowID)) }
-        let filter = SCContentFilter(display: scDisplay, excludingWindows: excluded)
 
-        // SCStreamConfiguration — 30 fps, YUV pixels (required by HEVC), display-local sourceRect.
+        // Build the content filter and capture dimensions from the target. Both paths
+        // size the output by `SCContentFilter.pointPixelScale` — ScreenCaptureKit's own
+        // pixels-per-point — so the grab is 1:1 native with no up/down-scaling on any
+        // display (plain 2×, fractional-HiDPI, and 1× externals alike). This is
+        // authoritative, unlike deriving the ratio from `CGDisplayMode`, whose point
+        // dimensions are ambiguous on some external monitors.
+        let filter: SCContentFilter
+        let capturePoints: CGSize   // capture size in points (before the pixel scale)
+
+        switch target {
+        case let .region(region, screen):
+            let displayID = (screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value ?? 0
+            guard let scDisplay = content.displays.first(where: { $0.displayID == displayID }) else {
+                throw RecordError.noMatchingDisplay
+            }
+            let excluded = content.windows.filter { excludedWindowIDs.contains(CGWindowID($0.windowID)) }
+            filter = SCContentFilter(display: scDisplay, excludingWindows: excluded)
+            capturePoints = region.size
+        case let .window(windowID):
+            guard let scWindow = content.windows.first(where: { $0.windowID == windowID }) else {
+                throw RecordError.noMatchingWindow
+            }
+            filter = SCContentFilter(desktopIndependentWindow: scWindow)
+            capturePoints = scWindow.frame.size
+        }
+
+        // SCStreamConfiguration — 30 fps, YUV pixels (required by HEVC).
         let cfg = SCStreamConfiguration()
-        // Record at the display's true pixel density. `SCContentFilter.pointPixelScale`
-        // is ScreenCaptureKit's own pixels-per-point for this display, so sizing the
-        // output by it captures 1:1 with no up/down-scaling — correct on every display
-        // (plain 2×, fractional-HiDPI, and 1× externals alike). This is authoritative,
-        // unlike deriving the ratio from `CGDisplayMode`, whose point dimensions are
-        // ambiguous on some external monitors.
         let scale = CGFloat(filter.pointPixelScale)
-        // sourceRect: display-local, top-left origin (SCK convention — differs from
-        // the primary-height flip used for `screencapture -R`).
-        cfg.sourceRect = CGRect(
-            x: region.minX - screen.frame.minX,
-            y: screen.frame.maxY - region.maxY,
-            width: region.width,
-            height: region.height
-        )
-        let pixelWidth  = Int(region.width  * scale)
-        let pixelHeight = Int(region.height * scale)
+        // A display filter captures the whole display, so the region is carved out with
+        // `sourceRect` (display-local, top-left origin — the SCK convention). A window
+        // filter already captures nothing but the window, so no sourceRect is set.
+        if case let .region(region, screen) = target {
+            cfg.sourceRect = CGRect(
+                x: region.minX - screen.frame.minX,
+                y: screen.frame.maxY - region.maxY,
+                width: region.width,
+                height: region.height
+            )
+        }
+        let pixelWidth  = Int(capturePoints.width  * scale)
+        let pixelHeight = Int(capturePoints.height * scale)
         cfg.width  = pixelWidth
         cfg.height = pixelHeight
         cfg.minimumFrameInterval = CMTime(value: 1, timescale: 30)
@@ -85,7 +108,7 @@ final class VideoRecordSession: NSObject, @unchecked Sendable {
         let writer = try AVAssetWriter(outputURL: outputURL, fileType: .mp4)
 
         // Video input: HEVC with bitrate scaled to the capture resolution.
-        let regionSize = CGSize(width: region.width * scale, height: region.height * scale)
+        let regionSize = CGSize(width: capturePoints.width * scale, height: capturePoints.height * scale)
         let videoSettings: [String: Any] = [
             AVVideoCodecKey: AVVideoCodecType.hevc,
             AVVideoWidthKey:  pixelWidth,
@@ -242,8 +265,7 @@ final class VideoRecordSession: NSObject, @unchecked Sendable {
 
     // MARK: - Private state
 
-    private let region:           CGRect
-    private let screen:           NSScreen
+    private let target:           Target
     private let quality:          VideoQuality
     private let audioSource:      VideoAudioSource
     private let outputURL:        URL
@@ -284,10 +306,6 @@ final class VideoRecordSession: NSObject, @unchecked Sendable {
     private var pausedWallDuration = 0.0
 
     // MARK: - Helpers
-
-    private var displayID: CGDirectDisplayID {
-        (screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value ?? 0
-    }
 
     /// Starts an `AVCaptureSession` for the default microphone and routes its
     /// sample buffers through the write queue into `audioInput`.
@@ -441,6 +459,7 @@ final class VideoRecordSession: NSObject, @unchecked Sendable {
 
     enum RecordError: Error {
         case noMatchingDisplay
+        case noMatchingWindow
         case writerFailed
     }
 }
