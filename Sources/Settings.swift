@@ -80,20 +80,22 @@ struct Shortcut: Equatable {
 
 /// The capture actions that each have a rebindable global hotkey.
 enum ShortcutAction: String, CaseIterable {
-    case screenshot, record
+    case screenshot, record, quickScreen
 
     var label: String {
         switch self {
-        case .screenshot: return "Screenshot"
-        case .record:     return "Record"
+        case .screenshot:  return "Screenshot"
+        case .record:      return "Record"
+        case .quickScreen: return "Quick Screen"
         }
     }
 
     var defaultShortcut: Shortcut {
         let cs = UInt32(controlKey | shiftKey)
         switch self {
-        case .screenshot: return Shortcut(keyCode: UInt32(kVK_ANSI_X), modifiers: cs)
-        case .record:     return Shortcut(keyCode: UInt32(kVK_ANSI_R), modifiers: cs)
+        case .screenshot:  return Shortcut(keyCode: UInt32(kVK_ANSI_S), modifiers: cs)
+        case .record:      return Shortcut(keyCode: UInt32(kVK_ANSI_R), modifiers: cs)
+        case .quickScreen: return Shortcut(keyCode: UInt32(kVK_ANSI_Q), modifiers: cs)
         }
     }
 

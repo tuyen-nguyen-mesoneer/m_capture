@@ -16,7 +16,7 @@ see the [README](README.md).
 ## The menu
 
 Click the **m.** menu-bar icon to open the menu. **Screenshot** and **Record**
-also have global hotkeys (`⌃⇧X` / `⌃⇧R`) that fire directly, without opening the menu.
+also have global hotkeys (`⌃⇧S` / `⌃⇧R`) that fire directly, without opening the menu.
 
 <p align="center">
   <img src="docs/assets/menu.png" alt="The m_capture menu-bar dropdown with Screenshot, Record, Library, Settings, About and Quit" height="300">
@@ -26,7 +26,7 @@ also have global hotkeys (`⌃⇧X` / `⌃⇧R`) that fire directly, without ope
 
 | Menu item             | Hotkey | What it does                                                                                                                    |
 |-----------------------|:------:|---------------------------------------------------------------------------------------------------------------------------------|
-| **Screenshot**        | `⌃⇧X`  | Dim the screen; drag a region, or press **Space** to pick a window or the whole screen; open the editor.                        |
+| **Screenshot**        | `⌃⇧S`  | Dim the screen; drag a region, or press **Space** to pick a window or the whole screen; open the editor.                        |
 | **Record**            | `⌃⇧R`  | Dim the screen; pick a region, a window, or the whole screen; record it in-app to an MP4.                                       |
 | **Library**           |   —    | Open the save folder in Finder.                                                                                                 |
 | **Settings**          |   —    | Shortcuts, capture delay, save location, format, backgrounds, more.                                                             |
@@ -39,7 +39,7 @@ also have global hotkeys (`⌃⇧X` / `⌃⇧R`) that fire directly, without ope
 
 ## Taking a screenshot
 
-1. Press `⌃⇧X`. The screen dims and the cursor becomes a crosshair.
+1. Press `⌃⇧S`. The screen dims and the cursor becomes a crosshair.
 2. **Drag** to select a region. A live cutout shows the area bright with a
    `width × height` label. Press **Space** to cycle modes — the cursor switches to a
    camera glyph for the other two: **Window** — hover over a window to wash it in a

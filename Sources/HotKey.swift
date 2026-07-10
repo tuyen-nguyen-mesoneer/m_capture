@@ -13,6 +13,11 @@ final class HotKey {
     private static var registry: [UInt32: HotKey] = [:]
     private static var handlerInstalled = false
 
+    /// While `true`, registered hotkeys still fire their Carbon event but skip
+    /// the handler — set during shortcut recording in Settings so pressing the
+    /// combo you're capturing doesn't also trigger a screenshot/recording.
+    static var isSuppressed = false
+
     init(keyCode: UInt32, modifiers: UInt32, handler: @escaping () -> Void) {
         self.handler = handler
         HotKey.counter += 1
@@ -47,7 +52,7 @@ final class HotKey {
             GetEventParameter(event, EventParamName(kEventParamDirectObject),
                               EventParamType(typeEventHotKeyID), nil,
                               MemoryLayout<EventHotKeyID>.size, nil, &hkID)
-            if let hk = HotKey.registry[hkID.id] {
+            if let hk = HotKey.registry[hkID.id], !HotKey.isSuppressed {
                 DispatchQueue.main.async { hk.handler() }
             }
             return noErr

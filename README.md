@@ -26,8 +26,9 @@ A complete screenshot workflow — capture, annotate, and share — that runs en
 on-device, with no subscriptions, cloud services, or accounts.
 
 **📸 Capture**
-- **Global hotkeys** — `⌃⇧X` for a screenshot, `⌃⇧R` to record; both fully rebindable.
+- **Global hotkeys** — `⌃⇧S` for a screenshot, `⌃⇧R` to record, `⌃⇧Q` for Quick Screen; all fully rebindable.
 - **Region, window, or full screen** — drag to select a region, or press **Space** to grab a whole window (hover to wash it in a tint, release the mouse over it to capture) or the entire screen in a single click. Fully multi-monitor aware — every mode works on any connected display.
+- **Quick Screen** (`⌃⇧Q`) — grabs the screen under your cursor the instant you press the hotkey, with no selection overlay in between — for a hover state, tooltip, or menu that would vanish once you start dragging a selection.
 - **Self-timer** — a 3, 5, or 10-second delay with a menu-bar countdown, plus an optional mouse cursor and shutter sound.
 - **Recording** — record a region, a single window, or the whole screen in-app to an MP4 (HEVC), with a floating, draggable timer/size bar and pause/stop; optionally mixes in system and/or microphone audio.
 - **Configurable after-capture action** — open the editor, save directly to disk, or copy to the clipboard.

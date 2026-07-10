@@ -24,12 +24,14 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
 
 ## How it works
 
-- **Screenshot** (⌃⇧X): a dim selection overlay → drag a region (or **Space** →
+- **Screenshot** (⌃⇧S): a dim selection overlay → drag a region (or **Space** →
   whole-screen mode → click) → an in-place annotation editor opens over the dimmed screen.
 - **Record** (⌃⇧R): drag a region → record it in-process via ScreenCaptureKit
   (`SCStream`), encoding HEVC video + AAC audio into an `.mp4`, with a floating control
   bar (live timer, size estimate, quality badge, pause/stop). Quality and audio source
   (system / mic / both) live in Settings.
+- **Quick Screen** (⌃⇧Q): captures the screen under the mouse instantly — no overlay,
+  no delay — for a hover state or tooltip that a drag-to-select would lose.
 - Hotkeys are rebindable defaults (**Settings → Shortcuts**). Captures save to the
   configured folder (default Desktop) and copy to the clipboard; format, location
   and auto-copy live in Settings.
@@ -57,7 +59,9 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
   `deliver(_:)` routes the result per `CaptureBehavior` (editor / save / clipboard).
   Multi-monitor coordinate math lives in `finish`. Gated on
   `ScreenRecordingPermission` so a denied grant guides the user instead of
-  silently producing nothing.
+  silently producing nothing. `captureQuickScreen()` is the Quick Screen path —
+  skips the overlay and delay entirely, grabbing the screen under the mouse
+  straight away.
 - `Permissions.swift` — `ScreenRecordingPermission`: `CGPreflightScreenCaptureAccess`
   check + the guidance alert / System Settings deep link when Screen Recording is off.
 - `SelectionOverlay.swift` — the dim drag-to-select overlay; **Space** cycles
