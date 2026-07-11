@@ -85,12 +85,17 @@ find_identity() {
 
 SIGN_ID="-"
 if [ "$RUN" = "1" ]; then
-    # Dev rebuild — prefer the local convenience cert, else ad-hoc.
-    if [ -n "$(find_identity 'm_capture-dev')" ]; then
+    # Dev rebuild — prefer the shared release identity (if imported locally), so the
+    # Screen Recording grant matches the shipped app too; else the local dev
+    # convenience cert; else ad-hoc.
+    if [ -n "$(find_identity 'm_capture-release')" ]; then
+        SIGN_ID="m_capture-release"
+        echo "    release identity 'm_capture-release' — your local Screen Recording grant persists"
+    elif [ -n "$(find_identity 'm_capture-dev')" ]; then
         SIGN_ID="m_capture-dev"
         echo "    dev identity 'm_capture-dev' — your local Screen Recording grant persists"
     else
-        echo "    ad-hoc (create an 'm_capture-dev' cert to stop re-granting on rebuild)"
+        echo "    ad-hoc (create an 'm_capture-dev' cert, or import 'm_capture-release', to stop re-granting on rebuild)"
     fi
 else
     # Release build (DMG) — require the shared release identity so users keep their grant.

@@ -18,9 +18,12 @@ DMG. No Xcode/SPM project.
 - **Faster development loop**
   - `./build.sh --run` — rebuild, quit, and relaunch in place (skips the DMG).
   - **Keep the Screen Recording grant across rebuilds:** ad-hoc signing resets the
-    grant every build. Create a self-signed **Code Signing** cert named **`m_capture-dev`** in
-    Keychain Access (*Self Signed Root*); `./build.sh --run` then signs with it. It's local and
-    per-developer, separate from the shared release identity (see *Releasing*).
+    grant every build. `./build.sh --run` signs with, in order of preference: the shared
+    **`m_capture-release`** identity if you have it imported locally (e.g. as the release
+    admin — see *Releasing*) — this also matches the grant of any installed release build;
+    otherwise a self-signed **Code Signing** cert named **`m_capture-dev`** you create yourself
+    in Keychain Access (*Self Signed Root*), local and per-developer; otherwise ad-hoc (grant
+    resets every build).
   - `./build.sh && open build/m_capture.app --args --settings-demo` — opens the
     Settings panel at launch to iterate on it.
 
