@@ -48,21 +48,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func statusClicked() {
+        // Rebuilt on every open (not just at launch/hotkey-rebind) so the
+        // Screenshot/Record rows reflect whether the editor is open right now.
+        buildMenu()
         if let button = statusItem.button { menu.toggle(from: button) }
     }
 
     /// Build the menu-bar menu, showing each action's current hotkey glyphs.
+    /// Screenshot/Record are disabled while the annotation editor is open — both
+    /// already no-op in that state (see `ScreenshotController.isBusy` /
+    /// `VideoRecordController.begin()`); this just makes that visible.
     private func buildMenu() {
         let s = Settings.shared
+        let editorOpen = EditorWindowController.hasOpenWindows
         var entries: [MenuEntry] = [
             .header("m_capture", url: "https://github.com/tuyen-nguyen-mesoneer/m_capture"),
             .separator,
             .item(title: "Screenshot", symbol: "camera.viewfinder",
-                  shortcut: s.shortcut(.screenshot).displayString) { [weak self] in self?.takeScreenshot() },
+                  shortcut: s.shortcut(.screenshot).displayString,
+                  enabled: !editorOpen) { [weak self] in self?.takeScreenshot() },
         ]
         entries.append(contentsOf: [
             .item(title: "Record Video", symbol: "record.circle",
-                  shortcut: s.shortcut(.record).displayString) { [weak self] in self?.record() },
+                  shortcut: s.shortcut(.record).displayString,
+                  enabled: !editorOpen) { [weak self] in self?.record() },
             .item(title: "Library", symbol: "folder", shortcut: nil) { [weak self] in self?.openLibrary() },
             .item(title: "Settings", symbol: "gearshape", shortcut: nil) { [weak self] in self?.settings() },
             .separator,

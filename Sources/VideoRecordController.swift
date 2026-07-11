@@ -28,9 +28,12 @@ final class VideoRecordController {
     var isRecording: Bool { session != nil }
 
     /// Begin a new recording: show the selection overlay on every screen.
-    /// No-op if a recording is already in progress.
+    /// No-op if a recording is already in progress, or the annotation editor
+    /// is open (its full-screen dim backdrop and the recording overlay would
+    /// otherwise fight for the same screen).
     func begin() {
         guard session == nil else { return }
+        guard !EditorWindowController.hasOpenWindows else { return }
         guard ScreenRecordingPermission.isGranted else {
             ScreenRecordingPermission.handleDenied()
             return
