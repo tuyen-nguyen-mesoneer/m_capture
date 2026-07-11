@@ -22,6 +22,11 @@ final class VideoRecordController {
 
     // MARK: - Public
 
+    /// Whether a recording is in progress (or paused mid-recording). Callers that need
+    /// to avoid interrupting an in-flight capture (e.g. the updater's auto-relaunch)
+    /// check this first.
+    var isRecording: Bool { session != nil }
+
     /// Begin a new recording: show the selection overlay on every screen.
     /// No-op if a recording is already in progress.
     func begin() {

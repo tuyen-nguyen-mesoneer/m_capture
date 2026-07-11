@@ -486,9 +486,17 @@ final class EditorWindowController: NSObject {
             (CGPoint(x: sel.minX - g - w, y: cy),   sel.minX - g - w - m),
             (CGPoint(x: sel.maxX + g, y: cy),       cs.width - (sel.maxX + g + w) - m),
         ]
-        let best = candidates.max { $0.1 < $1.1 }!.0
-        let fx = min(max(m, best.x), cs.width - w - m)
-        let fy = min(max(m, best.y), cs.height - h - m)
+        let best = candidates.max { $0.1 < $1.1 }!
+        // A selection spanning the whole screen (e.g. Quick Screen) leaves no side
+        // with real room — every candidate is a negative-margin worst-fit clamped to
+        // an edge. Center the panel instead of pinning it to whichever edge lost least.
+        if best.1 < 0 {
+            p.setFrameOrigin(NSPoint(x: (cs.width - w) / 2, y: (cs.height - h) / 2))
+            content.addSubview(p)
+            return
+        }
+        let fx = min(max(m, best.0.x), cs.width - w - m)
+        let fy = min(max(m, best.0.y), cs.height - h - m)
         p.setFrameOrigin(NSPoint(x: fx, y: fy))
         content.addSubview(p)
     }
