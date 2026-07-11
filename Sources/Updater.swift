@@ -5,8 +5,9 @@ import AppKit
 /// Checks GitHub Releases for a newer build — no dependencies, just URLSession +
 /// JSONDecoder — and drives the install. Two entry points:
 ///
-/// - `checkInBackground()` — a silent check on every launch that downloads and swaps
-///   the new build in place with no UI; it takes effect on the next launch.
+/// - `checkInBackground()` — a silent check (on launch, and periodically thereafter via
+///   `scheduleBackgroundChecks`) that downloads and swaps the new build in place with no
+///   UI, then relaunches into it immediately.
 /// - `checkManually()` — the "Check for Updates" item; always reports an outcome and,
 ///   on a newer build, installs it and offers an immediate relaunch.
 ///
@@ -21,6 +22,10 @@ enum Updater {
     private static let repo = "tuyen-nguyen-mesoneer/m_capture"
     private static let releasesURL = URL(string: "https://api.github.com/repos/\(repo)/releases")!
     private static let releasesPage = "https://github.com/\(repo)/releases"
+    private static let checkInterval: TimeInterval = 24 * 60 * 60
+
+    /// Keeps the repeating timer alive; retained for the process lifetime.
+    private static var backgroundTimer: Timer?
 
     /// A build we've already swapped onto disk but haven't relaunched into yet. Kept so
     /// the launch check doesn't see the just-installed release as "newer" and reinstall it.
@@ -86,8 +91,21 @@ enum Updater {
         }
     }
 
-    /// Silent check run on every launch; on a newer build it downloads and swaps with no
-    /// UI. Any failure stays silent — the running version is untouched.
+    /// Checks now, then re-checks silently once a day for as long as the process keeps
+    /// running. m_capture is a menu-bar agent that's rarely quit — a launch-only check
+    /// would only ever fire once per login/reboot, not "once a day" as intended, leaving
+    /// long-running sessions to go weeks without ever picking up a newer release.
+    static func scheduleBackgroundChecks() {
+        checkInBackground()
+        backgroundTimer?.invalidate()
+        backgroundTimer = Timer.scheduledTimer(withTimeInterval: checkInterval, repeats: true) { _ in
+            checkInBackground()
+        }
+    }
+
+    /// Silent check run on every launch (and periodically thereafter, see
+    /// `scheduleBackgroundChecks`); on a newer build it downloads, swaps, and relaunches
+    /// into it with no UI. Any failure stays silent — the running version is untouched.
     static func checkInBackground() {
         fetch { result in
             guard case .success(let release) = result,
@@ -95,7 +113,17 @@ enum Updater {
                   let dmg = dmgURL(for: release)
             else { return }
             UpdateInstaller.install(dmgURL: dmg, expectedVersion: normalize(release.tagName)) { outcome in
-                if case .success = outcome { markInstalled(normalize(release.tagName)) }
+                if case .success = outcome {
+                    markInstalled(normalize(release.tagName))
+                    // The swap is already safely on disk; only relaunch into it now if
+                    // there's nothing to interrupt. Otherwise it's picked up next time
+                    // the app naturally restarts (or the next background check).
+                    var busy = EditorWindowController.hasOpenWindows
+                    if #available(macOS 14, *) {
+                        busy = busy || VideoRecordController.shared.isRecording
+                    }
+                    if !busy { relaunch() }
+                }
             }
         }
     }

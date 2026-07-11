@@ -200,29 +200,40 @@ final class CanvasView: NSView, NSTextViewDelegate {
     /// Tools whose "point" is at the glyph's lower-left tip rather than its centre.
     private static func usesTipHotspot(_ tool: Tool) -> Bool {
         switch tool {
-        case .pencil, .marker, .eraser, .eyedropper: return true
+        case .pencil, .marker, .eraser, .eyedropper, .arrow: return true
         default: return false
         }
     }
 
-    /// SF Symbol name representing each tool's cursor — filled variants for clear,
-    /// legible glyphs. `nil` → no glyph (use arrow). Symbols with no filled form keep
-    /// their solid line drawing; unavailable names fall back to the crosshair.
+    /// The Shapes tool group — a plain click (no drag) with one of these should still
+    /// place a visible, default-sized shape rather than a degenerate zero-size one.
+    private static func isShapeTool(_ tool: Tool) -> Bool {
+        switch tool {
+        case .rect, .roundedRect, .ellipse, .triangle, .diamond, .star,
+             .checkmark, .pentagon, .hexagon, .octagon: return true
+        default: return false
+        }
+    }
+
+    /// SF Symbol name representing each tool's cursor. Shape-family tools use the
+    /// outline variant — a filled glyph reads as an indistinguishable purple blob
+    /// at cursor size, where the outline keeps the silhouette recognizable.
+    /// `nil` → no glyph (use arrow). Unavailable names fall back to the crosshair.
     private static func symbolName(for tool: Tool) -> String? {
         switch tool {
         case .pencil:      return "pencil"
         case .marker:      return "highlighter"
         case .line:        return "line.diagonal"
-        case .arrow:       return "arrowshape.right.fill"
-        case .rect, .roundedRect: return "rectangle.fill"
-        case .ellipse:     return "circle.fill"
-        case .triangle:    return "triangle.fill"
-        case .diamond:     return "diamond.fill"
-        case .star:        return "star.fill"
-        case .checkmark:   return "checkmark.circle.fill"
-        case .pentagon:    return "pentagon.fill"
-        case .hexagon:     return "hexagon.fill"
-        case .octagon:     return "octagon.fill"
+        case .arrow:       return "arrow.up.right"
+        case .rect, .roundedRect: return "rectangle"
+        case .ellipse:     return "circle"
+        case .triangle:    return "triangle"
+        case .diamond:     return "diamond"
+        case .star:        return "star"
+        case .checkmark:   return "checkmark"
+        case .pentagon:    return "pentagon"
+        case .hexagon:     return "hexagon"
+        case .octagon:     return "octagon"
         case .text:        return "character.textbox"
         case .blur:        return "drop.fill"
         case .counter:     return "number.circle.fill"
@@ -627,6 +638,23 @@ final class CanvasView: NSView, NSTextViewDelegate {
             ocrRect = nil
             needsDisplay = true
             return
+        }
+        if Self.isShapeTool(tool), let a = live as? TwoPointAnnotation {
+            let minSide = 6 / displayScale
+            if a.rect.width < minSide, a.rect.height < minSide {
+                let side = 90 / displayScale, half = side / 2
+                let center = a.start
+                a.start = CGPoint(x: center.x - half, y: center.y - half)
+                a.end = CGPoint(x: center.x + half, y: center.y + half)
+            }
+        }
+        if tool == .line || tool == .arrow, let a = live as? CurvedAnnotation {
+            let minSide = 6 / displayScale
+            if abs(a.end.x - a.start.x) < minSide, abs(a.end.y - a.start.y) < minSide {
+                let side = 70 / displayScale
+                a.end = CGPoint(x: a.start.x + side, y: a.start.y + side)
+                a.straighten()
+            }
         }
         if let b = live as? BlurAnnotation { b.patch = gaussianBlur(b.rect) }
         if let a = live {
