@@ -4,7 +4,7 @@ import AppKit
 
 enum MenuEntry {
     case header(String, url: String?)
-    case item(title: String, symbol: String?, shortcut: String?, action: () -> Void)
+    case item(title: String, symbol: String?, shortcut: String?, enabled: Bool = true, action: () -> Void)
     case separator
 }
 
@@ -87,9 +87,9 @@ final class BrandMenu: NSObject {
                 line.layer?.backgroundColor = Theme.border.cgColor
                 container.addSubview(line)
                 y += 9
-            case .item(let title, let symbol, let shortcut, let action):
+            case .item(let title, let symbol, let shortcut, let enabled, let action):
                 let row = MenuRowView(width: width - 2 * pad, height: rowH,
-                                      icon: symbol, title: title, shortcut: shortcut) { [weak self] in
+                                      icon: symbol, title: title, shortcut: shortcut, enabled: enabled) { [weak self] in
                     self?.close()
                     DispatchQueue.main.async(execute: action)
                 }
@@ -173,28 +173,34 @@ private final class HeaderView: NSView {
 }
 
 /// A single styled row: [icon] title …… shortcut, with purple hover.
+/// A disabled row shows dimmed, ignores clicks, and never hover-highlights.
 private final class MenuRowView: NSView {
+    private let enabled: Bool
     private let onClick: () -> Void
 
     init(width: CGFloat, height: CGFloat, icon: String?, title: String,
-         shortcut: String?, onClick: @escaping () -> Void) {
+         shortcut: String?, enabled: Bool = true, onClick: @escaping () -> Void) {
+        self.enabled = enabled
         self.onClick = onClick
         super.init(frame: NSRect(x: 0, y: 0, width: width, height: height))
         wantsLayer = true
         layer?.cornerRadius = 7
 
+        let textColor = enabled ? Theme.textPrimary : Theme.textMuted
         var textX: CGFloat = 12
         if let icon, let img = NSImage(systemSymbolName: icon, accessibilityDescription: nil) {
             let iv = NSImageView(frame: NSRect(x: 12, y: (height - 18) / 2, width: 18, height: 18))
             iv.image = img
-            iv.contentTintColor = Theme.textPrimary
+            iv.contentTintColor = textColor
             iv.imageScaling = .scaleProportionallyUpOrDown
+            iv.alphaValue = enabled ? 1 : 0.5
             addSubview(iv)
             textX = 40
         }
 
         let name = NSTextField(labelWithString: title)
-        name.font = Theme.font(13, .medium); name.textColor = Theme.textPrimary
+        name.font = Theme.font(13, .medium); name.textColor = textColor
+        name.alphaValue = enabled ? 1 : 0.5
         name.frame = NSRect(x: textX, y: (height - 18) / 2, width: width - textX - 60, height: 18)
         addSubview(name)
 
@@ -202,15 +208,20 @@ private final class MenuRowView: NSView {
             let key = NSTextField(labelWithString: shortcut)
             key.font = Theme.font(12, .semibold); key.textColor = Theme.textMuted
             key.alignment = .right
+            key.alphaValue = enabled ? 1 : 0.5
             key.frame = NSRect(x: width - 58, y: (height - 16) / 2, width: 46, height: 16)
             addSubview(key)
         }
     }
     required init?(coder: NSCoder) { fatalError() }
 
-    override func resetCursorRects() { addCursorRect(bounds, cursor: .pointingHand) }
+    override func resetCursorRects() {
+        guard enabled else { return }
+        addCursorRect(bounds, cursor: .pointingHand)
+    }
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
+        guard enabled else { return }
         trackingAreas.forEach(removeTrackingArea)
         addTrackingArea(NSTrackingArea(rect: bounds,
                                        options: [.mouseEnteredAndExited, .activeAlways],
@@ -219,6 +230,7 @@ private final class MenuRowView: NSView {
     override func mouseEntered(with event: NSEvent) { layer?.backgroundColor = Theme.accentPurple.cgColor }
     override func mouseExited(with event: NSEvent) { layer?.backgroundColor = NSColor.clear.cgColor }
     override func mouseUp(with event: NSEvent) {
+        guard enabled else { return }
         layer?.backgroundColor = NSColor.clear.cgColor
         onClick()
     }

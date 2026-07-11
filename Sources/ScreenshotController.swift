@@ -10,8 +10,18 @@ final class ScreenshotController {
     static let shared = ScreenshotController()
     private var overlays: [OverlayWindow] = []
 
+    /// True from the moment a capture starts (overlay shown, or a quick-screen
+    /// grab kicked off) until it's fully handed off to `deliver`, plus for as
+    /// long as an editor window from a prior capture is still open. `overlays`
+    /// alone isn't enough: it's cleared by `dismiss()` well before the async
+    /// ScreenCaptureKit grab and `deliver` finish, which left a window where a
+    /// second hotkey press/menu click could start an independent overlay set
+    /// (or a second `EditorWindowController`) while the first was still in flight.
+    private var capturePending = false
+    private var isBusy: Bool { !overlays.isEmpty || capturePending || EditorWindowController.hasOpenWindows }
+
     func begin() {
-        if !overlays.isEmpty { return }
+        if isBusy { return }
         guard ScreenRecordingPermission.isGranted else {
             ScreenRecordingPermission.handleDenied()
             return
@@ -56,6 +66,7 @@ final class ScreenshotController {
     /// capture delay — for a transient UI state (a tooltip, a hover menu) that
     /// would vanish the moment the user has to drag a selection.
     func captureQuickScreen() {
+        if isBusy { return }
         guard ScreenRecordingPermission.isGranted else {
             ScreenRecordingPermission.handleDenied()
             return
@@ -65,6 +76,7 @@ final class ScreenshotController {
             ?? NSScreen.main ?? NSScreen.screens[0]
         guard let displayID = screen.displayID else { return }
 
+        capturePending = true
         let sourceRect = CGRect(origin: .zero, size: screen.frame.size)
         ScreenshotController.playCaptureSoundIfEnabled()
         nonisolated(unsafe) let deliverScreen = screen
@@ -72,6 +84,7 @@ final class ScreenshotController {
             let result = await ScreenshotController.captureRegion(
                 displayID: displayID, sourceRect: sourceRect, showsCursor: Settings.shared.captureCursor)
             await MainActor.run {
+                defer { self.capturePending = false }
                 guard let result else { ScreenshotController.handleEmptyCapture(); return }
                 ScreenshotController.deliver(ScreenshotController.image(from: result.cg),
                                             selectionRect: deliverScreen.frame, screen: deliverScreen,
@@ -217,6 +230,7 @@ final class ScreenshotController {
 
     private func finishWindow(windowID: CGWindowID) {
         dismiss()
+        capturePending = true
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.06) {
             ScreenshotController.playCaptureSoundIfEnabled()
             Task {
@@ -224,6 +238,7 @@ final class ScreenshotController {
                 // capture badge, which would otherwise bake into the shot.
                 let result = await ScreenshotController.captureWindow(windowID: windowID, showsCursor: false)
                 await MainActor.run {
+                    defer { self.capturePending = false }
                     guard let result else { ScreenshotController.handleEmptyCapture(); return }
                     ScreenshotController.deliver(ScreenshotController.image(from: result.cg),
                                                 selectionRect: result.globalRect, screen: result.screen,
@@ -241,6 +256,7 @@ final class ScreenshotController {
         guard global.width >= 3, global.height >= 3 else { return }
         guard let displayID = screen.displayID else { return }
 
+        capturePending = true
         let sourceRect = CGRect(x: viewRect.minX,
                                 y: screen.frame.height - viewRect.maxY,
                                 width: viewRect.width, height: viewRect.height)
@@ -252,6 +268,7 @@ final class ScreenshotController {
                 let result = await ScreenshotController.captureRegion(
                     displayID: displayID, sourceRect: sourceRect, showsCursor: showsCursor)
                 await MainActor.run {
+                    defer { self.capturePending = false }
                     guard let result else { ScreenshotController.handleEmptyCapture(); return }
                     ScreenshotController.deliver(ScreenshotController.image(from: result.cg),
                                                 selectionRect: global, screen: deliverScreen,
