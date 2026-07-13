@@ -42,23 +42,29 @@ func glyph() -> (CGImage, CGFloat)? {
     return (cg, CGFloat(cg.width) / CGFloat(cg.height))
 }
 
-// The rounded gradient tile with the centered "m." glyph, at `px` square.
+// A full-bleed gradient square with the centered "m." glyph, at `px` square — no
+// manual corner rounding. macOS applies its own standard squircle mask to app
+// icons, so a self-rounded tile here would double up into a rounded-square-inside-
+// a-rounded-square with visible background bleeding through the corners. A plain
+// square (matching `Logo.image`, the same brand tile used in the About window and
+// menu bar) lets the system mask do that job, same as every other macOS app icon.
 func render(_ px: Int) -> NSBitmapImageRep {
     let size = CGFloat(px)
     let (rep, ctx) = bitmap(px, px)
     NSGraphicsContext.saveGraphicsState()
     NSGraphicsContext.current = ctx
 
-    let margin = size * 0.06
-    let tile = NSRect(x: margin, y: margin, width: size - 2 * margin, height: size - 2 * margin)
-    let radius = tile.width * 0.225
-    let path = NSBezierPath(roundedRect: tile, xRadius: radius, yRadius: radius)
-    let top = NSColor(srgbRed: 0x53 / 255, green: 0x3a / 255, blue: 0xa3 / 255, alpha: 1)
-    let bottom = NSColor(srgbRed: 0x2a / 255, green: 0x1d / 255, blue: 0x4f / 255, alpha: 1)
-    NSGradient(starting: top, ending: bottom)!.draw(in: path, angle: -90)
+    let tile = NSRect(x: 0, y: 0, width: size, height: size)
+    let path = NSBezierPath(rect: tile)
+    // Same tile colors/angle as `Logo.image` (the brand "m." mark used in the About
+    // window and menu bar) — this script can't import Theme.swift (it's compiled
+    // standalone, see build.sh), so the values are duplicated from Theme.logoTileTop/Bottom.
+    let top = NSColor(srgbRed: 0x41 / 255, green: 0x28 / 255, blue: 0x80 / 255, alpha: 1)
+    let bottom = NSColor(srgbRed: 0x2a / 255, green: 0x20 / 255, blue: 0x48 / 255, alpha: 1)
+    NSGradient(starting: top, ending: bottom)!.draw(in: path, angle: 225)
 
     if let (cg, aspect) = glyph() {
-        let gw = tile.width * 0.6
+        let gw = tile.width * 0.54
         let gh = gw / aspect
         NSImage(cgImage: cg, size: NSSize(width: gw, height: gh))
             .draw(in: NSRect(x: (size - gw) / 2, y: (size - gh) / 2, width: gw, height: gh))
