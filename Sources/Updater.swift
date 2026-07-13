@@ -214,8 +214,8 @@ enum Updater {
     /// as soon as they confirm — a single "OK", not a choice, since the swap already
     /// happened and staying on the old build serves no purpose.
     private static func presentUpdatedAlert(_ version: String) {
-        BrandAlert(title: "You're all set",
-                   message: "m_capture \(version) has been installed.",
+        BrandAlert(title: "Update installed",
+                   message: "We've installed m_capture \(version). Click OK to relaunch and start using it.",
                    titles: ["OK"], primary: 0, cancel: 0).runModal()
         relaunch()
     }
