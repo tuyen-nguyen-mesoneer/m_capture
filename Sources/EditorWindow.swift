@@ -1010,6 +1010,7 @@ final class EditorWindowController: NSObject {
     @objc private func closePressed() { attemptClose() }
 
     private func attemptClose() {
+        guard Settings.shared.confirmDiscard else { close(); return }
         let choice = BrandAlert(title: "Discard capture?",
                                 message: "Your screenshot and edits will be deleted permanently.",
                                 titles: ["Keep Editing", "Discard"],

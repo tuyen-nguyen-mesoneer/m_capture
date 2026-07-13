@@ -274,7 +274,7 @@ final class SelectionView: NSView {
         case .screen: drawScreenMode(ctx)
         }
 
-        drawModePill()
+        drawModeBanner()
     }
 
     /// Clear `r` to a bright "hole" in the dim, but leave a hair of opacity (0.02) so
@@ -354,19 +354,38 @@ final class SelectionView: NSView {
     }
 
     /// A single chip centred in the overlay — used for the "move over a window" hint.
+    /// Sits below the (also centred) mode banner so the two never overlap.
     private func drawCenteredChip(_ text: String) {
         let attrs: [NSAttributedString.Key: Any] = [
             .font: Theme.font(13, .semibold), .foregroundColor: Theme.textPrimary,
         ]
         let ts = text.size(withAttributes: attrs)
         let pad: CGFloat = 8
-        let box = CGRect(x: bounds.midX - (ts.width + pad * 2) / 2, y: bounds.midY - (ts.height + pad) / 2,
-                         width: ts.width + pad * 2, height: ts.height + pad)
+        let bh = ts.height + pad
+        let box = CGRect(x: bounds.midX - (ts.width + pad * 2) / 2, y: bounds.midY - bh / 2 - modeBannerClearance,
+                         width: ts.width + pad * 2, height: bh)
         fillChip(box)
         text.draw(at: CGPoint(x: box.minX + pad, y: box.minY + pad / 2), withAttributes: attrs)
     }
 
-    private func drawModePill() {
+    /// Vertical gap reserved below the centred mode banner for `drawCenteredChip`.
+    private var modeBannerClearance: CGFloat { 56 }
+
+    /// The SF Symbol that best represents each capture mode, shown at the mode
+    /// banner's leading edge.
+    private func symbolName(for mode: CaptureMode) -> String {
+        switch mode {
+        case .region: return "viewfinder"
+        case .window: return "macwindow"
+        case .screen: return "display"
+        }
+    }
+
+    /// The centred mode banner: a lavender-tinted glyph, the mode name in bold white,
+    /// a hairline divider, then a muted "Space to cycle" hint — on a glowing
+    /// brand-gradient rounded rect. The one piece of chrome that's always on screen,
+    /// so it gets the most polish of any overlay chip.
+    private func drawModeBanner() {
         let modeName: String
         switch captureMode {
         case .region: modeName = "Region"
@@ -374,16 +393,82 @@ final class SelectionView: NSView {
         case .screen: modeName = "Screen"
         }
         // Only advertise the Space shortcut when there's more than one mode to cycle.
-        let label = availableModes.count > 1 ? "\(modeName)  (Space to cycle)" : modeName
-        let attrs: [NSAttributedString.Key: Any] = [
-            .font: Theme.font(11, .regular), .foregroundColor: Theme.textPrimary,
+        let showsHint = availableModes.count > 1
+        let nameAttrs: [NSAttributedString.Key: Any] = [
+            .font: Theme.font(19, .bold), .foregroundColor: Theme.textPrimary,
         ]
-        let ts = label.size(withAttributes: attrs)
-        let pad: CGFloat = 6
-        let bw = ts.width + pad * 2, bh = ts.height + pad
-        let box = CGRect(x: (bounds.width - bw) / 2, y: bounds.height - bh - 12, width: bw, height: bh)
-        fillChip(box)
-        label.draw(at: CGPoint(x: box.minX + pad, y: box.minY + pad / 2), withAttributes: attrs)
+        let hintAttrs: [NSAttributedString.Key: Any] = [
+            .font: Theme.font(13, .medium), .foregroundColor: Theme.textSecondary,
+        ]
+        let hintText = "Space to cycle"
+        let nameSize = modeName.size(withAttributes: nameAttrs)
+        let hintSize = showsHint ? hintText.size(withAttributes: hintAttrs) : .zero
+
+        let iconSize: CGFloat = 18
+        let iconGap: CGFloat = 10
+        let dividerGap: CGFloat = 14
+        let padH: CGFloat = 22, padV: CGFloat = 15
+
+        var bw = iconSize + iconGap + nameSize.width + padH * 2
+        if showsHint { bw += dividerGap + 1 + dividerGap + hintSize.width }
+        let bh = max(iconSize, nameSize.height, hintSize.height) + padV
+        let box = CGRect(x: bounds.midX - bw / 2, y: bounds.midY - bh / 2, width: bw, height: bh)
+
+        drawBannerBackground(box)
+
+        var x = box.minX + padH
+        if let icon = tintedSymbol(symbolName(for: captureMode), pointSize: iconSize * 0.78, color: Theme.lavender) {
+            icon.draw(in: CGRect(x: x, y: box.midY - iconSize / 2, width: iconSize, height: iconSize))
+        }
+        x += iconSize + iconGap
+        modeName.draw(at: CGPoint(x: x, y: box.midY - nameSize.height / 2), withAttributes: nameAttrs)
+        x += nameSize.width
+        if showsHint {
+            x += dividerGap
+            Theme.divider.setFill()
+            NSRect(x: x, y: box.midY - 9, width: 1, height: 18).fill()
+            x += 1 + dividerGap
+            hintText.draw(at: CGPoint(x: x, y: box.midY - hintSize.height / 2), withAttributes: hintAttrs)
+        }
+    }
+
+    /// A solid-color copy of an SF Symbol, for drawing brand-tinted glyphs directly
+    /// via CGContext (matches the tinting technique `BrandCursor` uses).
+    private func tintedSymbol(_ name: String, pointSize: CGFloat, color: NSColor) -> NSImage? {
+        let cfg = NSImage.SymbolConfiguration(pointSize: pointSize, weight: .semibold)
+        guard let symbol = NSImage(systemSymbolName: name, accessibilityDescription: nil)?
+                .withSymbolConfiguration(cfg) else { return nil }
+        let glyph = symbol.size
+        let tinted = NSImage(size: glyph)
+        tinted.lockFocus()
+        symbol.draw(in: NSRect(origin: .zero, size: glyph))
+        color.set()
+        NSRect(origin: .zero, size: glyph).fill(using: .sourceAtop)
+        tinted.unlockFocus()
+        return tinted
+    }
+
+    /// A larger-radius, more elevated version of `fillChip` reserved for the mode
+    /// banner: brand gradient fill, soft drop shadow, and a lavender hairline glow.
+    private func drawBannerBackground(_ box: CGRect) {
+        guard let ctx = NSGraphicsContext.current?.cgContext else { return }
+        let path = NSBezierPath(roundedRect: box, xRadius: Theme.radiusMedium, yRadius: Theme.radiusMedium)
+
+        ctx.saveGState()
+        let shadow = NSShadow()
+        shadow.shadowColor = NSColor.black.withAlphaComponent(0.5)
+        shadow.shadowBlurRadius = 20
+        shadow.shadowOffset = CGSize(width: 0, height: -4)
+        shadow.set()
+        Theme.surfaceBase.setFill(); path.fill()
+        ctx.restoreGState()
+
+        if let gradient = NSGradient(colors: [Theme.gradientTop, Theme.surfaceRaised]) {
+            gradient.draw(in: path, angle: 90)
+        }
+        Theme.lavender.withAlphaComponent(0.5).setStroke()
+        path.lineWidth = 1
+        path.stroke()
     }
 
 }
