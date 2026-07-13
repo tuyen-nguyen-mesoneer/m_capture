@@ -20,6 +20,8 @@ final class BrandMenu: NSObject {
     private let entries: [MenuEntry]
     private var window: MenuWindow?
     private var lastClose = Date.distantPast
+    private var globalClickMonitor: Any?
+    private var localClickMonitor: Any?
 
     private let width: CGFloat = 252
     private let pad: CGFloat = 8
@@ -63,6 +65,17 @@ final class BrandMenu: NSObject {
         window = win
         NotificationCenter.default.addObserver(self, selector: #selector(resigned),
                                                name: NSWindow.didResignKeyNotification, object: win)
+        // `didResignKeyNotification` alone misses some outside clicks — e.g. onto
+        // another status-bar item, or a spot that doesn't hand key status to another
+        // window — leaving the menu stuck open. Global/local mouse-down monitors catch
+        // every click outside this window, in other apps and in our own, as a backstop.
+        globalClickMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
+            self?.close()
+        }
+        localClickMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] event in
+            if event.window !== self?.window { self?.close() }
+            return event
+        }
     }
 
     private func makeWindow() -> MenuWindow {
@@ -116,6 +129,8 @@ final class BrandMenu: NSObject {
     private func close() {
         guard let win = window else { return }
         NotificationCenter.default.removeObserver(self, name: NSWindow.didResignKeyNotification, object: win)
+        if let m = globalClickMonitor { NSEvent.removeMonitor(m); globalClickMonitor = nil }
+        if let m = localClickMonitor { NSEvent.removeMonitor(m); localClickMonitor = nil }
         win.orderOut(nil)
         window = nil
         lastClose = Date()
