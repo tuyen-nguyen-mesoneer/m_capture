@@ -9,6 +9,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var countdownActive = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        if terminateIfAlreadyRunning() { return }
         if Relocator.relocateToUserApplicationsIfNeeded() { return }
 
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -92,6 +93,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hotKeys.append(HotKey(s.shortcut(.screenshot)) { [weak self] in self?.takeScreenshot() })
         hotKeys.append(HotKey(s.shortcut(.record)) { [weak self] in self?.record() })
         hotKeys.append(HotKey(s.shortcut(.quickScreen)) { ScreenshotController.shared.captureQuickScreen() })
+        hotKeys.append(HotKey(s.shortcut(.forceQuit)) { [weak self] in self?.forceQuit() })
         buildMenu()
     }
 
@@ -157,6 +159,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc func quit() {
         NSApp.terminate(nil)
+    }
+
+    /// Force Quit: also force-terminates any other m_capture process still
+    /// running (covers the stray-duplicate scenario a stuck quit can leave
+    /// behind), then exits this process directly rather than going through
+    /// `NSApp.terminate` — a harder stop than the regular Quit menu item.
+    @objc func forceQuit() {
+        let bundleID = Bundle.main.bundleIdentifier ?? ""
+        let myPID = ProcessInfo.processInfo.processIdentifier
+        for other in NSRunningApplication.runningApplications(withBundleIdentifier: bundleID)
+        where other.processIdentifier != myPID {
+            other.forceTerminate()
+        }
+        exit(0)
+    }
+
+    /// Refuses a second launch when another m_capture process already owns the bundle
+    /// identifier. Without this, a stray double-launch (a Login Item plus a manual
+    /// open, a Finder relaunch that races an in-flight Relocator/Updater relaunch,
+    /// etc.) leaves two menu-bar icons and two sets of global hotkeys running — and
+    /// quitting one via its menu never touches the other.
+    private func terminateIfAlreadyRunning() -> Bool {
+        let bundleID = Bundle.main.bundleIdentifier ?? ""
+        let myPID = ProcessInfo.processInfo.processIdentifier
+        let others = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID)
+            .filter { $0.processIdentifier != myPID }
+        guard !others.isEmpty else { return false }
+        NSApp.terminate(nil)
+        return true
     }
 
     /// Open the editor on a generated sample image (see `--editor-demo`).
