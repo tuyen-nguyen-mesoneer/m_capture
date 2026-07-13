@@ -182,6 +182,7 @@ final class Settings {
         static let delay = "captureDelay", padding = "paddingSize", defaultBG = "defaultBackground"
         static let radius = "radiusSize"
         static let behavior = "captureBehavior", prefix = "filenamePrefix"
+        static let confirmDiscard = "confirmDiscard"
         static let videoQuality = "videoQuality", videoAudioSource = "videoAudioSource"
     }
 
@@ -207,6 +208,14 @@ final class Settings {
     var autoCopyOnSave: Bool {
         get { d.object(forKey: Key.autoCopy) == nil ? true : d.bool(forKey: Key.autoCopy) }
         set { d.set(newValue, forKey: Key.autoCopy) }
+    }
+
+    /// Show the "Discard capture?" confirmation when closing the editor without
+    /// saving (default on). Unset reads as on; once the user toggles it, their
+    /// choice is respected.
+    var confirmDiscard: Bool {
+        get { d.object(forKey: Key.confirmDiscard) == nil ? true : d.bool(forKey: Key.confirmDiscard) }
+        set { d.set(newValue, forKey: Key.confirmDiscard) }
     }
 
     /// What to do the moment a region/window capture is taken (default: editor).

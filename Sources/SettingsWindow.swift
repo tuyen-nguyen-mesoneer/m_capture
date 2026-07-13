@@ -23,6 +23,7 @@ final class SettingsWindowController: NSObject {
     private var autoCopyCheck: NSButton!
     private var cursorCheck: NSButton!
     private var soundCheck: NSButton!
+    private var confirmDiscardCheck: NSButton!
     private var videoQualityPopup: NSPopUpButton!
     private var videoAudioSourcePopup: NSPopUpButton!
     private var shortcutFields: [HotKeyField] = []
@@ -61,6 +62,7 @@ final class SettingsWindowController: NSObject {
 
         cursorCheck = checkbox("Include the mouse cursor in captures", #selector(cursorToggled))
         soundCheck = checkbox("Play the shutter sound when capturing", #selector(soundToggled))
+        confirmDiscardCheck = checkbox("Ask before discarding a capture", #selector(confirmDiscardToggled))
 
         pathLabel = valueLabel("")
         pathLabel.lineBreakMode = .byTruncatingMiddle
@@ -98,6 +100,7 @@ final class SettingsWindowController: NSObject {
             sectionHeader("Capture"),
             checkRow(cursorCheck),
             checkRow(soundCheck),
+            checkRow(confirmDiscardCheck),
             sectionHeader("Output"),
             saveRow(pathLabel, choose),
             row("Filename prefix", prefixField),
@@ -114,13 +117,13 @@ final class SettingsWindowController: NSObject {
         let stack = NSStackView(views: rows)
         stack.orientation = .vertical
         stack.alignment = .leading
-        stack.spacing = 11
+        stack.spacing = 8
         for (i, view) in rows.enumerated() where view is SectionHeader && i > 0 {
-            stack.setCustomSpacing(22, after: rows[i - 1])
+            stack.setCustomSpacing(16, after: rows[i - 1])
         }
         stack.translatesAutoresizingMaskIntoConstraints = false
         content.addSubview(stack)
-        let topInset: CGFloat = 44, bottomInset: CGFloat = 24
+        let topInset: CGFloat = 36, bottomInset: CGFloat = 20
         NSLayoutConstraint.activate([
             stack.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: Layout.sideMargin),
             stack.topAnchor.constraint(equalTo: content.topAnchor, constant: topInset),
@@ -362,6 +365,7 @@ final class SettingsWindowController: NSObject {
         autoCopyCheck.state = s.autoCopyOnSave ? .on : .off
         cursorCheck.state = s.captureCursor ? .on : .off
         soundCheck.state = s.playSound ? .on : .off
+        confirmDiscardCheck.state = s.confirmDiscard ? .on : .off
         videoQualityPopup.selectItem(at: VideoQuality.allCases.firstIndex(of: s.videoQuality) ?? 0)
         videoAudioSourcePopup.selectItem(at: VideoAudioSource.allCases.firstIndex(of: s.videoAudioSource) ?? 0)
     }
@@ -483,6 +487,10 @@ final class SettingsWindowController: NSObject {
 
     @objc private func soundToggled() {
         Settings.shared.playSound = (soundCheck.state == .on)
+    }
+
+    @objc private func confirmDiscardToggled() {
+        Settings.shared.confirmDiscard = (confirmDiscardCheck.state == .on)
     }
 
     @objc private func videoQualityChanged() {
