@@ -104,8 +104,9 @@ enum Updater {
     }
 
     /// Silent check run on every launch (and periodically thereafter, see
-    /// `scheduleBackgroundChecks`); on a newer build it downloads, swaps, and relaunches
-    /// into it with no UI. Any failure stays silent — the running version is untouched.
+    /// `scheduleBackgroundChecks`); on a newer build it downloads and swaps it in with no
+    /// UI, then tells the user it's ready and relaunches once they confirm. Any failure
+    /// stays silent — the running version is untouched.
     static func checkInBackground() {
         fetch { result in
             guard case .success(let release) = result,
@@ -114,15 +115,17 @@ enum Updater {
             else { return }
             UpdateInstaller.install(dmgURL: dmg, expectedVersion: normalize(release.tagName)) { outcome in
                 if case .success = outcome {
-                    markInstalled(normalize(release.tagName))
-                    // The swap is already safely on disk; only relaunch into it now if
-                    // there's nothing to interrupt. Otherwise it's picked up next time
-                    // the app naturally restarts (or the next background check).
+                    let version = normalize(release.tagName)
+                    markInstalled(version)
+                    // The swap is already safely on disk; only interrupt with the
+                    // relaunch prompt if there's nothing to interrupt. Otherwise it's
+                    // picked up next time the app naturally restarts (or the next
+                    // background check).
                     var busy = EditorWindowController.hasOpenWindows
                     if #available(macOS 14, *) {
                         busy = busy || VideoRecordController.shared.isRecording
                     }
-                    if !busy { relaunch() }
+                    if !busy { presentUpdatedAlert(version) }
                 }
             }
         }
@@ -205,6 +208,16 @@ enum Updater {
                                 message: "m_capture \(version) will run the next time you launch.",
                                 titles: ["Relaunch now", "Later"], primary: 0, cancel: 1).runModal()
         if choice == 0 { relaunch() }
+    }
+
+    /// Silent-install path: tells the user the update already installed and relaunches
+    /// as soon as they confirm — a single "OK", not a choice, since the swap already
+    /// happened and staying on the old build serves no purpose.
+    private static func presentUpdatedAlert(_ version: String) {
+        BrandAlert(title: "Update installed",
+                   message: "m_capture \(version) is installed. Click OK to relaunch.",
+                   titles: ["OK"], primary: 0, cancel: 0).runModal()
+        relaunch()
     }
 
     private static func presentUpToDateAlert() {
