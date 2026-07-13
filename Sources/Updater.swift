@@ -215,7 +215,7 @@ enum Updater {
     /// happened and staying on the old build serves no purpose.
     private static func presentUpdatedAlert(_ version: String) {
         BrandAlert(title: "Update installed",
-                   message: "We've installed m_capture \(version). Click OK to relaunch and start using it.",
+                   message: "m_capture \(version) is installed. Click OK to relaunch.",
                    titles: ["OK"], primary: 0, cancel: 0).runModal()
         relaunch()
     }
