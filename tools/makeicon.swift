@@ -53,9 +53,12 @@ func render(_ px: Int) -> NSBitmapImageRep {
     let tile = NSRect(x: margin, y: margin, width: size - 2 * margin, height: size - 2 * margin)
     let radius = tile.width * 0.225
     let path = NSBezierPath(roundedRect: tile, xRadius: radius, yRadius: radius)
-    let top = NSColor(srgbRed: 0x53 / 255, green: 0x3a / 255, blue: 0xa3 / 255, alpha: 1)
-    let bottom = NSColor(srgbRed: 0x2a / 255, green: 0x1d / 255, blue: 0x4f / 255, alpha: 1)
-    NSGradient(starting: top, ending: bottom)!.draw(in: path, angle: -90)
+    // Same tile colors/angle as `Logo.image` (the brand "m." mark used in the About
+    // window and menu bar) — this script can't import Theme.swift (it's compiled
+    // standalone, see build.sh), so the values are duplicated from Theme.logoTileTop/Bottom.
+    let top = NSColor(srgbRed: 0x41 / 255, green: 0x28 / 255, blue: 0x80 / 255, alpha: 1)
+    let bottom = NSColor(srgbRed: 0x2a / 255, green: 0x20 / 255, blue: 0x48 / 255, alpha: 1)
+    NSGradient(starting: top, ending: bottom)!.draw(in: path, angle: 225)
 
     if let (cg, aspect) = glyph() {
         let gw = tile.width * 0.6
