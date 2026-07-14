@@ -28,8 +28,11 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
   whole-screen mode → click) → an in-place annotation editor opens over the dimmed screen.
 - **Record** (⌃⇧R): drag a region → record it in-process via ScreenCaptureKit
   (`SCStream`), encoding HEVC video + AAC audio into an `.mp4`, with a floating control
-  bar (live timer, size estimate, quality badge, pause/stop). Quality and audio source
-  (system / mic / both) live in Settings.
+  bar (live timer, size estimate, quality badge, pause/stop, minimize). **Esc** discards
+  (with confirm), **Return** saves. While recording, the menu-bar icon shows a red dot +
+  live timer, and the status menu offers Stop / Pause-Resume / Show-bar so it's driveable
+  from the menu bar. Quitting mid-record still finalizes a playable file. Quality and
+  audio source (system / mic / both) live in Settings → Video.
 - **Quick Screen** (⌃⇧Q): captures the screen under the mouse instantly — no overlay,
   no delay — for a hover state or tooltip that a drag-to-select would lose.
 - Hotkeys are rebindable defaults (**Settings → Shortcuts**). Captures save to the
@@ -40,7 +43,10 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
 
 - `main.swift` — entry point; configures the menu-bar agent.
 - `AppDelegate.swift` — status item, menu, global hotkeys, capture actions, and the
-  Check-for-Updates / Report-a-Bug menu items.
+  Quick-Screen / Usage-Guide / Check-for-Updates / Report-a-Bug menu items. Shows the
+  one-time first-run welcome (`showWelcome`), the in-menu recording controls, and the
+  menu-bar recording indicator (`updateRecordingIndicator`); Quit/Force-Quit finalize an
+  active recording first.
 - `Updater.swift` — checks GitHub Releases (`releases`, newest-first) for a newer build;
   drives the manual "Check for Updates" item and a silent once-a-day launch check.
   Requires the repo's releases to be readable by the user.
@@ -63,7 +69,8 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
   skips the overlay and delay entirely, grabbing the screen under the mouse
   straight away.
 - `Permissions.swift` — `ScreenRecordingPermission`: `CGPreflightScreenCaptureAccess`
-  check + the guidance alert / System Settings deep link when Screen Recording is off.
+  check, `prime()` (fire the grant prompt during onboarding), + the brand guidance alert
+  / System Settings deep link when Screen Recording is off.
 - `SelectionOverlay.swift` — the dim drag-to-select overlay; **Space** cycles
   Region → Window → Screen mode; draws the cutout, size readout, mode hint, and a
   lavender hover tint over the Window/Screen capture target. An `OverlayCoordinator`
@@ -79,33 +86,41 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
 - `VideoRecordController.swift` — the screen-recording flow (macOS 14+): reuses the
   selection overlay (region / window / screen), then drives `VideoRecordSession`, the
   floating `VideoRecordBar`, and a 1 Hz update tick; requests mic permission first when
-  the audio source needs it.
+  the audio source needs it. Exposes menu-bar controls (stop/pause/minimize) and
+  `onRecordingUIUpdate` (drives the menu-bar red-dot/timer indicator);
+  `finalizeForTermination()` pump-runs the main run loop so quit/force-quit finish the
+  file. `discardRecording()` handles the Esc discard; `handleUnexpectedStop` surfaces a
+  mid-record failure.
 - `VideoRecordSession.swift` — records a `Target` (display region or a single window)
   via ScreenCaptureKit (`SCStream`),
   encoding HEVC video + AAC audio into an `.mp4` with `AVAssetWriter` (PTS-normalized on
-  a serial `writeQueue`).
+  a serial `writeQueue`). `onUnexpectedStop` fires if the stream dies on its own.
 - `VideoRecordBar.swift` — the floating recording HUD (live timer, size estimate, quality
-  badge, pause/stop); its `windowNumber` is excluded from the `SCStream` capture.
+  badge, pause/stop, and a minimize-to-menu-bar button); its `windowNumber` is excluded
+  from the `SCStream` capture.
 - `EditorWindow.swift` — the in-place annotation editor: tool tiles in five groups
-  (Markup, Shapes, Color, Actions, Background) as scattered cards or one draggable
-  panel. Actions owns the Select tool (move/resize/delete a placed mark; **V**),
+  (Markup, Shapes, Style, Actions, Background) as scattered cards or one draggable
+  panel. Style holds the color palette, custom-color picker, and a cycling stroke-width
+  tile. Actions owns the Select tool (move/resize/delete a placed mark; **V**),
   crop, rotate-right, flip, undo/redo, Pin (⌘P), Before/After GIF, Copy (⌘C), Save
   (⌘S), Save As (⇧⌘S), Cancel. Owns tooltips, selection state, the pickers, and the
   live background preview (`BackgroundView`).
 - `CanvasView.swift` — the annotation canvas: `Tool` enum, undo/redo, Gaussian blur,
   crop/rotate/flip/resample transforms (`bakeResample` bakes annotations on
-  corner-drag resize), and live edit state (the Select tool's move/resize of a
-  placed mark — drag reuses `remap`, the corner knob reuses `scale(by:around:)`;
-  bendable-arrow apex; zoom callout; overlay image; ruler;
-  `counterFormat`/`currentEmoji`). Coordinates stay in full-res image space so
-  exports stay sharp.
+  corner-drag resize), and live edit state. Shapes get an eight-handle box resize
+  (`boxHandle`/`resizeBox`: four corners + four edge midpoints for single-axis stretch);
+  arrows/lines get three handles (`curveHandle`: start/end endpoints + bend apex).
+  A just-drawn shape (`editingShape`) or curve (`editingCurve`) stays editable under its
+  own tool, and ⌫ deletes it. `restrokeSelection` applies a stroke width live. Zoom
+  callout; overlay image; ruler; `counterFormat`/`currentEmoji`. Coordinates stay in
+  full-res image space so exports stay sharp.
 - `Annotations.swift` — annotation model (pencil, marker, line, curved arrow,
   shapes, text, blur, counter, spotlight, emoji, zoom callout, ruler, image
-  overlay). Each mark exposes `bounds` / `resizable` / `scale(by:around:)` so the
-  Select tool can move, resize, and delete it (path-like marks are move-only).
-  Crop/rotate/flip are transforms, not stored marks.
+  overlay). Each mark exposes `bounds` / `resizable` / `scale(by:around:)` / `recolor`
+  / `restroke` so the Select tool can move, resize, recolor, restyle and delete it
+  (path-like marks are move-only). Crop/rotate/flip are transforms, not stored marks.
 - `ToolButton.swift` — the rounded tool tile (custom-drawn glyphs / SF Symbols);
-  swatches draw a colour chip.
+  swatches draw a colour chip; `.lineWeight` draws the stroke-width glyph.
 - `ColorPicker.swift` — brand custom-color picker (hue strip + S/B square), shown
   *above* the editor (system `NSColorPanel` is hidden behind the overlay).
 - `EmojiPicker.swift` — preset emoji grid; sets the current emoji stamp.
@@ -124,9 +139,12 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
   save dir, format (`ImageFormat`), quality, auto-copy, cursor, sound, delay,
   post-capture `CaptureBehavior`, per-action hotkeys, background padding/radius,
   launch-at-login (live via `SMAppService`). `fileURL()` + `encode(_:)` are the
-  single source for where/how captures are saved.
+  single source for where/how captures are saved; `fileURL()` uniquifies the name and
+  `resolvedSaveDirectory()` falls back to the Desktop when the configured folder is
+  gone/unwritable.
 - `SettingsWindow.swift` — the dark Settings panel (`SettingsWindowController.shared`);
-  General / Shortcuts / Capture / Output groups. `--settings-demo` opens it at launch.
+  General / Shortcuts / Capture / Output / Video groups, with per-row info-dot tips.
+  `--settings-demo` opens it at launch.
 - `ShortcutRecorder.swift` — click-to-record shortcut field + `Shortcut` glyph helpers.
 - `BrandPopUpButton.swift` — brand `NSPopUpButton` + `BrandControl` shared inset
   geometry aligning the Settings form controls.
@@ -159,10 +177,12 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
 - **Capture latency / overlay.** A short `asyncAfter` delay in `finish` lets the dim
   overlay clear (a couple of compositor frames) so it isn't in the shot; the actual
   ScreenCaptureKit grab then runs asynchronously off a `Task`, so the UI never stalls.
-- **Save is async.** `savePressed` flattens on the main thread, then encodes/writes
-  off a background queue (the window closes immediately). Files are named
-  `<prefix><HH-mm-ss-dd-MM-yyyy>.<ext>` (from Settings, default `m_capture_` / PNG).
-  ⌘C flattens and writes to the pasteboard.
+- **Save is async, but failures aren't silent.** `savePressed` flattens on the main
+  thread, then `writeCapture` encodes/writes off a background queue and only closes the
+  editor **after** the write succeeds — on failure it keeps the window open and shows a
+  brand alert; a save-folder fallback to the Desktop shows a notice too. Files are named
+  `<prefix><HH-mm-ss-dd-MM-yyyy>.<ext>` (from Settings, default `m_capture_` / PNG),
+  uniquified on collision. ⌘C flattens and writes to the pasteboard.
 - Global hotkeys use Carbon `RegisterEventHotKey` (`HotKey.swift`) — no Accessibility
   permission needed.
 - **Overlay click-through on transparent holes.** The selection overlay is a

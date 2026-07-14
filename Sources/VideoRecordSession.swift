@@ -47,6 +47,14 @@ final class VideoRecordSession: NSObject, @unchecked Sendable {
         self.excludedWindowIDs = excludedWindowIDs
     }
 
+    /// Invoked on the main thread if the capture stream stops on its own — permission
+    /// revoked mid-recording, the captured display unplugged, etc. Lets the controller
+    /// tear down the HUD and tell the user, instead of the bar ticking on forever
+    /// against a dead stream. Fired at most once.
+    var onUnexpectedStop: ((String) -> Void)?
+    private var didReportUnexpectedStop = false
+    private var isStopping = false
+
     // MARK: - Public interface
 
     /// Configures SCStream and AVAssetWriter, then begins capture.
@@ -220,6 +228,7 @@ final class VideoRecordSession: NSObject, @unchecked Sendable {
     /// Finalises the AVAssetWriter and stops SCStream. Safe to call immediately
     /// after `start()`. Returns only when the file is fully written.
     func stop() async {
+        isStopping = true   // so didStopWithError knows this stop was intentional
         // Stop SCStream first (no more callbacks after this).
         if let stream = stream {
             try? await stream.stopCapture()
@@ -512,6 +521,15 @@ extension VideoRecordSession: SCStreamDelegate {
         // being called, the file will be left unfinalized — acceptable for an error
         // path. The user can still trigger stop() via the recording bar.
         print("[VRS] didStopWithError: \(error) — finalization deferred to stop()")
+
+        // If this wasn't a stop() we initiated, the stream died on us (permission
+        // revoked, display unplugged, …). Tell the controller once so it can tear down
+        // the HUD and surface the reason, instead of the bar ticking against a dead
+        // stream. stop() still owns finalizing whatever was written.
+        guard !isStopping, !didReportUnexpectedStop else { return }
+        didReportUnexpectedStop = true
+        let reason = error.localizedDescription
+        DispatchQueue.main.async { [weak self] in self?.onUnexpectedStop?(reason) }
     }
 }
 

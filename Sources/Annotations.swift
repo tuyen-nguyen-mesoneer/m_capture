@@ -24,6 +24,9 @@ protocol Annotation: AnyObject {
     /// Restyle the mark's stroke/text color in place (Select-tool color change).
     /// No-op for marks without a color (emoji, image overlay).
     func recolor(_ c: NSColor)
+    /// Restyle the mark's stroke width in place (Select-tool width change). No-op for
+    /// marks without a stroke (text, emoji, counter, image overlay, spotlight).
+    func restroke(_ width: CGFloat)
 }
 extension Annotation {
     func hit(_ p: CGPoint) -> Bool { false }
@@ -32,6 +35,7 @@ extension Annotation {
         remap { CGPoint(x: a.x + ($0.x - a.x) * f, y: a.y + ($0.y - a.y) * f) }
     }
     func recolor(_ c: NSColor) {}
+    func restroke(_ width: CGFloat) {}
 }
 
 private func contrasting(_ c: NSColor) -> NSColor {
@@ -47,6 +51,7 @@ class FreehandAnnotation: Annotation {
     func add(_ p: CGPoint) { points.append(p) }
     func remap(_ f: (CGPoint) -> CGPoint) { points = points.map(f) }
     func recolor(_ c: NSColor) { style.color = c }
+    func restroke(_ width: CGFloat) { style.lineWidth = width }
     var strokeWidth: CGFloat { style.lineWidth }
     var resizable: Bool { false }
     var bounds: CGRect {
@@ -98,6 +103,7 @@ class TwoPointAnnotation: Annotation {
     var style: DrawStyle
     init(start: CGPoint, style: DrawStyle) { self.start = start; self.end = start; self.style = style }
     func recolor(_ c: NSColor) { style.color = c }
+    func restroke(_ width: CGFloat) { style.lineWidth = width }
     var rect: CGRect {
         CGRect(x: min(start.x, end.x), y: min(start.y, end.y),
                width: abs(end.x - start.x), height: abs(end.y - start.y))
@@ -122,6 +128,7 @@ class CurvedAnnotation: Annotation {
         self.start = start; self.end = start; self.control = start; self.style = style
     }
     func recolor(_ c: NSColor) { style.color = c }
+    func restroke(_ width: CGFloat) { style.lineWidth = width }
     /// Midpoint of the straight start–end line.
     var lineMid: CGPoint { CGPoint(x: (start.x + end.x) / 2, y: (start.y + end.y) / 2) }
     /// Point the curve passes through at t=0.5 — where the drag handle sits.

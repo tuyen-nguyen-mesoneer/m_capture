@@ -12,16 +12,22 @@ final class ToolButton: NSButton {
         case spotlightGlyph
         case counterGlyph
         case roundedSquare
+        case lineWeight(CGFloat)
         case noneGlyph
         case plusGlyph
     }
 
-    var tip: String?
+    /// The hover tooltip text — also mirrored to the accessibility label so VoiceOver
+    /// can announce these custom-drawn tiles (they have no title text of their own).
+    var tip: String? { didSet { setAccessibilityLabel(tip) } }
     var onEnter: ((ToolButton) -> Void)?
     var onExit: (() -> Void)?
     var selectedState = false { didSet { needsDisplay = true } }
     /// Replaces the glyph for `.text` buttons at runtime (e.g. the live emoji stamp).
     var overrideText: String? { didSet { needsDisplay = true } }
+    /// Overrides the bar thickness for a `.lineWeight` tile at runtime (the cycling
+    /// stroke-width control updates this as it cycles).
+    var overrideLineWeight: CGFloat? { didSet { needsDisplay = true } }
 
     private let style: Style
     let radius: CGFloat
@@ -137,6 +143,8 @@ final class ToolButton: NSButton {
             drawCounter()
         case .roundedSquare:
             drawRoundedSquare(ctx)
+        case .lineWeight(let w):
+            drawLineWeight(ctx, thickness: overrideLineWeight ?? w)
         case .noneGlyph:
             drawNoSign(ctx)
         case .plusGlyph:
@@ -197,6 +205,24 @@ final class ToolButton: NSButton {
         return NSRect(x: bounds.midX - m.cx * drawW,
                       y: bounds.midY - m.cyBottom * drawH,
                       width: drawW, height: drawH)
+    }
+
+    /// Stroke-width glyph: three stacked horizontal lines of increasing thickness — the
+    /// familiar "line weight" icon. Fixed proportions (independent of the selected
+    /// preset) so it always reads cleanly, and never as a bare "−" next to the "+".
+    private func drawLineWeight(_ ctx: CGContext, thickness: CGFloat) {
+        let w = glyphBox.width
+        let x0 = bounds.midX - w / 2, x1 = bounds.midX + w / 2
+        let weights: [CGFloat] = [1.3, 2.6, 4.2]   // thin → thick, top → bottom
+        let spacing = w * 0.30
+        ctx.setStrokeColor(inkColor.cgColor)
+        ctx.setLineCap(.round)
+        for (i, t) in weights.enumerated() {
+            let y = bounds.midY + spacing - CGFloat(i) * spacing   // top, middle, bottom
+            ctx.setLineWidth(t)
+            ctx.move(to: CGPoint(x: x0, y: y)); ctx.addLine(to: CGPoint(x: x1, y: y))
+            ctx.strokePath()
+        }
     }
 
     /// Blur: a dense checkerboard of pixels (clearly reads as pixelation).

@@ -12,6 +12,8 @@ import AppKit
 final class VideoRecordBar: NSObject {
     var onStop: (() -> Void)?
     var onPauseResume: (() -> Void)?
+    var onDiscard: (() -> Void)?
+    var onMinimize: (() -> Void)?
 
     var windowNumber: Int { window.windowNumber }
 
@@ -46,6 +48,7 @@ final class VideoRecordBar: NSObject {
         win.level = .floating
         win.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary]
         win.onKeyStop = { [weak self] in self?.onStop?() }
+        win.onKeyDiscard = { [weak self] in self?.onDiscard?() }
         window = win
 
         // ── Card ───────────────────────────────────────────────────────────
@@ -101,6 +104,20 @@ final class VideoRecordBar: NSObject {
                                                width: badgeW, height: badgeH), letter: quality)
         card.addSubview(badge)
 
+        // Minimize-to-menu-bar button, tucked left of the quality chip.
+        let miniSize: CGFloat = 18
+        let mini = MinimizeButton()
+        mini.isBordered = false
+        mini.imagePosition = .imageOnly
+        mini.image = NSImage(systemSymbolName: "minus.circle", accessibilityDescription: "Minimize to menu bar")?
+            .withSymbolConfiguration(.init(pointSize: 13, weight: .semibold))
+        mini.contentTintColor = Theme.textSecondary
+        mini.frame = NSRect(x: contentRight - badgeW - 10 - miniSize,
+                            y: statusRowY + (statusRowH - miniSize) / 2, width: miniSize, height: miniSize)
+        mini.target = self; mini.action = #selector(minimizePressed)
+        mini.toolTip = "Minimize to the menu bar — control from the m. menu"
+        card.addSubview(mini)
+
         // ── Row 2: actions — two equal halves spanning the content width ────
         let gap: CGFloat = 12
         let buttonW = (contentRight - sidePad - gap) / 2      // 148
@@ -114,6 +131,14 @@ final class VideoRecordBar: NSObject {
         card.addSubview(pauseBtn)
 
         window.contentView = card
+    }
+
+    @objc private func minimizePressed() { onMinimize?() }
+
+    /// Minimize button that shows the pointing-hand (clickable) cursor, overriding the
+    /// card's open-hand drag cursor beneath it.
+    private final class MinimizeButton: NSButton {
+        override func resetCursorRects() { addCursorRect(bounds, cursor: .pointingHand) }
     }
 
     // MARK: - Public API
@@ -132,6 +157,12 @@ final class VideoRecordBar: NSObject {
     func close() {
         window.orderOut(nil)
     }
+
+    /// Minimize to / restore from the menu bar without ending the recording.
+    func setVisible(_ visible: Bool) {
+        if visible { window.orderFront(nil) } else { window.orderOut(nil) }
+    }
+    var isVisible: Bool { window.isVisible }
 
     /// Called externally (typically 1 Hz) to refresh the displayed values.
     func update(elapsed: TimeInterval, fileSize: Int64, isPaused: Bool) {
@@ -181,14 +212,17 @@ final class VideoRecordBar: NSObject {
 
 // MARK: - Private NSWindow subclass
 
-/// Intercepts Esc and Return so the bar can stop the recording without focus gymnastics.
+/// Intercepts Esc and Return so the bar can finish or abort the recording without
+/// focus gymnastics. Esc discards (the universal cancel gesture); Return commits.
 private final class RecordBarWindow: NSWindow {
     var onKeyStop: (() -> Void)?
+    var onKeyDiscard: (() -> Void)?
     override var canBecomeKey: Bool { true }
     override func keyDown(with event: NSEvent) {
         switch event.keyCode {
-        case 53, 36, 76: onKeyStop?()          // Esc / Return / keypad Enter
-        default: super.keyDown(with: event)
+        case 53:     onKeyDiscard?()           // Esc → discard
+        case 36, 76: onKeyStop?()              // Return / keypad Enter → save
+        default:     super.keyDown(with: event)
         }
     }
 }

@@ -365,6 +365,19 @@ final class CanvasView: NSView, NSTextViewDelegate {
             selected = nil; selectDrag = .none; redoStack.removeAll(); onChange?(); needsDisplay = true
             return
         }
+        // Backspace/Delete also removes a just-drawn shape or arrow/line still showing
+        // its handles under its own tool — the instinctive "undo that mark" gesture.
+        if event.keyCode == 51 || event.keyCode == 117 {
+            let live: Annotation? = Self.isShapeTool(tool) ? editingShape
+                : ((tool == .arrow || tool == .line) ? editingCurve : nil)
+            if let m = live {
+                if let idx = annotations.firstIndex(where: { $0 === m }) { annotations.remove(at: idx) }
+                editingShape = nil; editingShapeTool = nil; editingCurve = nil
+                curveDrag = nil; boxDrag = nil
+                redoStack.removeAll(); onChange?(); needsDisplay = true
+                return
+            }
+        }
         if tool == .text, textView == nil, let t = editingText, event.keyCode == 51 || event.keyCode == 117 {
             if let idx = annotations.firstIndex(where: { $0 === t }) { annotations.remove(at: idx) }
             editingText = nil; textDrag = .none; redoStack.removeAll(); onChange?(); needsDisplay = true
@@ -952,6 +965,16 @@ final class CanvasView: NSView, NSTextViewDelegate {
         guard let target = selected ?? editingText else { return }
         target.recolor(c)
         onChange?(); needsDisplay = true
+    }
+
+    /// Set the stroke width for the next mark drawn, and apply it live to the mark
+    /// currently selected (Select tool) or the one still live under its own tool.
+    func restrokeSelection(_ width: CGFloat) {
+        style.lineWidth = width
+        if let target = selected ?? editingShape ?? editingCurve {
+            target.restroke(width); onChange?()
+        }
+        needsDisplay = true
     }
 
     private func clearSelections() {

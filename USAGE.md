@@ -28,12 +28,18 @@ also have global hotkeys (`⌃⇧S` / `⌃⇧R`) that fire directly, without ope
 |-----------------------|:------:|---------------------------------------------------------------------------------------------------------------------------------|
 | **Screenshot**        | `⌃⇧S`  | Dim the screen; drag a region, or press **Space** to pick a window or the whole screen; open the editor.                        |
 | **Record**            | `⌃⇧R`  | Dim the screen; pick a region, a window, or the whole screen; record it in-app to an MP4.                                       |
+| **Quick Screen**      | `⌃⇧Q`  | Instantly grab the screen under the pointer — no overlay, no delay.                                                             |
 | **Library**           |   —    | Open the save folder in Finder.                                                                                                 |
 | **Settings**          |   —    | Shortcuts, capture delay, save location, format, backgrounds, more.                                                             |
+| **Usage Guide**       |   —    | Open this reference on GitHub.                                                                                                  |
 | **About**             |   —    | Show the About panel (version + license).                                                                                       |
 | **Check for Updates** |   —    | Check GitHub Releases for a newer version.                                                                                      |
 | **Report a Bug**      |   —    | Open a [pre-filled GitHub issue](https://github.com/tuyen-nguyen-mesoneer/m_capture/issues/new) (app + macOS version attached). |
 | **Quit**              |   —    | Quit `m_capture`.                                                                                                               |
+
+While a recording is in progress, the menu also shows **Stop Recording**,
+**Pause / Resume Recording**, and — if the floating bar is minimized — **Show
+Recording Bar**, so the whole recording can be driven from the menu bar.
 
 ---
 
@@ -65,9 +71,7 @@ filename format, location, image format and auto-copy are all configurable in
 
 ## Recording
 
-1. Press `⌃⇧R`. The screen dims — the same overlay as a screenshot, with a video
-   glyph on the cursor in Window/Screen mode so it's clear you're about to record,
-   not just capture a still.
+1. Press `⌃⇧R`. The screen dims — the same overlay as a screenshot.
 2. Choose what to record: **drag** a region, or press **Space** to cycle to
    **Window** (hover a window to tint it, release the mouse over it to record just
    that window) or **Screen** (the display is tinted; click to record it whole). All
@@ -75,18 +79,26 @@ filename format, location, image format and auto-copy are all configurable in
 3. Recording starts with a floating bar showing a live timer, the estimated file
    size, and a quality badge, plus **pause/resume** and **stop** — drag anywhere on
    the bar's background to move it out of the way (the cursor shows an open hand).
-4. **Stop** finalises the `.mp4` (HEVC video, optional AAC audio) into your save
-   folder and reveals it in Finder.
+4. **Stop** (or **Return**) finalises the `.mp4` (HEVC video, optional AAC audio) into
+   your save folder and reveals it in Finder. **Esc discards** the recording after a
+   confirmation — the take is deleted, nothing is saved.
+
+**Knowing it's recording, and controlling it from the menu bar:** while recording, the
+menu-bar **m.** icon becomes a **red dot with a live timer** (grey "Paused" when
+paused). Click the **–** button on the floating bar to **minimize** it to the menu bar;
+you can then **Pause / Resume / Stop** — and **Show Recording Bar** — from the menu.
 
 Quality and the audio source (system, microphone, or both) live in
-**Settings → Capture**.
+**Settings → Video**. If the microphone is requested but permission is denied, the
+recording continues without the mic track. Quitting the app mid-recording still
+finalizes a playable file.
 
 ---
 
 ## The annotation editor
 
 The editor frames your image on a dark backdrop with tools in **clusters**
-(Markup, Shapes, Color, Actions, Background). For small or very large selections,
+(Markup, Shapes, Style, Actions, Background). For small or very large selections,
 the clusters gather into one draggable panel so they never cover the image.
 
 ### Tools
@@ -108,7 +120,9 @@ the clusters gather into one draggable panel so they never cover the image.
 | Overlay image  |  —   | Add an image — paste (`⌘V`), drop a file, or click to choose (with an opacity slider). |
 | Copy text / QR | `⌘T` | OCR — drag over text or a QR code to recognize & copy it.                              |
 
-**Shapes** — drag to draw; all hollow outlines.
+**Shapes** — drag to draw; all hollow outlines. A just-drawn shape stays live with its
+handles showing, so you can resize or move it (or press `⌫` to remove it) without
+switching tools.
 
 | Tool              | Key | Tool      | Key |
 |-------------------|:---:|-----------|:---:|
@@ -121,7 +135,7 @@ the clusters gather into one draggable panel so they never cover the image.
 
 ### Transform & actions
 
-- **Select / move** (`V`) — click any placed mark to select it, then **drag** to reposition, **drag the corner knob** to resize (shapes, text, emoji, counters, blur, spotlight, overlays, zoom callouts), or press `⌫` to delete it. Lines, arrows, freehand strokes and the ruler are move-only. Lets you reposition or remove a mark without undoing and redrawing it.
+- **Select / edit** (`V`) — click any placed mark to select it, then **drag** to reposition or press `⌫` to delete it. **Shapes** resize from **eight handles** — four corners (free) and four edge midpoints (stretch a single side, e.g. widen a triangle). **Arrows and lines** show three handles — both **endpoints** and a **bend** handle at the apex — so you can reshape them. Text, emoji, counters, blur, spotlight, overlays and zoom callouts resize from a corner knob; freehand strokes and the ruler are move-only. Everything can also be edited right after you draw it, without switching to Select.
 - **Crop** — drag a region, then `↵` (or **✓**) to apply.
 - **Rotate** — 90° right (clockwise).
 - **Flip horizontal** — mirror the image left↔right.
@@ -130,13 +144,13 @@ the clusters gather into one draggable panel so they never cover the image.
 - **Before/After GIF** — export a two-frame looping GIF that toggles the annotations on and off, useful for highlighting before-and-after differences.
 - **Undo / Redo / Copy / Save / Save As / Cancel** — see the shortcut table below.
 
-### Colors
+### Style
 
-- **Palette:** red, orange, yellow, green, teal, blue, purple, pink, white,
-  black, plus **+** for a custom color (hue strip + brightness square).
+- **Palette:** red, orange, yellow, green, blue, purple, pink, white, black, plus
+  **+** for a custom color (hue strip + brightness square).
 - **Eyedropper** (`I`) — sample a color from the screenshot to match it.
-
-Stroke width is fixed at a medium weight.
+- **Stroke width** — the line-weight tile cycles **Thin → Medium → Thick**; the new
+  width applies to marks you draw next and to the currently selected mark.
 
 ### Backgrounds
 
@@ -157,7 +171,7 @@ Save and Pin (OCR always uses the un-framed image).
 | `⌘T`              | Copy text / QR (OCR) — then drag over text or a code |
 | `⌘P`              | Pin to screen & close                                |
 | `↵`               | Apply a pending crop                                 |
-| `⌫` / `⌦`         | Delete the selected mark (Select tool)               |
+| `⌫` / `⌦`         | Delete the selected mark, or a just-drawn shape/arrow |
 | `Esc`             | Cancel & close                                       |
 | `P` `H` `V` `T` … | Select a tool — single key (see tables above)        |
 
@@ -168,7 +182,8 @@ Save and Pin (OCR always uses the un-framed image).
 ## Settings
 
 Open **Settings** from the menu. Options are grouped into **General**,
-**Shortcuts**, **Capture** and **Output**.
+**Shortcuts**, **Capture**, **Output** and **Video**. Info dots (ⓘ) next to the less
+obvious rows explain what they do.
 
 <p align="center">
   <img src="docs/assets/settings.png" alt="The dark, brand-styled Settings panel with the General, Shortcuts, Capture and Output groups" height="480">
@@ -178,24 +193,28 @@ Open **Settings** from the menu. Options are grouped into **General**,
 
 - **General** — launch at login; capture delay (with menu-bar countdown);
   after-capture behavior (open editor / save to file / copy to clipboard).
-- **Shortcuts** — rebind the **Screenshot** and **Record** hotkeys (click a
-  field, press the new combination).
-- **Capture** — include the mouse cursor; play the shutter sound (off by default).
+- **Shortcuts** — rebind the **Screenshot**, **Record**, **Quick Screen** and
+  **Force Quit** hotkeys (click a field, press the new combination).
+- **Capture** — include the mouse cursor; play the shutter sound (off by default);
+  confirm before discarding an unsaved capture.
 - **Output** — save location; filename prefix (default `m_capture_`); image format
   (PNG / JPEG / HEIC / TIFF); background padding and corner radius (Square →
   Large); default editor background; also copy to clipboard when saving.
+- **Video** — recording quality and the audio source (system / microphone / both).
 
 Settings persist across launches and apply to the editor's **Save**, the
 pinned-window **Save**, and **Library**. Files are named
-`<prefix><HH-mm-ss-dd-MM-yyyy>.<ext>`.
+`<prefix><HH-mm-ss-dd-MM-yyyy>.<ext>`, uniquified with a `-1`, `-2`… suffix if a name
+is already taken. If the save folder is missing or not writable, captures fall back to
+the Desktop and a notice tells you where they went.
 
 ---
 
 ## Troubleshooting
 
-`m_capture` needs **Screen Recording** permission (it uses `screencapture`). Grant it
-under **System Settings → Privacy & Security → Screen Recording**, then relaunch.
-Hotkeys use Carbon and need no extra permission.
+`m_capture` needs **Screen Recording** permission (it captures in-process via
+ScreenCaptureKit). Grant it under **System Settings → Privacy & Security → Screen
+Recording**, then relaunch. Hotkeys use Carbon and need no extra permission.
 
 | Symptom                               | Fix                                                                                                                                                                                                                                                                            |
 |---------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|

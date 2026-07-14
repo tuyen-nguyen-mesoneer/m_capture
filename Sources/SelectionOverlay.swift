@@ -143,18 +143,18 @@ final class SelectionView: NSView {
         return modes
     }
 
-    /// Region drag uses the crosshair; window/screen picking uses a capture cursor —
-    /// a video glyph for the record flow, a camera for screenshots.
+    /// Region drag uses the crosshair. Window/screen picking uses the camera glyph for
+    /// screenshots, and a plain pointing hand for recording — the video glyph over a
+    /// hover-highlighted window/screen read as clutter, so "click to pick" is clearer.
     private var modeCursor: NSCursor {
         if captureMode == .region { return .crosshair }
-        return recording ? Self.videoCursor : Self.cameraCursor
+        return recording ? .pointingHand : Self.cameraCursor
     }
     override func cursorUpdate(with event: NSEvent) { modeCursor.set() }
 
-    /// Capture cursors for window/screen modes, mesoneer-styled (shared `BrandCursor`):
-    /// a camera glyph for screenshots and a video glyph for recording.
+    /// Camera cursor for the screenshot window/screen pick, mesoneer-styled (shared
+    /// `BrandCursor`). The record flow uses a plain pointing hand instead.
     private static let cameraCursor = BrandCursor.make(symbol: "camera.fill") ?? .pointingHand
-    private static let videoCursor  = BrandCursor.make(symbol: "video.fill") ?? .pointingHand
 
     /// Re-assert the mode cursor. The `viewDidMoveToWindow` set can be discarded
     /// by the system before the window is key/active, so the owning window calls

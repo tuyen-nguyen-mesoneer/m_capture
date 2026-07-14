@@ -54,11 +54,24 @@ final class PinnedWindowController: NSObject, NSWindowDelegate {
     }
 
     private func saveToDisk() {
+        let fellBack = !Settings.shared.saveDirectoryAvailable
         let url = Settings.shared.fileURL()
         let rep = self.rep
         DispatchQueue.global(qos: .userInitiated).async {
-            guard let data = Settings.shared.encode(rep) else { return }
-            try? data.write(to: url)
+            let ok = Settings.shared.encode(rep).map { (try? $0.write(to: url)) != nil } ?? false
+            DispatchQueue.main.async {
+                if !ok {
+                    _ = BrandAlert(title: "Couldn't save the image",
+                                   message: "Saving failed. Check your save folder in Settings → Output.",
+                                   titles: ["OK"], primary: 0, cancel: 0,
+                                   icon: "exclamationmark.triangle").runModal()
+                } else if fellBack {
+                    _ = BrandAlert(title: "Saved to the Desktop",
+                                   message: "Your save folder wasn't available, so this went to the Desktop. Update it in Settings → Output.",
+                                   titles: ["OK"], primary: 0, cancel: 0,
+                                   icon: "folder.badge.questionmark").runModal()
+                }
+            }
         }
     }
 

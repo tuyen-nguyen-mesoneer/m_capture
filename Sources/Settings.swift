@@ -309,12 +309,47 @@ final class Settings {
         }
     }
 
-    /// A destination file URL: `<saveDirectory>/<prefix><timestamp>.<ext>`.
-    /// `ext` overrides the configured image format (e.g. "gif" for the
-    /// before/after animation export).
+    /// The directory captures are actually written to: the configured folder if it
+    /// exists (or can be created) and is writable, otherwise the Desktop. Guards
+    /// against a save location that was deleted, unmounted, or made read-only —
+    /// which would otherwise make every capture silently vanish.
+    /// Whether the configured save folder currently exists and is writable. When false,
+    /// `resolvedSaveDirectory()` falls back to the Desktop — callers surface that so the
+    /// capture isn't silently redirected without the user knowing.
+    var saveDirectoryAvailable: Bool {
+        let fm = FileManager.default
+        var isDir: ObjCBool = false
+        return fm.fileExists(atPath: saveDirectory.path, isDirectory: &isDir)
+            && isDir.boolValue && fm.isWritableFile(atPath: saveDirectory.path)
+    }
+
+    func resolvedSaveDirectory() -> URL {
+        let fm = FileManager.default
+        let dir = saveDirectory
+        var isDir: ObjCBool = false
+        // Use the configured folder only if it still exists and is writable — don't
+        // silently recreate a folder the user deleted/renamed; fall back to the Desktop.
+        if fm.fileExists(atPath: dir.path, isDirectory: &isDir), isDir.boolValue,
+           fm.isWritableFile(atPath: dir.path) { return dir }
+        let fallback = defaultDirectory
+        try? fm.createDirectory(at: fallback, withIntermediateDirectories: true)
+        return fallback
+    }
+
+    /// A destination file URL: `<saveDirectory>/<prefix><timestamp>.<ext>`, made
+    /// unique with a `-1`, `-2`, … suffix so two captures in the same second never
+    /// silently overwrite each other. `ext` overrides the configured image format
+    /// (e.g. "gif" for the before/after animation export).
     func fileURL(date: Date = Date(), ext: String? = nil) -> URL {
         let fmt = DateFormatter(); fmt.dateFormat = "HH-mm-ss-dd-MM-yyyy"
-        return saveDirectory.appendingPathComponent("\(filenamePrefix)\(fmt.string(from: date)).\(ext ?? format.ext)")
+        let dir = resolvedSaveDirectory(), e = ext ?? format.ext
+        let base = "\(filenamePrefix)\(fmt.string(from: date))"
+        var url = dir.appendingPathComponent("\(base).\(e)")
+        var n = 1
+        while FileManager.default.fileExists(atPath: url.path) {
+            url = dir.appendingPathComponent("\(base)-\(n).\(e)"); n += 1
+        }
+        return url
     }
 
     func encode(_ rep: NSBitmapImageRep) -> Data? { format.encode(rep) }
