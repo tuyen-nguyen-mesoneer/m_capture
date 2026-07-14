@@ -90,12 +90,14 @@ final class SettingsWindowController: NSObject {
         var rows: [NSView] = [
             sectionHeader("General"),
             checkRow(loginCheck),
-            row("Capture delay", delayPopup),
-            row("After capture", behaviorPopup),
+            row("Capture delay", delayPopup,
+                tip: "Seconds to wait before a screenshot's selection overlay appears — time to open a menu or set up the shot."),
+            row("After capture", behaviorPopup,
+                tip: "What happens the instant a capture is taken: open the annotation editor, save straight to a file, or just copy to the clipboard."),
             sectionHeader("Shortcuts"),
         ]
         rows += zip(ShortcutAction.allCases, shortcutFields)
-            .map { action, field in row(action.label, field) }
+            .map { action, field in row(action.label, field, tip: Self.shortcutTip(action)) }
         rows += [
             sectionHeader("Capture"),
             checkRow(cursorCheck),
@@ -222,6 +224,17 @@ final class SettingsWindowController: NSObject {
 
     /// A labelled row: a right-aligned label, then a control that fills the
     /// control column to the right margin (uniform width across all rows).
+    /// Explanatory tip for each rebindable action — the non-obvious ones (Quick
+    /// Screen, Force Quit) especially need it.
+    private static func shortcutTip(_ a: ShortcutAction) -> String {
+        switch a {
+        case .screenshot:  return "Drag a region (or press Space for a whole window / screen) to capture."
+        case .record:      return "Drag a region (or press Space for a window / screen) to record video."
+        case .quickScreen: return "Instantly grab the screen under the pointer — no overlay, no delay — great for tooltips or menus that vanish."
+        case .forceQuit:   return "Hard-quit m_capture and any stray duplicate instances — use if the menu-bar icon gets stuck or doubled."
+        }
+    }
+
     private func row(_ title: String, _ control: NSView, tip: String? = nil) -> NSView {
         let row = NSView()
         row.translatesAutoresizingMaskIntoConstraints = false

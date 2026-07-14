@@ -14,6 +14,16 @@ enum ScreenRecordingPermission {
 
     private static let didRequestKey = "permissions.didRequestScreenRecording"
 
+    /// Proactively fire the system grant prompt once (used by first-run onboarding),
+    /// so the very first capture doesn't hit a cold permission wall. No-op if already
+    /// requested or already granted.
+    static func prime() {
+        let defaults = UserDefaults.standard
+        guard !defaults.bool(forKey: didRequestKey), !isGranted else { return }
+        defaults.set(true, forKey: didRequestKey)
+        _ = CGRequestScreenCaptureAccess()
+    }
+
     /// Call when a capture is attempted without permission. First time: fire the
     /// system grant prompt (which registers the app in the Screen Recording list).
     /// After that, macOS won't re-prompt, so show our own alert linking to Settings.
@@ -28,15 +38,13 @@ enum ScreenRecordingPermission {
     }
 
     private static func presentGuidanceAlert() {
-        let alert = NSAlert()
-        alert.alertStyle = .warning
-        alert.messageText = "Screen Recording permission needed"
-        alert.informativeText = "m_capture captures your screen with macOS's screen-recording API. "
-            + "Turn it on under System Settings → Privacy & Security → Screen Recording, then try your capture again."
-        alert.addButton(withTitle: "Open System Settings")
-        alert.addButton(withTitle: "Cancel")
         NSApp.activate(ignoringOtherApps: true)
-        if alert.runModal() == .alertFirstButtonReturn { openSettings() }
+        let r = BrandAlert(
+            title: "Screen Recording permission needed",
+            message: "Turn it on in System Settings → Privacy & Security → Screen Recording, then try again.",
+            titles: ["Open System Settings", "Cancel"],
+            primary: 0, cancel: 1, icon: "lock.shield").runModal()
+        if r == 0 { openSettings() }
     }
 
     private static func openSettings() {

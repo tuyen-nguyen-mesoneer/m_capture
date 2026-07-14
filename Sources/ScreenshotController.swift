@@ -141,13 +141,28 @@ final class ScreenshotController {
         NSPasteboard.general.writeObjects([image])
     }
 
-    /// Encode in the configured format and write off the main thread.
+    /// Encode in the configured format and write off the main thread. On failure —
+    /// with no editor open in this "save straight to file" mode — alert the user so
+    /// the capture isn't lost silently.
     private static func saveToDisk(_ image: NSImage) {
         guard let rep = bitmap(from: image) else { return }
+        let fellBack = !Settings.shared.saveDirectoryAvailable
         let url = Settings.shared.fileURL()
         DispatchQueue.global(qos: .userInitiated).async {
-            guard let data = Settings.shared.encode(rep) else { return }
-            try? data.write(to: url)
+            let ok = Settings.shared.encode(rep).map { (try? $0.write(to: url)) != nil } ?? false
+            DispatchQueue.main.async {
+                if !ok {
+                    _ = BrandAlert(title: "Couldn't save the capture",
+                                   message: "Saving failed. Check your save folder in Settings → Output.",
+                                   titles: ["OK"], primary: 0, cancel: 0,
+                                   icon: "exclamationmark.triangle").runModal()
+                } else if fellBack {
+                    _ = BrandAlert(title: "Saved to the Desktop",
+                                   message: "Your save folder wasn't available, so this went to the Desktop. Update it in Settings → Output.",
+                                   titles: ["OK"], primary: 0, cancel: 0,
+                                   icon: "folder.badge.questionmark").runModal()
+                }
+            }
         }
     }
 

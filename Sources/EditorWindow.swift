@@ -130,6 +130,14 @@ final class EditorWindowController: NSObject {
     private let canvas: CanvasView
     private var toolButtons: [Tool: ToolButton] = [:]
     private var swatchButtons: [ToolButton] = []
+    /// Stroke-width presets, exposed via ONE cycling tile (Thin → Medium → Thick) so the
+    /// Style cluster stays a clean 3×4 like every other cluster. The tile's bar previews
+    /// the current width. `widthDisplay` is the on-tile bar thickness for each preset.
+    private let widths: [CGFloat] = [3, 6, 11]
+    private let widthDisplay: [CGFloat] = [2, 4, 7]
+    private let widthLabels = ["Thin", "Medium", "Thick"]
+    private weak var widthButton: ToolButton?
+    private var currentWidth = 1   // 6 pt — matches the editor's default stroke
     private weak var plusButton: ToolButton?
     private weak var counterFormatButton: ToolButton?
     private weak var emojiButton: ToolButton?
@@ -160,7 +168,6 @@ final class EditorWindowController: NSObject {
         (Theme.rgb(0xF9, 0x73, 0x16), "Orange"),
         (Theme.rgb(0xFA, 0xCC, 0x15), "Yellow"),
         (Theme.rgb(0x22, 0xC5, 0x5E), "Green"),
-        (Theme.rgb(0x14, 0xB8, 0xA6), "Teal"),
         (Theme.rgb(0x3B, 0x82, 0xF6), "Blue"),
         (Theme.rgb(0xA8, 0x55, 0xF7), "Purple"),
         (Theme.rgb(0xEC, 0x48, 0x99), "Pink"),
@@ -312,7 +319,13 @@ final class EditorWindowController: NSObject {
         plus.tip = "Custom color — pick any hue"; wireHover(plus)
         plusButton = plus
         colorTiles.append(plus)
-        let color = makeCluster("Color", colorTiles, perRow: 4, radius: colorR)
+        // One cycling stroke-width tile completes a tidy 3×4 grid (9 swatches +
+        // eyedropper + custom + width), matching every other cluster's footprint.
+        let widthTile = ToolButton(style: .lineWeight(widthDisplay[currentWidth]), radius: colorR,
+                                   target: self, action: #selector(widthPressed))
+        widthTile.tip = "Stroke width: \(widthLabels[currentWidth]) — click to cycle"
+        wireHover(widthTile); widthButton = widthTile; colorTiles.append(widthTile)
+        let color = makeCluster("Style", colorTiles, perRow: 4, radius: colorR)
 
         let actions = makeCluster("Action", [
             toolButton(.select, "cursorarrow", "Move — drag an object to reposition, drag its corner to resize, ⌫ to delete  (V)"),
@@ -668,6 +681,14 @@ final class EditorWindowController: NSObject {
     }
     private func deselectSwatches() { swatchButtons.forEach { $0.selectedState = false } }
 
+    /// Cycle the stroke width Thin → Medium → Thick, updating the tile's bar preview and
+    /// applying it live to the selected/active mark.
+    @objc private func widthPressed() {
+        currentWidth = (currentWidth + 1) % widths.count
+        canvas.restrokeSelection(widths[currentWidth])
+        widthButton?.tip = "Stroke width: \(widthLabels[currentWidth]) — click to cycle"
+    }
+
     @objc private func counterPressed() {
         if canvas.tool == .counter { formatPressed() }
         else { selectTool(.counter) }
@@ -754,12 +775,36 @@ final class EditorWindowController: NSObject {
             NSPasteboard.general.clearContents()
             NSPasteboard.general.writeObjects([img])
         }
-        let url = Settings.shared.fileURL()
+        let fellBack = !Settings.shared.saveDirectoryAvailable
+        writeCapture(rep, to: Settings.shared.fileURL(), fellBack: fellBack) { [weak self] in self?.close() }
+    }
+
+    /// Encode and write `rep` off the main thread, then act on the result:
+    /// - success: if the save folder was unavailable and we fell back to the Desktop,
+    ///   tell the user where it went; then run `onSuccess` (closing the editor).
+    /// - failure: keep the window open and show a brand alert, so a full disk / encode
+    ///   failure can't silently throw the capture away.
+    private func writeCapture(_ rep: NSBitmapImageRep, to url: URL,
+                              fellBack: Bool = false, onSuccess: @escaping () -> Void) {
         DispatchQueue.global(qos: .userInitiated).async {
-            guard let data = Settings.shared.encode(rep) else { return }
-            try? data.write(to: url)
+            let ok = Settings.shared.encode(rep).map { (try? $0.write(to: url)) != nil } ?? false
+            DispatchQueue.main.async {
+                if ok {
+                    if fellBack {
+                        _ = BrandAlert(title: "Saved to the Desktop",
+                                       message: "Your save folder wasn't available, so this went to the Desktop. Update it in Settings → Output.",
+                                       titles: ["OK"], primary: 0, cancel: 0,
+                                       icon: "folder.badge.questionmark").runModal()
+                    }
+                    onSuccess()
+                } else {
+                    _ = BrandAlert(title: "Couldn't save the capture",
+                                   message: "Saving failed. Your capture is still open — try Save As.",
+                                   titles: ["OK"], primary: 0, cancel: 0,
+                                   icon: "exclamationmark.triangle").runModal()
+                }
+            }
         }
-        close()
     }
     /// Save with a chooser: pick the location/name via an NSSavePanel (shown as a
     /// sheet so it surfaces above the screen-saver-level editor), in the configured
@@ -769,7 +814,7 @@ final class EditorWindowController: NSObject {
         let panel = NSSavePanel()
         panel.allowedContentTypes = [Settings.shared.format.utType]
         panel.nameFieldStringValue = Settings.shared.fileURL().lastPathComponent
-        panel.directoryURL = Settings.shared.saveDirectory
+        panel.directoryURL = Settings.shared.resolvedSaveDirectory()
         panel.message = "Save the capture"
         panel.beginSheetModal(for: window) { [weak self] resp in
             guard let self else { return }
@@ -781,10 +826,7 @@ final class EditorWindowController: NSObject {
                 img.addRepresentation(rep)
                 NSPasteboard.general.clearContents(); NSPasteboard.general.writeObjects([img])
             }
-            DispatchQueue.global(qos: .userInitiated).async {
-                if let data = Settings.shared.encode(rep) { try? data.write(to: url) }
-            }
-            self.close()
+            self.writeCapture(rep, to: url) { self.close() }
         }
     }
     @objc private func copyTextPressed() {
@@ -887,7 +929,7 @@ final class EditorWindowController: NSObject {
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.gif]
         panel.nameFieldStringValue = Settings.shared.fileURL(ext: "gif").lastPathComponent
-        panel.directoryURL = Settings.shared.saveDirectory
+        panel.directoryURL = Settings.shared.resolvedSaveDirectory()
         panel.message = "Save the before/after animation"
         panel.beginSheetModal(for: window) { [weak self] resp in
             guard let self else { return }

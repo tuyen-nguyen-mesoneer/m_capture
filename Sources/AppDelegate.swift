@@ -20,13 +20,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         buildMenu()
         reloadHotKeys()
 
-        // Enable launch-at-login by default on first run; the user's later toggle
-        // in Settings wins (this only runs once, and SMAppService is the source of
-        // truth after that).
-        let loginDefaultKey = "didApplyLoginItemDefault"
-        if !UserDefaults.standard.bool(forKey: loginDefaultKey) {
-            UserDefaults.standard.set(true, forKey: loginDefaultKey)
-            Settings.shared.launchAtLogin = true
+        // Reflect recording state in the menu-bar icon so it's obvious the app is
+        // recording even when the floating bar is minimized.
+        VideoRecordController.shared.onRecordingUIUpdate = { [weak self] active, elapsed, paused in
+            self?.updateRecordingIndicator(active: active, elapsed: elapsed, paused: paused)
+        }
+
+        // First-run welcome: point at the menu-bar icon, list the hotkeys, and — with
+        // the user's consent — prime Screen Recording and enable launch-at-login.
+        // (We no longer silently register a login item behind the user's back.)
+        let welcomeKey = "didShowWelcome"
+        if !UserDefaults.standard.bool(forKey: welcomeKey) {
+            UserDefaults.standard.set(true, forKey: welcomeKey)
+            DispatchQueue.main.async { [weak self] in self?.showWelcome() }
         }
 
         Updater.reconcileAfterRelaunch()
@@ -62,20 +68,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func buildMenu() {
         let s = Settings.shared
         let editorOpen = EditorWindowController.hasOpenWindows
+        let rec = VideoRecordController.shared
         var entries: [MenuEntry] = [
             .header("m_capture", url: "https://github.com/tuyen-nguyen-mesoneer/m_capture"),
             .separator,
-            .item(title: "Screenshot", symbol: "camera.viewfinder",
-                  shortcut: s.shortcut(.screenshot).displayString,
-                  enabled: !editorOpen) { [weak self] in self?.takeScreenshot() },
         ]
+        // While recording, surface Stop / Pause-Resume (and Show bar if minimized) so the
+        // whole flow can be driven from the menu bar, not just the floating HUD.
+        if rec.isRecording {
+            entries.append(.item(title: "Stop Recording", symbol: "stop.circle",
+                                 shortcut: nil) { rec.stopFromMenu() })
+            entries.append(.item(title: rec.isRecordingPaused ? "Resume Recording" : "Pause Recording",
+                                 symbol: rec.isRecordingPaused ? "play.circle" : "pause.circle",
+                                 shortcut: nil) { rec.togglePauseFromMenu() })
+            if rec.isBarHidden {
+                entries.append(.item(title: "Show Recording Bar", symbol: "menubar.dock.rectangle",
+                                     shortcut: nil) { rec.setBarHidden(false) })
+            }
+            entries.append(.separator)
+        }
+        entries.append(.item(title: "Screenshot", symbol: "camera.viewfinder",
+                             shortcut: s.shortcut(.screenshot).displayString,
+                             enabled: !editorOpen) { [weak self] in self?.takeScreenshot() })
         entries.append(contentsOf: [
             .item(title: "Record Video", symbol: "record.circle",
                   shortcut: s.shortcut(.record).displayString,
                   enabled: !editorOpen) { [weak self] in self?.record() },
+            .item(title: "Quick Screen", symbol: "cursorarrow.rays",
+                  shortcut: s.shortcut(.quickScreen).displayString,
+                  enabled: !editorOpen) { ScreenshotController.shared.captureQuickScreen() },
             .item(title: "Library", symbol: "folder", shortcut: nil) { [weak self] in self?.openLibrary() },
             .item(title: "Settings", symbol: "gearshape", shortcut: nil) { [weak self] in self?.settings() },
             .separator,
+            .item(title: "Usage Guide", symbol: "questionmark.circle", shortcut: nil) { [weak self] in self?.openUsageGuide() },
             .item(title: "About", symbol: "info.circle", shortcut: nil) { [weak self] in self?.about() },
             .item(title: "Check for Updates", symbol: "arrow.down.circle", shortcut: nil) { Updater.checkManually() },
             .item(title: "Report a Bug", symbol: "ladybug", shortcut: nil) { [weak self] in self?.reportBug() },
@@ -157,8 +182,69 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let u = url.url { NSWorkspace.shared.open(u) }
     }
 
+    /// Open the usage guide (the repo's USAGE.md) so the editor-only features — Pin,
+    /// OCR, Backgrounds, Before/After GIF, Quick Screen — are discoverable from the menu.
+    @objc func openUsageGuide() {
+        if let u = URL(string: "https://github.com/tuyen-nguyen-mesoneer/m_capture/blob/trunk/USAGE.md") {
+            NSWorkspace.shared.open(u)
+        }
+    }
+
     @objc func quit() {
+        // Finalize any in-flight recording synchronously first (proven run-loop-pumping
+        // path, same as Force Quit) so the mp4 is playable, then terminate. This is more
+        // reliable than applicationShouldTerminate/.terminateLater, whose modal run loop
+        // can leave the app half-alive.
+        VideoRecordController.shared.finalizeForTermination()
         NSApp.terminate(nil)
+    }
+
+    /// Safety net for quit routes that bypass our menu item (system logout, etc.):
+    /// finalize a still-running recording synchronously before the process exits.
+    func applicationWillTerminate(_ notification: Notification) {
+        VideoRecordController.shared.finalizeForTermination()
+    }
+
+    /// Show recording state right in the menu-bar icon — a red dot plus a live timer
+    /// (grey "Paused" when paused) — so it's unmistakable the app is recording even with
+    /// the floating bar minimized. Reverts to the plain m. logo when idle.
+    private func updateRecordingIndicator(active: Bool, elapsed: TimeInterval, paused: Bool) {
+        guard let button = statusItem.button else { return }
+        guard active else {
+            button.image = Logo.menuBarImage(); button.title = ""; button.imagePosition = .imageOnly
+            return
+        }
+        let conf = NSImage.SymbolConfiguration(pointSize: 12, weight: .bold)
+            .applying(.init(paletteColors: [paused ? .systemGray : .systemRed]))
+        let dot = NSImage(systemSymbolName: "record.circle.fill", accessibilityDescription: "Recording")?
+            .withSymbolConfiguration(conf)
+        dot?.isTemplate = false
+        button.image = dot
+        button.imagePosition = .imageLeading
+        button.imageHugsTitle = true
+        button.font = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .semibold)
+        button.title = paused ? " Paused" : " " + Self.clockString(elapsed)
+    }
+
+    private static func clockString(_ t: TimeInterval) -> String {
+        let s = Int(t), h = Int(t) / 3600, m = (s % 3600) / 60, sec = s % 60
+        return h > 0 ? String(format: "%d:%02d:%02d", h, m, sec) : String(format: "%d:%02d", m, sec)
+    }
+
+    /// First-run welcome: orients the user (menu-bar app, no Dock icon), shows the live
+    /// hotkeys, and — only on the user's choice — primes Screen Recording and enables
+    /// launch-at-login. Nothing is registered without an explicit click.
+    private func showWelcome() {
+        let s = Settings.shared
+        let sc = { (a: ShortcutAction) in s.shortcut(a).displayString }
+        let msg = "m_capture lives in your menu bar — no Dock icon.\n"
+            + "Screenshot \(sc(.screenshot))  ·  Record \(sc(.record))  ·  Quick Screen \(sc(.quickScreen))"
+        NSApp.activate(ignoringOtherApps: true)
+        let r = BrandAlert(title: "Welcome to m_capture",
+                           message: msg,
+                           titles: ["Grant Access", "Not Now"],
+                           primary: 0, cancel: 1, icon: "hand.wave.fill").runModal()
+        if r == 0 { ScreenRecordingPermission.prime() }
     }
 
     /// Force Quit: also force-terminates any other m_capture process still
@@ -172,6 +258,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         where other.processIdentifier != myPID {
             other.forceTerminate()
         }
+        // exit(0) skips applicationWillTerminate, so finalize a recording here too —
+        // otherwise a hard Force Quit mid-record leaves a corrupt file.
+        VideoRecordController.shared.finalizeForTermination()
         exit(0)
     }
 

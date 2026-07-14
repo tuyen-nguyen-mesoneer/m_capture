@@ -20,12 +20,29 @@ final class VideoRecordController {
     private var isPaused = false
     private var currentURL: URL?
 
+    /// Reports recording state to the menu-bar icon so it's obvious the app is recording
+    /// even when the floating bar is minimized: `(active, elapsed, paused)`.
+    var onRecordingUIUpdate: ((_ active: Bool, _ elapsed: TimeInterval, _ paused: Bool) -> Void)?
+    private func clearRecordingUI() { onRecordingUIUpdate?(false, 0, false) }
+
     // MARK: - Public
 
     /// Whether a recording is in progress (or paused mid-recording). Callers that need
     /// to avoid interrupting an in-flight capture (e.g. the updater's auto-relaunch)
     /// check this first.
     var isRecording: Bool { session != nil }
+
+    /// Whether an in-progress recording is currently paused (for the menu-bar controls).
+    var isRecordingPaused: Bool { session != nil && isPaused }
+
+    // Menu-bar controls, so the recording can be driven from the status item when the
+    // floating bar is minimized.
+    func stopFromMenu() { stopRecording() }
+    func togglePauseFromMenu() { togglePause() }
+    /// Hide/show the floating record bar without ending the recording.
+    func setBarHidden(_ hidden: Bool) { bar?.setVisible(!hidden) }
+    /// Whether the bar is currently hidden (minimized to the menu bar).
+    var isBarHidden: Bool { bar?.isVisible == false }
 
     /// Begin a new recording: show the selection overlay on every screen.
     /// No-op if a recording is already in progress, or the annotation editor
@@ -125,10 +142,10 @@ final class VideoRecordController {
                         // Downgrade: if both were requested, fall back to system only;
                         // if mic-only was requested, fall back to none.
                         effective = audioSource == .both ? .system : .none
-                        let alert = NSAlert()
-                        alert.messageText = "Microphone Access Denied"
-                        alert.informativeText = "m_capture doesn't have permission to use the microphone. Recording will continue without mic audio."
-                        alert.runModal()
+                        _ = BrandAlert(title: "Microphone access denied",
+                                       message: "Recording will continue without mic audio.",
+                                       titles: ["OK"], primary: 0, cancel: 0,
+                                       icon: "mic.slash").runModal()
                     }
                     self?.startRecording(target: target, barScreen: barScreen, audioSource: effective)
                 }
@@ -169,10 +186,13 @@ final class VideoRecordController {
             excludedWindowIDs: [CGWindowID(recordBar.windowNumber)]
         )
         session = recordSession
+        recordSession.onUnexpectedStop = { [weak self] reason in self?.handleUnexpectedStop(reason) }
 
         // Phase 2d — wire bar callbacks.
         recordBar.onStop = { [weak self] in self?.stopRecording() }
         recordBar.onPauseResume = { [weak self] in self?.togglePause() }
+        recordBar.onDiscard = { [weak self] in self?.discardRecording() }
+        recordBar.onMinimize = { [weak self] in self?.setBarHidden(true) }
 
         // Phase 2e — start capture, then start the UI ticker.
         // Handle start() errors explicitly: a silent failure leaves the bar running
@@ -195,15 +215,18 @@ final class VideoRecordController {
             self.bar?.update(elapsed: session.elapsedSeconds,
                              fileSize: session.estimatedFileSize,
                              isPaused: self.isPaused)
+            self.onRecordingUIUpdate?(true, session.elapsedSeconds, self.isPaused)
         }
         t.resume()
         updateTimer = t
+        onRecordingUIUpdate?(true, 0, isPaused)   // show the indicator immediately, not after 1 s
     }
 
     private func stopRecording() {
         updateTimer?.cancel()
         updateTimer = nil
         bar?.close()
+        clearRecordingUI()
         revertActivationPolicyIfIdle()
         guard let session = session, let url = currentURL else { return }
         self.session = nil
@@ -213,9 +236,64 @@ final class VideoRecordController {
         Task {
             await session.stop()
             await MainActor.run {
+                // Only celebrate/reveal a file that actually made it to disk — a
+                // failed writer leaves nothing to show.
+                guard FileManager.default.fileExists(atPath: url.path) else {
+                    _ = BrandAlert(title: "Recording wasn't saved",
+                                   message: "Check that your save folder has free space.",
+                                   titles: ["OK"], primary: 0, cancel: 0,
+                                   icon: "exclamationmark.triangle").runModal()
+                    return
+                }
                 if Settings.shared.playSound { NSSound(named: "Grab")?.play() }
                 NSWorkspace.shared.activateFileViewerSelecting([url])
             }
+        }
+    }
+
+    /// Finalize an in-flight recording before the process quits, so the `.mp4` gets its
+    /// `moov` atom instead of ending up a corrupt, unplayable file. Called from the Quit
+    /// / Force Quit menu actions before termination.
+    ///
+    /// We *pump* the main run loop while the async stop runs rather than blocking it:
+    /// `SCStream.stopCapture` delivers its completion on the main queue, so a plain
+    /// `semaphore.wait` on main would deadlock and leave the file unfinalized. Bounded
+    /// so termination can't hang.
+    func finalizeForTermination() {
+        guard let session = session, let url = currentURL else { return }
+        updateTimer?.cancel(); updateTimer = nil
+        bar?.close(); bar = nil
+        self.session = nil; self.currentURL = nil; self.isPaused = false
+        let done = DispatchSemaphore(value: 0)
+        Task.detached { await session.stop(); done.signal() }
+        let deadline = Date().addingTimeInterval(8)
+        while done.wait(timeout: .now()) == .timedOut, Date() < deadline {
+            // Let main-queue completions (stopCapture, finishWriting) run.
+            RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.02))
+        }
+        if Settings.shared.playSound, FileManager.default.fileExists(atPath: url.path) {
+            NSSound(named: "Grab")?.play()
+        }
+    }
+
+    /// Discard the recording (Esc): confirm, then stop the session and delete the
+    /// partial file — the universal cancel gesture shouldn't leave a junk .mp4 behind.
+    private func discardRecording() {
+        guard let session = session, let url = currentURL else { return }
+        NSApp.activate(ignoringOtherApps: true)
+        let confirm = BrandAlert(title: "Discard recording?",
+                                 message: "This recording will be deleted.",
+                                 titles: ["Discard", "Keep Recording"],
+                                 primary: 1, cancel: 1, icon: "trash", destructive: [0]).runModal()
+        guard confirm == 0 else { return }
+        updateTimer?.cancel(); updateTimer = nil
+        bar?.close(); bar = nil
+        clearRecordingUI()
+        self.session = nil; self.currentURL = nil; self.isPaused = false
+        revertActivationPolicyIfIdle()
+        Task {
+            await session.stop()
+            try? FileManager.default.removeItem(at: url)
         }
     }
 
@@ -228,6 +306,33 @@ final class VideoRecordController {
             session.pause()
             isPaused = true
         }
+        onRecordingUIUpdate?(true, session.elapsedSeconds, isPaused)   // reflect pause in the menu-bar icon at once
+    }
+
+    /// Called on the main thread when the capture stream stops unexpectedly mid-record
+    /// (permission revoked, display unplugged, disk trouble). Finalizes whatever was
+    /// captured, tears down the HUD, and tells the user — rather than the bar ticking
+    /// on against a dead stream.
+    private func handleUnexpectedStop(_ reason: String) {
+        guard let session = session else { return }
+        updateTimer?.cancel(); updateTimer = nil
+        bar?.close(); bar = nil
+        clearRecordingUI()
+        let url = currentURL
+        self.session = nil; self.currentURL = nil; self.isPaused = false
+        revertActivationPolicyIfIdle()
+        Task {
+            await session.stop()   // flush whatever frames made it, so the file is playable
+            await MainActor.run {
+                let saved = url.map { FileManager.default.fileExists(atPath: $0.path) } ?? false
+                let tail = saved ? " The partial recording was saved." : ""
+                _ = BrandAlert(title: "Recording stopped",
+                               message: "The recording ended unexpectedly.\(tail)",
+                               titles: ["OK"], primary: 0, cancel: 0,
+                               icon: "exclamationmark.triangle").runModal()
+                if saved, let url { NSWorkspace.shared.activateFileViewerSelecting([url]) }
+            }
+        }
     }
 
     /// Called on the main thread when `start()` throws. Tears down the bar and
@@ -235,6 +340,7 @@ final class VideoRecordController {
     private func handleStartError(_ error: Error) {
         updateTimer?.cancel(); updateTimer = nil
         bar?.close(); bar = nil
+        clearRecordingUI()
         session = nil; currentURL = nil; isPaused = false
         revertActivationPolicyIfIdle()
 
@@ -242,22 +348,16 @@ final class VideoRecordController {
         if isPermission {
             ScreenRecordingPermission.handleDenied()
         } else {
-            let alert = BrandAlert(
+            _ = BrandAlert(
                 title: "Recording failed to start",
-                message: "The recorder could not start: \(error.localizedDescription)\n\nIf Screen Recording was just reset by a rebuild, re-approve it under System Settings → Privacy & Security → Screen Recording and try again.",
-                titles: ["OK"],
-                primary: 0, cancel: 0
-            )
-            alert.runModal()
+                message: "If Screen Recording was just reset, re-approve it in System Settings and try again.",
+                titles: ["OK"], primary: 0, cancel: 0,
+                icon: "exclamationmark.triangle"
+            ).runModal()
         }
     }
 
-    /// Produces a timestamped `.mp4` URL in the configured save directory,
-    /// independent of the image-format setting in `Settings`.
-    private func videoURL() -> URL {
-        let fmt = DateFormatter()
-        fmt.dateFormat = "HH-mm-ss-dd-MM-yyyy"
-        let name = "\(Settings.shared.filenamePrefix)\(fmt.string(from: Date())).mp4"
-        return Settings.shared.saveDirectory.appendingPathComponent(name)
-    }
+    /// Produces a timestamped `.mp4` URL in the (validated, uniquified) save
+    /// directory, independent of the image-format setting in `Settings`.
+    private func videoURL() -> URL { Settings.shared.fileURL(ext: "mp4") }
 }

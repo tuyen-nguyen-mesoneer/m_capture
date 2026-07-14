@@ -30,9 +30,11 @@ on-device, with no subscriptions, cloud services, or accounts.
 - **Region, window, or full screen** — drag to select a region, or press **Space** to grab a whole window (hover to wash it in a tint, release the mouse over it to capture) or the entire screen in a single click. Fully multi-monitor aware — every mode works on any connected display.
 - **Quick Screen** (`⌃⇧Q`) — grabs the screen under your cursor the instant you press the hotkey, with no selection overlay in between — for a hover state, tooltip, or menu that would vanish once you start dragging a selection.
 - **Self-timer** — a 3, 5, or 10-second delay with a menu-bar countdown, plus an optional mouse cursor and shutter sound.
-- **Recording** — record a region, a single window, or the whole screen in-app to an MP4 (HEVC), with a floating, draggable timer/size bar and pause/stop; optionally mixes in system and/or microphone audio.
+- **Recording** — record a region, a single window, or the whole screen in-app to an MP4 (HEVC), with a floating, draggable bar (live timer, size, quality, pause/stop); optionally mixes in system and/or microphone audio. **Esc discards** the take; **Return** saves it.
+- **Menu-bar recording controls** — the menu-bar icon turns into a **red dot with a live timer** while recording (grey when paused), so it's clear even at a glance. **Minimize** the floating bar and drive Pause / Resume / Stop straight from the **m.** menu.
 - **Configurable after-capture action** — open the editor, save directly to disk, or copy to the clipboard.
-- **Launch at login** — start automatically with the system.
+- **Never lose a capture** — quitting mid-recording still finalizes a playable file; if a save folder is missing the capture falls back to the Desktop (and tells you); same-second captures never overwrite.
+- **First-run welcome** — a one-time welcome points out the menu-bar icon and hotkeys and, with your consent, grants Screen Recording. **Launch at login** is a toggle in Settings.
 
 **✏️ Annotate & edit** — an in-place editor in which every tool is a single keystroke, with full undo and redo.
 - **Draw** — pencil, highlighter, and eraser.
@@ -40,8 +42,8 @@ on-device, with no subscriptions, cloud services, or accounts.
 - **Text & counters** — inline text labels, auto-incrementing badges (numbers, letters, or Roman numerals), and emoji stamps.
 - **Focus & redaction** — **blur** to obscure sensitive information, **spotlight** to dim the surroundings, and **zoom** callouts to magnify detail.
 - **Measure & compose** — an on-screen **ruler**, image overlays, and an **eyedropper** for color matching.
-- **Color** — a 10-color palette with a custom hue and brightness picker.
-- **Select & move** — grab any placed mark with the **Select** tool (`V`) to drag it elsewhere, resize it from a corner knob, or delete it — no need to undo and redraw.
+- **Style** — a preset color palette with a custom hue/brightness picker, plus a stroke-width control (thin / medium / thick).
+- **Select & edit** — every placed mark stays editable: with the **Select** tool (`V`) — or right after you draw it — drag it to reposition, resize shapes from **any of eight handles** (four corners plus four edges, so you can stretch one side), reshape arrows and lines by their **endpoints or bend handle**, or press **⌫** to delete.
 - **Transform** — crop, rotate, flip, and aspect-locked resize, all baked into the export.
 
 **🚀 Share**
@@ -84,11 +86,14 @@ essential details in place.
 
 ## Permissions
 
-**m_capture** requires **Screen Recording** permission, as it captures through the
-system `screencapture` tool. macOS prompts for this on your first capture; grant it
-under **System Settings → Privacy & Security → Screen Recording**, then relaunch the
-app. **A blank capture is almost always caused by a missing grant.** Global hotkeys
-use Carbon and require no additional permission.
+**m_capture** requires **Screen Recording** permission, as it captures the screen
+in-process via **ScreenCaptureKit**. The first-run welcome can grant it up front;
+otherwise macOS prompts on your first capture. Grant it under **System Settings →
+Privacy & Security → Screen Recording**, then relaunch the app (a capture attempted
+without the grant shows guidance instead of failing silently). **A blank capture is
+almost always caused by a missing grant.** Recording the microphone additionally asks
+for **Microphone** permission; declining just drops the mic track. Global hotkeys use
+Carbon and require no additional permission.
 
 ## Build from source
 
