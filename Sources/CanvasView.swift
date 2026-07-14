@@ -23,6 +23,7 @@ final class CanvasView: NSView, NSTextViewDelegate {
                  (tool == .line && editingCurve is CurvedLineAnnotation)) {
                 editingCurve = nil
             }
+            if editingShapeTool != tool { editingShape = nil; editingShapeTool = nil }
             if tool != .zoom { editingZoom = nil }
             if tool != .overlay, editingOverlay != nil { editingOverlay = nil; onOverlaySelected?(nil) }
             if tool != .ruler { measureAxis = .none; measureAnchor = nil }
@@ -55,7 +56,21 @@ final class CanvasView: NSView, NSTextViewDelegate {
     private var zoomDragOffset: CGPoint = .zero
 
     private var editingCurve: CurvedAnnotation?
-    private var draggingCurveHandle = false
+    /// Which of a curved arrow/line's three drag knobs is being reshaped.
+    private enum CurveHandle { case start, end, apex }
+    private var curveDrag: (curve: CurvedAnnotation, handle: CurveHandle)?
+
+    /// The shape just drawn with a shape tool, kept live so its corner handles show
+    /// (and it can be resized/moved) without switching to Select — mirrors `editingCurve`.
+    /// `editingShapeTool` records the tool that made it, so re-selecting the same tool
+    /// keeps the handles while switching to any other tool clears them.
+    private var editingShape: TwoPointAnnotation?
+    private var editingShapeTool: Tool?
+
+    /// An eight-way box resize for rectangle-based shapes: four corners (free, both
+    /// axes) and four edge midpoints (single axis, e.g. stretch a triangle wider).
+    private enum BoxHandle { case topLeft, top, topRight, right, bottomRight, bottom, bottomLeft, left }
+    private var boxDrag: (shape: TwoPointAnnotation, handle: BoxHandle)?
 
     private var editingOverlay: ImageOverlayAnnotation?
     private enum OverlayDrag { case none, move, resize }
@@ -200,7 +215,7 @@ final class CanvasView: NSView, NSTextViewDelegate {
     /// Tools whose "point" is at the glyph's lower-left tip rather than its centre.
     private static func usesTipHotspot(_ tool: Tool) -> Bool {
         switch tool {
-        case .pencil, .marker, .eraser, .eyedropper, .arrow: return true
+        case .pencil, .marker, .eraser, .eyedropper: return true
         default: return false
         }
     }
@@ -215,29 +230,23 @@ final class CanvasView: NSView, NSTextViewDelegate {
         }
     }
 
-    /// SF Symbol name representing each tool's cursor. Shape-family tools use the
-    /// outline variant — a filled glyph reads as an indistinguishable purple blob
-    /// at cursor size, where the outline keeps the silhouette recognizable.
+    /// SF Symbol name representing each tool's cursor. The shape family plus line and
+    /// arrow share one precise crosshair glyph — a miniature shape/line outline reads as
+    /// an indistinguishable purple blob at cursor size and hides the exact drag-start
+    /// point, whereas a crosshair marks that point cleanly for dragging the mark out.
     /// `nil` → no glyph (use arrow). Unavailable names fall back to the crosshair.
     private static func symbolName(for tool: Tool) -> String? {
         switch tool {
         case .pencil:      return "pencil"
         case .marker:      return "highlighter"
-        case .line:        return "line.diagonal"
-        case .arrow:       return "arrow.up.right"
-        case .rect, .roundedRect: return "rectangle"
-        case .ellipse:     return "circle"
-        case .triangle:    return "triangle"
-        case .diamond:     return "diamond"
-        case .star:        return "star"
-        case .checkmark:   return "checkmark"
-        case .pentagon:    return "pentagon"
-        case .hexagon:     return "hexagon"
-        case .octagon:     return "octagon"
+        // Drag-to-define tools — shapes, line/arrow, and the blur / spotlight region
+        // drags — all share the precise crosshair: a filled glyph sits as an opaque
+        // blob over the exact start point you're aiming at.
+        case .line, .arrow, .rect, .roundedRect, .ellipse, .triangle, .diamond,
+             .star, .checkmark, .pentagon, .hexagon, .octagon,
+             .blur, .spotlight: return "plus"
         case .text:        return "character.textbox"
-        case .blur:        return "drop.fill"
         case .counter:     return "number.circle.fill"
-        case .spotlight:   return "flashlight.on.fill"
         case .eyedropper:  return "eyedropper.full"
         case .eraser:      return "eraser.fill"
         case .crop:        return "crop"
@@ -309,9 +318,24 @@ final class CanvasView: NSView, NSTextViewDelegate {
                 NSCursor.pointingHand.set(); return
             }
         }
+        if tool == .arrow || tool == .line, let ec = editingCurve,
+           curveHandle(ec, at: imagePoint(event)) != nil {
+            NSCursor.openHand.set(); return
+        }
+        if Self.isShapeTool(tool), let es = editingShape {
+            let p = imagePoint(event)
+            if let h = boxHandle(for: es, at: p) { boxCursor(h).set(); return }
+            if es.hit(p) { NSCursor.openHand.set(); return }
+        }
         if tool == .select {
-            let p = imagePoint(event), hr = 12 / displayScale
-            if annotations.contains(where: { $0.resizable && hypot($0.bounds.maxX - p.x, $0.bounds.minY - p.y) < hr }) {
+            let p = imagePoint(event)
+            if let c = selected as? CurvedAnnotation, curveHandle(c, at: p) != nil {
+                NSCursor.openHand.set(); return
+            }
+            if let sh = selected as? TwoPointAnnotation, let h = boxHandle(for: sh, at: p) {
+                boxCursor(h).set(); return
+            }
+            if let s = selected, resizeAnchor(for: s, at: p) != nil {
                 NSCursor.openHand.set(); return
             }
             (annotations.contains { $0.hit(p) } ? NSCursor.openHand : NSCursor.arrow).set()
@@ -362,12 +386,25 @@ final class CanvasView: NSView, NSTextViewDelegate {
     override func mouseDown(with event: NSEvent) {
         let didCommit = commitText()
         let p = imagePoint(event)
+        // A shape tool keeps its last shape live: grab a corner to resize it or its
+        // body to move it, exactly like the Select tool, without leaving the tool.
+        if Self.isShapeTool(tool), let es = editingShape {
+            if let h = boxHandle(for: es, at: p) {
+                boxDrag = (es, h); lastDragPoint = p
+                boxCursor(h).push(); needsDisplay = true; return
+            }
+            if es.hit(p) {
+                selected = es; selectDrag = .move; lastDragPoint = p
+                NSCursor.closedHand.push(); needsDisplay = true; return
+            }
+            editingShape = nil; editingShapeTool = nil   // clicked away → start a fresh shape
+        }
         switch tool {
         case .pencil:  let a = PencilAnnotation(style: style); a.add(p); live = a
         case .marker:  let a = MarkerAnnotation(style: style); a.add(p); live = a
         case .line, .arrow:
-            if let ec = editingCurve, hypot(ec.apex.x - p.x, ec.apex.y - p.y) < 11 / displayScale {
-                draggingCurveHandle = true
+            if let ec = editingCurve, let h = curveHandle(ec, at: p) {
+                curveDrag = (ec, h); NSCursor.closedHand.push()
             } else {
                 editingCurve = nil
                 live = tool == .arrow ? CurvedArrowAnnotation(start: p, style: style)
@@ -459,16 +496,16 @@ final class CanvasView: NSView, NSTextViewDelegate {
                 onOverlaySelected?(editingOverlay)
             }
         case .select:
-            let hr = 12 / displayScale
             if event.clickCount >= 2, let hit = annotations.reversed()
                 .first(where: { ($0 as? TextAnnotation)?.hit(p) ?? false }) as? TextAnnotation {
                 beginEditing(hit)
-            } else if let corner = annotations.reversed().first(where: {
-                $0.resizable && hypot($0.bounds.maxX - p.x, $0.bounds.minY - p.y) < hr
-            }) {
-                selected = corner
+            } else if let c = selected as? CurvedAnnotation, let h = curveHandle(c, at: p) {
+                curveDrag = (c, h); NSCursor.closedHand.push()
+            } else if let sh = selected as? TwoPointAnnotation, let h = boxHandle(for: sh, at: p) {
+                boxDrag = (sh, h); lastDragPoint = p; boxCursor(h).push()
+            } else if let s = selected, let anchor = resizeAnchor(for: s, at: p) {
                 selectDrag = .resize
-                dragAnchor = CGPoint(x: corner.bounds.minX, y: corner.bounds.maxY)
+                dragAnchor = anchor
                 lastDragPoint = p
                 NSCursor.closedHand.push()
             } else if let hit = annotations.reversed().first(where: { $0.hit(p) }) {
@@ -500,8 +537,16 @@ final class CanvasView: NSView, NSTextViewDelegate {
             if measureAxis != .none { needsDisplay = true }
             return
         }
-        if draggingCurveHandle, let ec = editingCurve {
-            ec.bend(through: p); needsDisplay = true; return
+        if let cd = curveDrag {
+            switch cd.handle {
+            case .start: cd.curve.start = p
+            case .end:   cd.curve.end = p
+            case .apex:  cd.curve.bend(through: p)
+            }
+            needsDisplay = true; return
+        }
+        if let bd = boxDrag {
+            resizeBox(bd.shape, handle: bd.handle, to: p); needsDisplay = true; return
         }
         if zoomDrag == .move, let ez = editingZoom {
             ez.dest.origin = CGPoint(x: p.x - zoomDragOffset.x, y: p.y - zoomDragOffset.y)
@@ -591,8 +636,16 @@ final class CanvasView: NSView, NSTextViewDelegate {
     }
 
     override func mouseUp(with event: NSEvent) {
-        if draggingCurveHandle {
-            draggingCurveHandle = false; onChange?(); needsDisplay = true; return
+        if curveDrag != nil {
+            curveDrag = nil
+            NSCursor.pop()   // matches the closedHand push on handle grab
+            onChange?(); needsDisplay = true; return
+        }
+        if let bd = boxDrag {
+            if let b = bd.shape as? BlurAnnotation { b.patch = gaussianBlur(b.rect) }
+            boxDrag = nil
+            NSCursor.pop()   // matches the resize-cursor push on knob grab
+            onChange?(); needsDisplay = true; return
         }
         if textDrag != .none {
             textDrag = .none; NSCursor.pop(); onChange?(); needsDisplay = true; return
@@ -656,11 +709,22 @@ final class CanvasView: NSView, NSTextViewDelegate {
                 a.straighten()
             }
         }
+        // Spotlight is drag-only: a click (no real dragged area) shouldn't dim the
+        // whole shot around a zero-size hole, so discard it below the drag threshold.
+        if tool == .spotlight, let a = live as? SpotlightAnnotation {
+            let minSide = 8 / displayScale
+            if a.rect.width < minSide || a.rect.height < minSide {
+                live = nil; needsDisplay = true; return
+            }
+        }
         if let b = live as? BlurAnnotation { b.patch = gaussianBlur(b.rect) }
         if let a = live {
             annotations.append(a)
             if a is CounterAnnotation { counter += 1 }
             if let cc = a as? CurvedAnnotation { editingCurve = cc }
+            if Self.isShapeTool(tool), let sh = a as? TwoPointAnnotation {
+                editingShape = sh; editingShapeTool = tool
+            }
             redoStack.removeAll()
             live = nil
             onChange?()
@@ -891,9 +955,122 @@ final class CanvasView: NSView, NSTextViewDelegate {
     }
 
     private func clearSelections() {
-        editingCurve = nil; editingZoom = nil; selected = nil; selectDrag = .none
+        editingCurve = nil; curveDrag = nil; boxDrag = nil; editingShape = nil; editingShapeTool = nil
+        editingZoom = nil; selected = nil; selectDrag = .none
         editingText = nil; textDrag = .none
         if editingOverlay != nil { editingOverlay = nil; onOverlaySelected?(nil) }
+    }
+
+    /// The curve handle under `p` (whichever knob is nearest within grab range), or
+    /// nil. Endpoints and apex share the reshape gesture for arrows and lines.
+    private func curveHandle(_ c: CurvedAnnotation, at p: CGPoint) -> CurveHandle? {
+        let hr = 12 / displayScale
+        let candidates: [(CurveHandle, CGPoint)] = [(.start, c.start), (.end, c.end), (.apex, c.apex)]
+        return candidates
+            .map { ($0.0, hypot($0.1.x - p.x, $0.1.y - p.y)) }
+            .filter { $0.1 < hr }
+            .min { $0.1 < $1.1 }?.0
+    }
+
+    /// The four corners of a bounding box, each paired with its diagonally opposite
+    /// corner (the anchor a resize scales around).
+    private func cornerAnchors(_ b: CGRect) -> [(corner: CGPoint, anchor: CGPoint)] {
+        [(CGPoint(x: b.minX, y: b.maxY), CGPoint(x: b.maxX, y: b.minY)),
+         (CGPoint(x: b.maxX, y: b.maxY), CGPoint(x: b.minX, y: b.minY)),
+         (CGPoint(x: b.minX, y: b.minY), CGPoint(x: b.maxX, y: b.maxY)),
+         (CGPoint(x: b.maxX, y: b.minY), CGPoint(x: b.minX, y: b.maxY))]
+    }
+
+    /// The resize anchor (opposite corner) for whichever of a resizable mark's four
+    /// corner knobs sits under `p`, or nil. Lets any corner drag the shape's size.
+    private func resizeAnchor(for s: Annotation, at p: CGPoint) -> CGPoint? {
+        guard s.resizable else { return nil }
+        let hr = 12 / displayScale
+        return cornerAnchors(s.bounds)
+            .map { ($0.anchor, hypot($0.corner.x - p.x, $0.corner.y - p.y)) }
+            .filter { $0.1 < hr }
+            .min { $0.1 < $1.1 }?.0
+    }
+
+    /// The eight box-resize knob positions for a bounding box: four corners and four
+    /// edge midpoints.
+    private func boxHandlePoints(_ b: CGRect) -> [(handle: BoxHandle, point: CGPoint)] {
+        [(.bottomLeft,  CGPoint(x: b.minX, y: b.minY)),
+         (.bottom,      CGPoint(x: b.midX, y: b.minY)),
+         (.bottomRight, CGPoint(x: b.maxX, y: b.minY)),
+         (.right,       CGPoint(x: b.maxX, y: b.midY)),
+         (.topRight,    CGPoint(x: b.maxX, y: b.maxY)),
+         (.top,         CGPoint(x: b.midX, y: b.maxY)),
+         (.topLeft,     CGPoint(x: b.minX, y: b.maxY)),
+         (.left,        CGPoint(x: b.minX, y: b.midY))]
+    }
+
+    /// Which box-resize knob sits under `p` (nearest within grab range), or nil.
+    private func boxHandle(for s: TwoPointAnnotation, at p: CGPoint) -> BoxHandle? {
+        let hr = 12 / displayScale
+        return boxHandlePoints(s.bounds)
+            .map { ($0.handle, hypot($0.point.x - p.x, $0.point.y - p.y)) }
+            .filter { $0.1 < hr }
+            .min { $0.1 < $1.1 }?.0
+    }
+
+    /// Resize a rect-based shape by dragging one of its eight knobs to `p`: the grabbed
+    /// edge(s) follow the pointer, the opposite edge(s) stay put, clamped to a min size.
+    private func resizeBox(_ s: TwoPointAnnotation, handle: BoxHandle, to p: CGPoint) {
+        let b = s.bounds, m = 8 / displayScale
+        var minX = b.minX, maxX = b.maxX, minY = b.minY, maxY = b.maxY
+        switch handle {
+        case .left, .topLeft, .bottomLeft:    minX = min(p.x, maxX - m)
+        case .right, .topRight, .bottomRight: maxX = max(p.x, minX + m)
+        default: break
+        }
+        switch handle {
+        case .bottom, .bottomLeft, .bottomRight: minY = min(p.y, maxY - m)
+        case .top, .topLeft, .topRight:          maxY = max(p.y, minY + m)
+        default: break
+        }
+        s.start = CGPoint(x: minX, y: minY)
+        s.end   = CGPoint(x: maxX, y: maxY)
+    }
+
+    /// The resize cursor for a box handle — directional for the edges, a grab hand for
+    /// the free corners.
+    private func boxCursor(_ h: BoxHandle) -> NSCursor {
+        switch h {
+        case .left, .right: return .resizeLeftRight
+        case .top, .bottom: return .resizeUpDown
+        default:            return .openHand
+        }
+    }
+
+    /// Draw a resizable mark's selection outline plus a white knob at each of its four
+    /// corners — the shared affordance for the Select tool and a live shape.
+    private func drawResizeBox(_ s: Annotation, in ctx: CGContext) {
+        let b = s.bounds
+        ctx.setStrokeColor(Theme.lavender.cgColor); ctx.setLineWidth(1.5 / displayScale)
+        ctx.stroke(b)
+        guard s.resizable else { return }
+        // Rect-based shapes get all eight knobs (edges stretch one axis); other
+        // resizable marks scale uniformly, so only their four corners are shown.
+        let pts = s is TwoPointAnnotation ? boxHandlePoints(b).map(\.point) : cornerAnchors(b).map(\.corner)
+        let r = 6 / displayScale
+        for c in pts {
+            let knob = CGRect(x: c.x - r, y: c.y - r, width: r * 2, height: r * 2)
+            ctx.setFillColor(NSColor(white: 1, alpha: 0.95).cgColor); ctx.fillEllipse(in: knob)
+            ctx.setStrokeColor(Theme.lavender.cgColor); ctx.strokeEllipse(in: knob)
+        }
+    }
+
+    /// Draw a curve's three reshape knobs (start, end, apex) as white dots ringed in
+    /// `tint`, matching the other editor handles.
+    private func drawCurveHandles(_ c: CurvedAnnotation, in ctx: CGContext, tint: NSColor) {
+        let r = 6 / displayScale
+        ctx.setLineWidth(1.5 / displayScale)
+        for pt in [c.start, c.end, c.apex] {
+            let box = CGRect(x: pt.x - r, y: pt.y - r, width: r * 2, height: r * 2)
+            ctx.setFillColor(NSColor(white: 1, alpha: 0.95).cgColor); ctx.fillEllipse(in: box)
+            ctx.setStrokeColor(tint.cgColor); ctx.strokeEllipse(in: box)
+        }
     }
 
     override func draw(_ dirtyRect: NSRect) {
@@ -911,10 +1088,7 @@ final class CanvasView: NSView, NSTextViewDelegate {
             ctx.stroke(z)
         }
         if tool == .arrow || tool == .line, let ec = editingCurve {
-            let r = 6 / displayScale, c = ec.apex
-            let box = CGRect(x: c.x - r, y: c.y - r, width: r * 2, height: r * 2)
-            ctx.setFillColor(NSColor(white: 1, alpha: 0.95).cgColor); ctx.fillEllipse(in: box)
-            ctx.setStrokeColor(style.color.cgColor); ctx.setLineWidth(1.5 / displayScale); ctx.strokeEllipse(in: box)
+            drawCurveHandles(ec, in: ctx, tint: style.color)
         }
         if tool == .zoom, let ez = editingZoom {
             let r = 6 / displayScale
@@ -940,16 +1114,16 @@ final class CanvasView: NSView, NSTextViewDelegate {
             ctx.setStrokeColor(Theme.lavender.cgColor); ctx.setLineWidth(1.5 / displayScale); ctx.strokeEllipse(in: knob)
         }
         if tool == .select, let s = selected {
-            let b = s.bounds
-            ctx.setStrokeColor(Theme.lavender.cgColor); ctx.setLineWidth(1.5 / displayScale)
-            ctx.stroke(b)
-            if s.resizable {
-                let r = 6 / displayScale
-                let knob = CGRect(x: b.maxX - r, y: b.minY - r, width: r * 2, height: r * 2)
-                ctx.setFillColor(NSColor(white: 1, alpha: 0.95).cgColor); ctx.fillEllipse(in: knob)
-                ctx.setStrokeColor(Theme.lavender.cgColor); ctx.setLineWidth(1.5 / displayScale); ctx.strokeEllipse(in: knob)
+            if let c = s as? CurvedAnnotation {
+                // Curves show their three drag knobs instead of a bounds box — the box
+                // around a diagonal arrow is large and reads as a phantom rectangle.
+                drawCurveHandles(c, in: ctx, tint: Theme.lavender)
+            } else {
+                drawResizeBox(s, in: ctx)
             }
         }
+        // A shape tool's just-drawn shape shows the same corner handles in place.
+        if Self.isShapeTool(tool), let es = editingShape { drawResizeBox(es, in: ctx) }
         if tool == .ruler, measureAxis != .none, let a = measureAnchor {
             MeasureAnnotation(start: a, end: measureEnd(at: lastMousePoint, from: a),
                               style: style).draw(in: ctx)
@@ -990,7 +1164,7 @@ final class CanvasView: NSView, NSTextViewDelegate {
             if let z = a as? ZoomAnnotation { z.patch = croppedCGImage(rect: z.source) }
         }
         live = nil
-        editingCurve = nil
+        editingCurve = nil; curveDrag = nil; boxDrag = nil; editingShape = nil; editingShapeTool = nil
         editingZoom = nil
         selected = nil; selectDrag = .none
         if editingOverlay != nil { editingOverlay = nil; onOverlaySelected?(nil) }
@@ -1100,7 +1274,8 @@ final class CanvasView: NSView, NSTextViewDelegate {
         image = img
         resampleSourceImage = img
         resampleCumulative = cumulative
-        annotations.removeAll(); redoStack.removeAll(); live = nil; editingCurve = nil; editingZoom = nil
+        annotations.removeAll(); redoStack.removeAll(); live = nil; editingCurve = nil; curveDrag = nil; boxDrag = nil
+        editingShape = nil; editingShapeTool = nil; editingZoom = nil
         selected = nil; selectDrag = .none
         if editingOverlay != nil { editingOverlay = nil; onOverlaySelected?(nil) }
         measureAxis = .none; measureAnchor = nil
