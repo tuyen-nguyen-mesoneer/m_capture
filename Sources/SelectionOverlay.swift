@@ -274,7 +274,7 @@ final class SelectionView: NSView {
     override func draw(_ dirtyRect: NSRect) {
         guard let ctx = NSGraphicsContext.current?.cgContext else { return }
 
-        ctx.setFillColor(Theme.surfaceBase.withAlphaComponent(0.3).cgColor)
+        ctx.setFillColor(Theme.surfaceBase.withAlphaComponent(0.55).cgColor)
         ctx.fill(bounds)
 
         switch captureMode {

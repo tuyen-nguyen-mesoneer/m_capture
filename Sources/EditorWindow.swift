@@ -48,10 +48,11 @@ private final class BackgroundView: NSView {
     }
 }
 
-/// One of eight draggable knobs around the capture — four corners resize both axes,
-/// four edge midpoints a single axis. Dragging resizes the picture (aspect free); the
-/// controller previews and commits the resample. Reports the drag as a screen-space
-/// delta so the controller can move the grabbed edge(s) and hold the opposite ones.
+/// One of eight draggable knobs around the capture — four corners trim both axes, four
+/// edge midpoints a single axis. Dragging trims the capture region inward (a crop of the
+/// captured pixels, never a grow); the controller previews and commits the crop. Reports
+/// the drag as a screen-space delta so the controller can move the grabbed edge(s) and
+/// hold the opposite ones.
 private final class ResizeHandle: NSView {
     enum Edge: CaseIterable { case topLeft, top, topRight, right, bottomRight, bottom, bottomLeft, left }
     let edge: Edge
@@ -145,6 +146,10 @@ final class EditorWindowController: NSObject {
     /// key equivalent is consumed before it ever becomes a keyDown.)
     private var pasteMonitor: Any?
     private let canvas: CanvasView
+    /// Capture context, kept so the resize handles can re-grab a larger region from the
+    /// same display (excluding this editor window so it sees the real screen behind).
+    private let captureScreen: NSScreen
+    private var reGrabbing = false
     private var toolButtons: [Tool: ToolButton] = [:]
     private var swatchButtons: [ToolButton] = []
     /// Stroke-width presets, exposed via ONE cycling tile (Thin → Medium → Thick) so the
@@ -181,6 +186,7 @@ final class EditorWindowController: NSObject {
     private var opacityCard: NSView?
     private weak var opacitySlider: NSSlider?
 
+
     private let palette: [(NSColor, String)] = [
         (Theme.rgb(0xE5, 0x3E, 0x3E), "Red"),
         (Theme.rgb(0xF9, 0x73, 0x16), "Orange"),
@@ -205,6 +211,7 @@ final class EditorWindowController: NSObject {
     init(image: NSImage, selectionRect: CGRect, screen: NSScreen, captureScale: CGFloat = 1) {
         let scale = captureScale > 0 ? 1 / captureScale : 1
         canvas = CanvasView(image: image, displayScale: scale)
+        captureScreen = screen
         window = KeyableWindow(contentRect: screen.frame, styleMask: .borderless,
                                backing: .buffered, defer: false)
         super.init()
@@ -941,8 +948,16 @@ final class EditorWindowController: NSObject {
 
     /// Paste an image from the clipboard as an overlay (⌘V in the canvas).
     private func pasteOverlay() {
+        // Image wins when present; otherwise fall back to pasting clipboard text as a
+        // text box (⌘V is shared between the two).
         guard let cg = CanvasView.cgImage(from: .general) else {
-            flashMessage("No image on the clipboard"); return
+            if let s = NSPasteboard.general.string(forType: .string),
+               !s.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                canvas.insertTextBox(s)
+            } else {
+                flashMessage("No image or text on the clipboard")
+            }
+            return
         }
         selectTool(.overlay)
         canvas.insertOverlay(cg)
@@ -1015,6 +1030,7 @@ final class EditorWindowController: NSObject {
     @objc private func opacityChanged(_ sender: NSSlider) {
         canvas.setSelectedOverlayOpacity(CGFloat(sender.doubleValue))
     }
+
 
     /// The flattened capture wrapped in the selected background (or just the
     /// flattened capture when `.none`). Used by Copy / Save / Pin (not OCR).
@@ -1195,12 +1211,6 @@ final class EditorWindowController: NSObject {
         case .left:        return CGPoint(x: f.minX, y: f.midY)
         }
     }
-    private func isLeftEdge(_ e: ResizeHandle.Edge) -> Bool {
-        switch e { case .topLeft, .left, .bottomLeft: return true; default: return false }
-    }
-    private func isBottomEdge(_ e: ResizeHandle.Edge) -> Bool {
-        switch e { case .bottomLeft, .bottom, .bottomRight: return true; default: return false }
-    }
 
     /// Put (or move) the eight resize knobs around the canvas — corners resize both
     /// axes, edge midpoints a single axis.
@@ -1239,45 +1249,67 @@ final class EditorWindowController: NSObject {
         p.layer?.borderColor = Theme.lavender.cgColor
         p.layer?.borderWidth = 1.5
         p.layer?.backgroundColor = NSColor.clear.cgColor
-        content.addSubview(p)
-        resizeHandles.forEach { content.addSubview($0) }   // keep knobs above the preview
+        // Insert the preview *below* the handles — re-adding the handles here would cancel
+        // the in-progress drag tracking on the grabbed handle (its mouseDragged then never
+        // fires, so the crop never registers).
+        content.addSubview(p, positioned: .below, relativeTo: resizeHandles.first)
         resizePreview = p
     }
 
     /// Move the grabbed edge(s) by the drag delta, holding the opposite edge(s) fixed.
+    /// Clamped to the display bounds so the region can be trimmed inward *or* grown outward
+    /// (up to the screen edge); growth re-grabs the display in `resizeEnded`.
     private func resizeDragged(_ d: CGSize) {
         guard let p = resizePreview, let content = window.contentView,
               resizeBaseFrame.width > 0, resizeBaseFrame.height > 0 else { return }
         let b = resizeBaseFrame, edge = activeResizeEdge, minSide: CGFloat = 40
+        let limit = content.bounds
         var minX = b.minX, maxX = b.maxX, minY = b.minY, maxY = b.maxY
         switch edge {
-        case .topLeft, .left, .bottomLeft:    minX = min(b.minX + d.width, maxX - minSide)
-        case .topRight, .right, .bottomRight: maxX = max(b.maxX + d.width, minX + minSide)
+        case .topLeft, .left, .bottomLeft:    minX = min(max(b.minX + d.width, limit.minX), maxX - minSide)
+        case .topRight, .right, .bottomRight: maxX = max(min(b.maxX + d.width, limit.maxX), minX + minSide)
         default: break
         }
         switch edge {
-        case .topLeft, .top, .topRight:          maxY = max(b.maxY + d.height, minY + minSide)
-        case .bottomLeft, .bottom, .bottomRight: minY = min(b.minY + d.height, maxY - minSide)
+        case .topLeft, .top, .topRight:          maxY = max(min(b.maxY + d.height, limit.maxY), minY + minSide)
+        case .bottomLeft, .bottom, .bottomRight: minY = min(max(b.minY + d.height, limit.minY), maxY - minSide)
         default: break
         }
-        minX = max(minX, 8); minY = max(minY, 8)
-        maxX = min(maxX, content.bounds.width - 8); maxY = min(maxY, content.bounds.height - 8)
-        p.frame = NSRect(x: minX, y: minY, width: max(minSide, maxX - minX), height: max(minSide, maxY - minY))
+        p.frame = NSRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
         repositionResizeHandles(around: p.frame)
     }
 
+    /// Commit the new region by re-grabbing that rectangle from the display (excluding this
+    /// editor window so it sees the real screen behind) — so the region can be enlarged to
+    /// show more, not just cropped. A drag that didn't move the region is a no-op.
     private func resizeEnded() {
         guard let p = resizePreview, resizeBaseFrame.width > 0, resizeBaseFrame.height > 0 else { return }
-        let b = resizeBaseFrame
-        let scaleX = p.frame.width / b.width, scaleY = p.frame.height / b.height
+        let b = resizeBaseFrame, ds = canvas.displayScale, pf = p.frame
         p.removeFromSuperview(); resizePreview = nil
-        canvas.bakeResample(scaleX: scaleX, scaleY: scaleY)
-        // Anchor the edge(s) that stayed put during the drag to the grid-aligned size the
-        // bake produced: a left-side grab holds the right edge, a bottom grab holds the top.
-        let size = NSSize(width: canvas.frame.width.rounded(), height: canvas.frame.height.rounded())
-        let originX = isLeftEdge(activeResizeEdge) ? b.maxX - size.width : b.minX
-        let originY = isBottomEdge(activeResizeEdge) ? b.maxY - size.height : b.minY
-        relayout(canvasFrame: NSRect(x: originX, y: originY, width: size.width, height: size.height))
+        // Unchanged region → nothing to do.
+        if abs(pf.minX - b.minX) < 1, abs(pf.minY - b.minY) < 1,
+           abs(pf.width - b.width) < 1, abs(pf.height - b.height) < 1 { relayout(canvasFrame: b); return }
+        guard pf.width >= 20, pf.height >= 20, let displayID = captureScreen.displayID, !reGrabbing else {
+            relayout(canvasFrame: b); return
+        }
+        // Preview frame (content coords) → display-local sourceRect (top-left origin).
+        let source = CGRect(x: pf.minX, y: captureScreen.frame.height - pf.maxY,
+                            width: pf.width, height: pf.height)
+        // Annotation shift (image pixels): the new image origin (region bottom-left) moved.
+        let dxPix = (b.minX - pf.minX) / ds, dyPix = (b.minY - pf.minY) / ds
+        let exclude = [CGWindowID(window.windowNumber)]
+        reGrabbing = true
+        Task {
+            let result = await ScreenshotController.recaptureRegion(displayID: displayID, sourceRect: source, excluding: exclude)
+            await MainActor.run {
+                self.reGrabbing = false
+                guard let result else { self.relayout(canvasFrame: b); self.flashMessage("Couldn't adjust the region"); return }
+                let newImage = ScreenshotController.nsImage(from: result.cg)
+                self.canvas.applyTransform(newImage: newImage) { CGPoint(x: $0.x + dxPix, y: $0.y + dyPix) }
+                self.relayout(canvasFrame: NSRect(x: pf.minX.rounded(), y: pf.minY.rounded(),
+                                                  width: pf.width.rounded(), height: pf.height.rounded()))
+            }
+        }
     }
 
     private func showCropConfirm() {

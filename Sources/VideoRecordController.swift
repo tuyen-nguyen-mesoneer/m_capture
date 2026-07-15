@@ -114,8 +114,9 @@ final class VideoRecordController {
             let hole = inter.isNull ? nil
                 : CGRect(x: inter.minX - screen.frame.minX, y: inter.minY - screen.frame.minY,
                          width: inter.width, height: inter.height)
-            // A screen the region fully covers needs no dimming — skip it.
-            if let h = hole, h.width >= screen.frame.width - 0.5, h.height >= screen.frame.height - 0.5 { continue }
+            // Every screen gets an overlay: a hole where the recording lands (dim around it
+            // + a frame), or a full dim where it doesn't. A screen the region fully covers
+            // shows just the frame (no dim) so screen/window recordings are outlined too.
             let win = RecordingDimWindow(screen: screen, holeInScreen: hole)
             win.orderFront(nil)
             dimWindows.append(win)
@@ -153,6 +154,13 @@ final class VideoRecordController {
             if let s = NSScreen.screens.first(where: { $0.frame.intersects(appKit) }) { return s }
         }
         return NSScreen.main ?? NSScreen.screens[0]
+    }
+
+    /// The picked window's global AppKit frame (for the recording dim's cutout), or nil.
+    private static func windowGlobalFrame(_ windowID: CGWindowID) -> CGRect? {
+        let pid = ProcessInfo.processInfo.processIdentifier
+        guard let win = WindowList.onScreen(excludingPID: pid).first(where: { $0.id == windowID }) else { return nil }
+        return WindowList.appKitRect(fromCG: win.frame)
     }
 
     /// If the configured audio source includes the mic, request permission first.
@@ -204,13 +212,16 @@ final class VideoRecordController {
         let url = videoURL()
         currentURL = url
 
-        // Phase 2b′ — darken everything outside the recorded region so it's obvious what's
-        // being captured. Region captures have a fixed on-screen rect; a window target moves,
-        // so it's left undimmed. The dim windows are excluded from capture below (and the
-        // region's `sourceRect` crop already keeps the surround out of the video).
+        // Phase 2b′ — darken everything outside what's being recorded so the captured
+        // bounds are unmistakable, for region, whole-screen and window targets alike. The
+        // dim windows are excluded from the region/display capture below; a window filter
+        // already captures only the target window, so they never reach that video.
         var excluded = [CGWindowID(recordBar.windowNumber)]
-        if case let .region(rect, _) = target {
+        switch target {
+        case let .region(rect, _):
             excluded += showDim(forRegion: rect)
+        case let .window(windowID):
+            if let rect = Self.windowGlobalFrame(windowID) { showDim(forRegion: rect) }
         }
 
         // Phase 2c — create session with the bar (and dim) excluded from capture. (Window
@@ -436,7 +447,7 @@ private final class RecordingDimView: NSView {
         // Match the capture selection overlay exactly (see SelectionOverlay): the same
         // surfaceBase dim and lavender region outline, so the record backdrop reads as
         // the same surface the user just dragged their region on.
-        ctx.setFillColor(Theme.surfaceBase.withAlphaComponent(0.3).cgColor)
+        ctx.setFillColor(Theme.surfaceBase.withAlphaComponent(0.55).cgColor)
         guard let h = hole else { ctx.fill(bounds); return }
         // Fill the four bands around the hole so the region itself stays clear.
         let b = bounds

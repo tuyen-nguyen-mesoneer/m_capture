@@ -294,10 +294,40 @@ final class ScreenshotController {
     }
 }
 
-private extension NSScreen {
+extension NSScreen {
     /// The CoreGraphics display ID backing this screen, for matching against
     /// ScreenCaptureKit's `SCDisplay`.
     var displayID: CGDirectDisplayID? {
         (deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value
+    }
+}
+
+extension ScreenshotController {
+    /// Re-capture a display region while excluding given windows (e.g. the annotation
+    /// editor covering the screen), so the editor can re-grab a *larger* region and see
+    /// the real content behind it. `sourceRect` is display-local, top-left origin (points).
+    static func recaptureRegion(displayID: CGDirectDisplayID, sourceRect: CGRect,
+                                excluding windowIDs: [CGWindowID]) async -> (cg: CGImage, scale: CGFloat)? {
+        do {
+            let content = try await SCShareableContent.current
+            guard let display = content.displays.first(where: { $0.displayID == displayID }) else { return nil }
+            let excluded = content.windows.filter { windowIDs.contains(CGWindowID($0.windowID)) }
+            let filter = SCContentFilter(display: display, excludingWindows: excluded)
+            let scale = CGFloat(filter.pointPixelScale)
+            let config = SCStreamConfiguration()
+            config.sourceRect = sourceRect
+            config.width = max(1, Int((sourceRect.width * scale).rounded()))
+            config.height = max(1, Int((sourceRect.height * scale).rounded()))
+            config.showsCursor = false
+            config.captureResolution = .best
+            let cg = try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: config)
+            return (cg, scale)
+        } catch { return nil }
+    }
+
+    /// Wrap a captured CGImage as a pixel-sized NSImage (scale 1) — mirrors the private
+    /// `image(from:)`, exposed for the editor's re-grab path.
+    static func nsImage(from cg: CGImage) -> NSImage {
+        NSImage(cgImage: cg, size: NSSize(width: cg.width, height: cg.height))
     }
 }
