@@ -31,9 +31,8 @@ final class ScreenshotController {
         let keyScreen = NSScreen.screens.first { $0.frame.contains(mouse) }
             ?? NSScreen.main ?? NSScreen.screens[0]
 
-        // The overlay needs keyboard focus (Esc to cancel, Space to toggle mode),
-        // so activate the app to bring it forward. The app is already `.regular`
-        // (Dock icon), which is what lets it reliably become active.
+        // Bring the app forward so the overlay gets keyboard focus (Esc to cancel,
+        // Space to toggle mode).
         NSApp.activate(ignoringOtherApps: true)
         let coordinator = OverlayCoordinator()
         for screen in NSScreen.screens {

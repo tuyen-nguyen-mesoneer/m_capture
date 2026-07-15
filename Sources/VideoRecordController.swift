@@ -59,9 +59,8 @@ final class VideoRecordController {
         let mouse = NSEvent.mouseLocation
         let keyScreen = NSScreen.screens.first { $0.frame.contains(mouse) }
             ?? NSScreen.main ?? NSScreen.screens[0]
-        // Activate so the overlay — and, later, the recording bar — can hold
-        // keyboard focus (Esc/Space, Esc/Return to stop). The app is already
-        // `.regular` (Dock icon), which is what lets it reliably become active.
+        // Bring the app forward so the overlay — and, later, the recording bar —
+        // can hold keyboard focus (Esc/Space, Esc/Return to stop).
         NSApp.activate(ignoringOtherApps: true)
         let coordinator = OverlayCoordinator()
         for screen in NSScreen.screens {

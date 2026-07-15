@@ -166,8 +166,7 @@ private final class HeaderView: NSView {
         titleLabel.frame = NSRect(x: textX, y: (34 - 20) / 2, width: titleLabel.frame.width, height: 20)
         addSubview(titleLabel)
 
-        // A lavender version pill, right-aligned in the header, so the build is
-        // emphasized and always visible at a glance from the menu bar.
+        // A version pill so the build is visible at a glance from the menu bar.
         if let version {
             let versionLabel = NSTextField(labelWithString: "v\(version)")
             versionLabel.font = Theme.font(11, .bold)
