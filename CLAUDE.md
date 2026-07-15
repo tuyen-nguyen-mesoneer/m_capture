@@ -16,7 +16,9 @@ MIT-licensed. Targets macOS 14+; bundle id `io.mesoneer.mcapture`.
 via `tools/makeicon.swift`), code-signs, and builds the DMG; the version is set
 here. It pins the deployment target with `-target …-macos14.0` to match
 `LSMinimumSystemVersion` (ScreenCaptureKit's capture API needs macOS 14). The app
-runs as a menu-bar agent (`LSUIElement`) — look for the **m.** icon, no Dock icon.
+shows both a Dock icon and the menu-bar **m.** icon (activation policy `.regular`);
+the menu-bar item stays the primary entry point, the Dock icon is a fallback for
+when the menu bar is hidden.
 No automated tests; smoke-test by hand.
 
 Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
@@ -41,7 +43,7 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
 
 ## Source map (`Sources/`)
 
-- `main.swift` — entry point; configures the menu-bar agent.
+- `main.swift` — entry point; sets `.regular` activation (Dock icon + menu-bar item).
 - `AppDelegate.swift` — status item, menu, global hotkeys, capture actions, and the
   Quick-Screen / Usage-Guide / Check-for-Updates / Report-a-Bug menu items. Shows the
   one-time first-run welcome (`showWelcome`), the in-menu recording controls, and the
@@ -106,8 +108,9 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
   (⌘S), Save As (⇧⌘S), Cancel. Owns tooltips, selection state, the pickers, and the
   live background preview (`BackgroundView`).
 - `CanvasView.swift` — the annotation canvas: `Tool` enum, undo/redo, Gaussian blur,
-  crop/rotate/flip/resample transforms (`bakeResample` bakes annotations on
-  corner-drag resize), and live edit state. Shapes get an eight-handle box resize
+  crop/rotate/flip transforms (`applyTransform` shifts annotations when the region
+  changes), and live edit state. (The whole-canvas resize is now a display re-grab in
+  `EditorWindow`, not a pixel resample.) Shapes get an eight-handle box resize
   (`boxHandle`/`resizeBox`: four corners + four edge midpoints for single-axis stretch);
   arrows/lines get three handles (`curveHandle`: start/end endpoints + bend apex).
   A just-drawn shape (`editingShape`) or curve (`editingCurve`) stays editable under its

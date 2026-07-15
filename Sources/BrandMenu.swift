@@ -3,7 +3,7 @@
 import AppKit
 
 enum MenuEntry {
-    case header(String, url: String?)
+    case header(String, url: String?, version: String? = nil)
     case item(title: String, symbol: String?, shortcut: String?, enabled: Bool = true, action: () -> Void)
     case separator
 }
@@ -88,8 +88,8 @@ final class BrandMenu: NSObject {
         var y = pad
         for entry in entries {
             switch entry {
-            case .header(let title, let url):
-                let header = HeaderView(width: width, pad: pad, title: title,
+            case .header(let title, let url, let version):
+                let header = HeaderView(width: width, pad: pad, title: title, version: version,
                                         url: url.flatMap(URL.init(string:))) { [weak self] in self?.close() }
                 header.frame = NSRect(x: 0, y: y, width: width, height: 34)
                 container.addSubview(header)
@@ -147,7 +147,7 @@ private final class HeaderView: NSView {
     private let onOpen: () -> Void
     private let titleLabel: NSTextField
 
-    init(width: CGFloat, pad: CGFloat, title: String, url: URL?, onOpen: @escaping () -> Void) {
+    init(width: CGFloat, pad: CGFloat, title: String, version: String?, url: URL?, onOpen: @escaping () -> Void) {
         self.url = url
         self.onOpen = onOpen
         let logoSize: CGFloat = 22
@@ -155,15 +155,37 @@ private final class HeaderView: NSView {
         titleLabel = NSTextField(labelWithString: title)
         super.init(frame: NSRect(x: 0, y: 0, width: width, height: 34))
 
-        let logo = NSImageView(frame: NSRect(x: pad + 8, y: 3, width: logoSize, height: logoSize))
+        let logo = NSImageView(frame: NSRect(x: pad + 8, y: (34 - logoSize) / 2, width: logoSize, height: logoSize))
         logo.image = Logo.image(size: logoSize)
         logo.imageScaling = .scaleProportionallyUpOrDown
         addSubview(logo)
 
         titleLabel.font = Theme.font(14, .bold)
         titleLabel.textColor = Theme.textPrimary
-        titleLabel.frame = NSRect(x: textX, y: 5, width: width - pad - 8 - textX, height: 20)
+        titleLabel.sizeToFit()
+        titleLabel.frame = NSRect(x: textX, y: (34 - 20) / 2, width: titleLabel.frame.width, height: 20)
         addSubview(titleLabel)
+
+        // A version pill so the build is visible at a glance from the menu bar.
+        if let version {
+            let versionLabel = NSTextField(labelWithString: "v\(version)")
+            versionLabel.font = Theme.font(11, .bold)
+            versionLabel.textColor = Theme.lavender
+            versionLabel.sizeToFit()
+            let padX: CGFloat = 8, badgeH: CGFloat = 18
+            let badgeW = versionLabel.frame.width + padX * 2
+            let badge = NSView(frame: NSRect(x: width - pad - 8 - badgeW, y: (34 - badgeH) / 2,
+                                             width: badgeW, height: badgeH))
+            badge.wantsLayer = true
+            badge.layer?.backgroundColor = Theme.accentPurple.cgColor
+            badge.layer?.cornerRadius = badgeH / 2
+            badge.layer?.borderWidth = 1
+            badge.layer?.borderColor = Theme.border.cgColor
+            versionLabel.frame = NSRect(x: padX, y: (badgeH - versionLabel.frame.height) / 2,
+                                        width: versionLabel.frame.width, height: versionLabel.frame.height)
+            badge.addSubview(versionLabel)
+            addSubview(badge)
+        }
     }
     required init?(coder: NSCoder) { fatalError() }
 

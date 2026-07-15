@@ -52,6 +52,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let button = statusItem.button { menu.toggle(from: button) }
     }
 
+    /// The app has a Dock icon but no main window, so a Dock-icon click (or ⌘-Tab
+    /// reopen) drops the status menu down from the menu-bar item — matching what a
+    /// user expects when they click to "open" the app.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        if !flag {
+            buildMenu()
+            if let button = statusItem.button { menu.toggle(from: button) }
+        }
+        return true
+    }
+
     /// Build the menu-bar menu, showing each action's current hotkey glyphs.
     /// Screenshot/Record are disabled while the annotation editor is open — both
     /// already no-op in that state (see `ScreenshotController.isBusy` /
@@ -61,7 +72,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let editorOpen = EditorWindowController.hasOpenWindows
         let rec = VideoRecordController.shared
         var entries: [MenuEntry] = [
-            .header("m_capture", url: "https://github.com/tuyen-nguyen-mesoneer/m_capture"),
+            .header("m_capture", url: "https://github.com/tuyen-nguyen-mesoneer/m_capture",
+                    version: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String),
             .separator,
         ]
         // While recording, surface Stop / Pause-Resume (and Show bar if minimized) so the

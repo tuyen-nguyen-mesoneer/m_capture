@@ -133,9 +133,8 @@ private final class BrandSlider: NSSlider {
 final class EditorWindowController: NSObject {
     private static var open: [EditorWindowController] = []
 
-    /// Whether any editor is on screen. Callers that flip the app's activation
-    /// policy (e.g. the selection overlay) check this before reverting to
-    /// `.accessory`, so they don't demote the app out from under a live editor.
+    /// Whether any editor is on screen. The menu disables Screenshot / Record
+    /// while an editor is open (both no-op in that state anyway).
     static var hasOpenWindows: Bool { !open.isEmpty }
 
     private let window: KeyableWindow
@@ -280,7 +279,6 @@ final class EditorWindowController: NSObject {
         canvas.style.lineWidth = 6
 
         EditorWindowController.open.append(self)
-        NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
         window.makeFirstResponder(canvas)
@@ -1347,7 +1345,6 @@ extension EditorWindowController: NSWindowDelegate {
     func windowWillClose(_ notification: Notification) {
         if let m = pasteMonitor { NSEvent.removeMonitor(m); pasteMonitor = nil }
         EditorWindowController.open.removeAll { $0 === self }
-        if EditorWindowController.open.isEmpty { NSApp.setActivationPolicy(.accessory) }
     }
 }
 
