@@ -48,33 +48,44 @@ private final class BackgroundView: NSView {
     }
 }
 
-/// A draggable knob at the capture's bottom-right corner. Dragging it resizes
-/// the picture (aspect-locked); the controller previews and commits the resample.
+/// One of eight draggable knobs around the capture — four corners resize both axes,
+/// four edge midpoints a single axis. Dragging resizes the picture (aspect free); the
+/// controller previews and commits the resample. Reports the drag as a screen-space
+/// delta so the controller can move the grabbed edge(s) and hold the opposite ones.
 private final class ResizeHandle: NSView {
+    enum Edge: CaseIterable { case topLeft, top, topRight, right, bottomRight, bottom, bottomLeft, left }
+    let edge: Edge
     var onBegin: (() -> Void)?
-    var onDrag: ((CGFloat) -> Void)?
+    var onDrag: ((CGSize) -> Void)?
     var onEnd: (() -> Void)?
-    private var startX: CGFloat = 0
+    private var start: NSPoint = .zero
+
+    init(edge: Edge) { self.edge = edge; super.init(frame: .zero) }
+    required init?(coder: NSCoder) { fatalError() }
 
     override func draw(_ dirtyRect: NSRect) {
         guard let ctx = NSGraphicsContext.current?.cgContext else { return }
         let r = bounds.insetBy(dx: 2, dy: 2)
         ctx.setFillColor(Theme.accentPurple.cgColor); ctx.fillEllipse(in: r)
         ctx.setStrokeColor(Theme.lavender.cgColor); ctx.setLineWidth(1); ctx.strokeEllipse(in: r)
-        ctx.setStrokeColor(NSColor.white.cgColor); ctx.setLineWidth(1.5)
-        for off in [CGFloat(5), 9] {
-            ctx.move(to: CGPoint(x: bounds.maxX - off, y: bounds.minY + 5))
-            ctx.addLine(to: CGPoint(x: bounds.maxX - 5, y: bounds.minY + off))
-        }
-        ctx.strokePath()
     }
-    override func resetCursorRects() { addCursorRect(bounds, cursor: .openHand) }
+    private var cursor: NSCursor {
+        switch edge {
+        case .left, .right: return .resizeLeftRight
+        case .top, .bottom: return .resizeUpDown
+        default:            return .openHand   // no system diagonal cursor
+        }
+    }
+    override func resetCursorRects() { addCursorRect(bounds, cursor: cursor) }
     override func mouseDown(with e: NSEvent) {
-        startX = NSEvent.mouseLocation.x
+        start = NSEvent.mouseLocation
         NSCursor.closedHand.push()
         onBegin?()
     }
-    override func mouseDragged(with e: NSEvent) { onDrag?(NSEvent.mouseLocation.x - startX) }
+    override func mouseDragged(with e: NSEvent) {
+        let m = NSEvent.mouseLocation
+        onDrag?(CGSize(width: m.x - start.x, height: m.y - start.y))
+    }
     override func mouseUp(with e: NSEvent) { NSCursor.pop(); onEnd?() }
 }
 
@@ -127,6 +138,12 @@ final class EditorWindowController: NSObject {
     static var hasOpenWindows: Bool { !open.isEmpty }
 
     private let window: KeyableWindow
+    /// Fallback ⌘V handler: `CanvasView.performKeyEquivalent` catches paste when the key
+    /// routing cooperates, but that isn't guaranteed for a promoted menu-bar agent's
+    /// borderless window — this local monitor catches the same event once it's dispatched
+    /// as a keyDown, so ⌘V pastes an image overlay reliably. (No double-paste: a handled
+    /// key equivalent is consumed before it ever becomes a keyDown.)
+    private var pasteMonitor: Any?
     private let canvas: CanvasView
     private var toolButtons: [Tool: ToolButton] = [:]
     private var swatchButtons: [ToolButton] = []
@@ -153,9 +170,10 @@ final class EditorWindowController: NSObject {
     private var currentBackground: Background = Settings.shared.defaultBackground
     private var bgButtons: [ToolButton] = []
 
-    private var resizeHandle: ResizeHandle?
+    private var resizeHandles: [ResizeHandle] = []
     private var resizePreview: NSView?
     private var resizeBaseFrame: NSRect = .zero
+    private var activeResizeEdge: ResizeHandle.Edge = .bottomRight
     private weak var bgPlusButton: ToolButton?
     private var bgColorPicker: ColorPickerPanel?
     private var bgView: BackgroundView?
@@ -237,7 +255,19 @@ final class EditorWindowController: NSObject {
         canvas.onCropConfirm = { [weak self] in self?.applyCrop() }
         canvas.onOCR = { [weak self] cg in self?.recognizeAndCopy(cg) }
         canvas.onOverlaySelected = { [weak self] a in self?.showOpacity(for: a) }
+        canvas.onToolChange = { [weak self] t in
+            guard let self else { return }
+            for (tool, b) in self.toolButtons { b.selectedState = (tool == t) }
+        }
         canvas.onPaste = { [weak self] in self?.pasteOverlay() }
+        pasteMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self else { return event }
+            guard event.window === self.window, !self.canvas.isEditingText,
+                  event.modifierFlags.intersection([.command, .option, .control]) == [.command],
+                  event.charactersIgnoringModifiers?.lowercased() == "v" else { return event }
+            self.pasteOverlay()
+            return nil   // consume
+        }
         selectTool(.pencil)
         selectSwatch(0)
         canvas.style.lineWidth = 6
@@ -324,6 +354,7 @@ final class EditorWindowController: NSObject {
         let widthTile = ToolButton(style: .lineWeight(widthDisplay[currentWidth]), radius: colorR,
                                    target: self, action: #selector(widthPressed))
         widthTile.tip = "Stroke width: \(widthLabels[currentWidth]) — click to cycle"
+        widthTile.activeLineWeightIndex = currentWidth
         wireHover(widthTile); widthButton = widthTile; colorTiles.append(widthTile)
         let color = makeCluster("Style", colorTiles, perRow: 4, radius: colorR)
 
@@ -687,6 +718,7 @@ final class EditorWindowController: NSObject {
         currentWidth = (currentWidth + 1) % widths.count
         canvas.restrokeSelection(widths[currentWidth])
         widthButton?.tip = "Stroke width: \(widthLabels[currentWidth]) — click to cycle"
+        widthButton?.activeLineWeightIndex = currentWidth
     }
 
     @objc private func counterPressed() {
@@ -1150,54 +1182,102 @@ final class EditorWindowController: NSObject {
         placeResizeHandle(in: content)
     }
 
-    /// Put (or move) the resize knob at the canvas's bottom-right corner.
-    private func placeResizeHandle(in content: NSView) {
-        let s: CGFloat = 20
-        let h: ResizeHandle
-        if let existing = resizeHandle { h = existing } else {
-            h = ResizeHandle(frame: .zero)
-            h.onBegin = { [weak self] in self?.resizeBegan() }
-            h.onDrag = { [weak self] dx in self?.resizeDragged(dx) }
-            h.onEnd = { [weak self] in self?.resizeEnded() }
-            resizeHandle = h
+    /// The center point of an edge's knob for a given canvas frame.
+    private func resizeHandleCenter(_ edge: ResizeHandle.Edge, in f: NSRect) -> CGPoint {
+        switch edge {
+        case .topLeft:     return CGPoint(x: f.minX, y: f.maxY)
+        case .top:         return CGPoint(x: f.midX, y: f.maxY)
+        case .topRight:    return CGPoint(x: f.maxX, y: f.maxY)
+        case .right:       return CGPoint(x: f.maxX, y: f.midY)
+        case .bottomRight: return CGPoint(x: f.maxX, y: f.minY)
+        case .bottom:      return CGPoint(x: f.midX, y: f.minY)
+        case .bottomLeft:  return CGPoint(x: f.minX, y: f.minY)
+        case .left:        return CGPoint(x: f.minX, y: f.midY)
         }
-        h.frame = NSRect(x: canvas.frame.maxX - s / 2, y: canvas.frame.minY - s / 2, width: s, height: s)
-        content.addSubview(h)
+    }
+    private func isLeftEdge(_ e: ResizeHandle.Edge) -> Bool {
+        switch e { case .topLeft, .left, .bottomLeft: return true; default: return false }
+    }
+    private func isBottomEdge(_ e: ResizeHandle.Edge) -> Bool {
+        switch e { case .bottomLeft, .bottom, .bottomRight: return true; default: return false }
     }
 
-    private func resizeBegan() {
+    /// Put (or move) the eight resize knobs around the canvas — corners resize both
+    /// axes, edge midpoints a single axis.
+    private func placeResizeHandle(in content: NSView) {
+        let s: CGFloat = 18
+        if resizeHandles.isEmpty {
+            for edge in ResizeHandle.Edge.allCases {
+                let h = ResizeHandle(edge: edge)
+                h.onBegin = { [weak self] in self?.resizeBegan(edge) }
+                h.onDrag = { [weak self] d in self?.resizeDragged(d) }
+                h.onEnd = { [weak self] in self?.resizeEnded() }
+                resizeHandles.append(h)
+            }
+        }
+        for h in resizeHandles {
+            let c = resizeHandleCenter(h.edge, in: canvas.frame)
+            h.frame = NSRect(x: c.x - s / 2, y: c.y - s / 2, width: s, height: s)
+            content.addSubview(h)
+        }
+    }
+
+    private func repositionResizeHandles(around f: NSRect) {
+        let s: CGFloat = 18
+        for h in resizeHandles {
+            let c = resizeHandleCenter(h.edge, in: f)
+            h.setFrameOrigin(NSPoint(x: c.x - s / 2, y: c.y - s / 2))
+        }
+    }
+
+    private func resizeBegan(_ edge: ResizeHandle.Edge) {
         guard let content = window.contentView else { return }
+        activeResizeEdge = edge
         resizeBaseFrame = canvas.frame
         let p = NSView(frame: canvas.frame)
         p.wantsLayer = true
         p.layer?.borderColor = Theme.lavender.cgColor
         p.layer?.borderWidth = 1.5
         p.layer?.backgroundColor = NSColor.clear.cgColor
-        content.addSubview(p, positioned: .below, relativeTo: resizeHandle)
+        content.addSubview(p)
+        resizeHandles.forEach { content.addSubview($0) }   // keep knobs above the preview
         resizePreview = p
     }
 
-    private func resizeDragged(_ dx: CGFloat) {
-        guard let p = resizePreview, let content = window.contentView, resizeBaseFrame.height > 0 else { return }
-        let aspect = resizeBaseFrame.width / resizeBaseFrame.height
-        let newW = min(max(40, resizeBaseFrame.width + dx), content.bounds.width - 16)
-        let newH = newW / aspect
-        p.frame = NSRect(x: resizeBaseFrame.minX, y: resizeBaseFrame.maxY - newH, width: newW, height: newH)
-        let s = resizeHandle?.frame.size ?? NSSize(width: 20, height: 20)
-        resizeHandle?.setFrameOrigin(NSPoint(x: p.frame.maxX - s.width / 2, y: p.frame.minY - s.height / 2))
+    /// Move the grabbed edge(s) by the drag delta, holding the opposite edge(s) fixed.
+    private func resizeDragged(_ d: CGSize) {
+        guard let p = resizePreview, let content = window.contentView,
+              resizeBaseFrame.width > 0, resizeBaseFrame.height > 0 else { return }
+        let b = resizeBaseFrame, edge = activeResizeEdge, minSide: CGFloat = 40
+        var minX = b.minX, maxX = b.maxX, minY = b.minY, maxY = b.maxY
+        switch edge {
+        case .topLeft, .left, .bottomLeft:    minX = min(b.minX + d.width, maxX - minSide)
+        case .topRight, .right, .bottomRight: maxX = max(b.maxX + d.width, minX + minSide)
+        default: break
+        }
+        switch edge {
+        case .topLeft, .top, .topRight:          maxY = max(b.maxY + d.height, minY + minSide)
+        case .bottomLeft, .bottom, .bottomRight: minY = min(b.minY + d.height, maxY - minSide)
+        default: break
+        }
+        minX = max(minX, 8); minY = max(minY, 8)
+        maxX = min(maxX, content.bounds.width - 8); maxY = min(maxY, content.bounds.height - 8)
+        p.frame = NSRect(x: minX, y: minY, width: max(minSide, maxX - minX), height: max(minSide, maxY - minY))
+        repositionResizeHandles(around: p.frame)
     }
 
     private func resizeEnded() {
-        guard let p = resizePreview, resizeBaseFrame.width > 0 else { return }
-        let scale = p.frame.width / resizeBaseFrame.width
+        guard let p = resizePreview, resizeBaseFrame.width > 0, resizeBaseFrame.height > 0 else { return }
+        let b = resizeBaseFrame
+        let scaleX = p.frame.width / b.width, scaleY = p.frame.height / b.height
         p.removeFromSuperview(); resizePreview = nil
-        canvas.bakeResample(scale: scale)
-        // Anchor the top-left corner (the drag handle is bottom-right) to the
-        // grid-aligned size the bake produced, so the canvas stays on the pixel grid.
+        canvas.bakeResample(scaleX: scaleX, scaleY: scaleY)
+        // Anchor the edge(s) that stayed put during the drag to the grid-aligned size the
+        // bake produced: a left-side grab holds the right edge, a bottom grab holds the top.
         let size = NSSize(width: canvas.frame.width.rounded(), height: canvas.frame.height.rounded())
-        let newFrame = NSRect(x: resizeBaseFrame.minX, y: resizeBaseFrame.maxY - size.height,
-                              width: size.width, height: size.height)
-        relayout(canvasFrame: newFrame)
+        let originX = isLeftEdge(activeResizeEdge) ? b.maxX - size.width : b.minX
+        let originY = isBottomEdge(activeResizeEdge) ? b.maxY - size.height : b.minY
+        relayout(canvasFrame: NSRect(x: originX, y: originY, width: size.width, height: size.height))
     }
 
     private func showCropConfirm() {
@@ -1233,6 +1313,7 @@ final class EditorWindowController: NSObject {
 
 extension EditorWindowController: NSWindowDelegate {
     func windowWillClose(_ notification: Notification) {
+        if let m = pasteMonitor { NSEvent.removeMonitor(m); pasteMonitor = nil }
         EditorWindowController.open.removeAll { $0 === self }
         if EditorWindowController.open.isEmpty { NSApp.setActivationPolicy(.accessory) }
     }

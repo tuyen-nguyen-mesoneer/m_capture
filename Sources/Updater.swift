@@ -203,22 +203,22 @@ enum Updater {
         return false
     }
 
-    private static func presentInstalledAlert(_ version: String) {
-        let choice = BrandAlert(title: "Update installed",
-                                message: "m_capture \(version) will run the next time you launch.",
-                                titles: ["Relaunch now", "Later"], primary: 0, cancel: 1).runModal()
-        if choice == 0 { relaunch() }
-    }
-
-    /// Silent-install path: tells the user the update already installed and relaunches
-    /// as soon as they confirm — a single "OK", not a choice, since the swap already
-    /// happened and staying on the old build serves no purpose.
-    private static func presentUpdatedAlert(_ version: String) {
+    /// The relaunch prompt shown after a build is swapped onto disk — same wording
+    /// whether the update came from a manual "Check for Updates" or the silent once-a-day
+    /// check, so the two paths read identically. The relaunch is forced: a single confirm,
+    /// then straight into the new build (no "Later" — the swap already happened).
+    private static func presentRelaunchAlert(_ version: String) {
         BrandAlert(title: "Update installed",
-                   message: "m_capture \(version) is installed. Click OK to relaunch.",
+                   message: "m_capture \(version) is ready. Click OK to relaunch.",
                    titles: ["OK"], primary: 0, cancel: 0).runModal()
         relaunch()
     }
+
+    private static func presentInstalledAlert(_ version: String) { presentRelaunchAlert(version) }
+
+    /// Silent-install path: the build is already swapped onto disk; prompt to relaunch
+    /// with the same message as the manual path.
+    private static func presentUpdatedAlert(_ version: String) { presentRelaunchAlert(version) }
 
     private static func presentUpToDateAlert() {
         BrandAlert(title: "You’re up to date",
