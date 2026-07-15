@@ -15,8 +15,11 @@ see the [README](README.md).
 
 ## The menu
 
-Click the **m.** menu-bar icon to open the menu. **Screenshot** and **Record**
-also have global hotkeys (`⌃⇧S` / `⌃⇧R`) that fire directly, without opening the menu.
+Click the **m.** menu-bar icon to open the menu — its header shows the current
+version on a badge. If the menu bar is hidden (notch, menu-bar hider), click the
+**m.** icon in the **Dock** to drop the same menu instead. **Screenshot** and
+**Record** also have global hotkeys (`⌃⇧S` / `⌃⇧R`) that fire directly, without
+opening the menu.
 
 <p align="center">
   <img src="docs/assets/menu.png" alt="The m_capture menu-bar dropdown with Screenshot, Record, Library, Settings, About and Quit" height="300">
@@ -139,7 +142,7 @@ switching tools.
 - **Crop** — drag a region, then `↵` (or **✓**) to apply.
 - **Rotate** — 90° right (clockwise).
 - **Flip horizontal** — mirror the image left↔right.
-- **Resize the capture** — drag the bottom-right knob to resample the whole image (aspect-locked); export comes out at the new size.
+- **Adjust the capture region** — drag any of the **eight handles** around the capture (four corners + four edge midpoints) to change what's captured: trim inward to crop, or drag outward to re-grab a **larger** area of the screen. Corners move both axes, edges a single one.
 - **Pin to screen** (`⌘P`) — float the capture always-on-top across Spaces. Drag to move, corner-drag to scale, right-click for **Copy / Save / Reset size / Close** (`Esc` / `⌘W` close). Pin several at once.
 - **Before/After GIF** — export a two-frame looping GIF that toggles the annotations on and off, useful for highlighting before-and-after differences.
 - **Undo / Redo / Copy / Save / Save As / Cancel** — see the shortcut table below.
@@ -221,5 +224,5 @@ Recording**, then relaunch. Hotkeys use Carbon and need no extra permission.
 | Capture is blank / fails              | Grant **Screen Recording**, then relaunch (see above).                                                                                                                                                                                                                         |
 | Hotkeys do nothing                    | Another app may own them, or `m_capture` isn't running — relaunch it.                                                                                                                                                                                                          |
 | "App can't be opened" on first launch | Not notarized. Install to `~/Applications`, then run `cd ~/Applications && xattr -dr com.apple.quarantine m_capture.app` before opening.                                                                                                                                       |
-| No menu-bar icon                      | The app isn't running; launch `m_capture.app` again (no Dock icon).                                                                                                                                                                                                            |
+| No menu-bar icon                      | The menu bar may be hidden (notch / menu-bar hider) — click the **m.** Dock icon to drop the menu; if there's no Dock icon either, the app isn't running, so launch `m_capture.app` again.                                                                                       |
 | Can't find a saved screenshot         | Use **Library** to open the save folder.                                                                                                                                                                                                                                       |
