@@ -327,6 +327,28 @@ final class SpotlightAnnotation: TwoPointAnnotation {
     override func hit(_ p: CGPoint) -> Bool { !rect.contains(p) }
 }
 
+/// Optional box drawn behind a text mark: a filled chip (highlight) or a hairline
+/// outline. `none` is plain text. Shared by the model and the live text editor.
+enum TextBackground: Int { case none, filled, outlined }
+
+/// Resolve a text font by optional family name, size and weight — shared by the text
+/// model and the live editor so both render identically. A nil family is the system
+/// font; a named family is resolved via the font manager (handling bold), falling back
+/// to the system font when the family isn't installed.
+func resolveTextFont(_ name: String?, size: CGFloat, bold: Bool) -> NSFont {
+    if let name {
+        let mgr = NSFontManager.shared
+        let traits: NSFontTraitMask = bold ? .boldFontMask : []
+        if let f = mgr.font(withFamily: name, traits: traits, weight: bold ? 9 : 5, size: size) {
+            return f
+        }
+        if let base = NSFont(name: name, size: size) {
+            return bold ? mgr.convert(base, toHaveTrait: .boldFontMask) : base
+        }
+    }
+    return Theme.font(size, bold ? .bold : .semibold)
+}
+
 final class TextAnnotation: Annotation {
     /// Rich text carrying the typed characters and each range's foreground color,
     /// so one mark can mix colors. Font, weight and wrapping are applied uniformly
@@ -340,31 +362,68 @@ final class TextAnnotation: Annotation {
     /// Height of the text box; the text is centered vertically within it to match
     /// the live editor. Scales with the font on resize.
     var boxHeight: CGFloat
+    /// PostScript font name (nil = the system font); `bold` toggles the heavy weight;
+    /// `alignment` sets left/center/right. All applied uniformly in `styled()`.
+    var fontName: String?
+    var bold: Bool
+    var alignment: NSTextAlignment
+    /// Optional background chip behind the text and its fill/stroke color.
+    var background: TextBackground
+    var backgroundColor: NSColor
+
+    /// Inset of the text inside its background chip (scales with the font).
+    var backgroundPad: CGFloat { background == .none ? 0 : fontSize * 0.28 }
+
     init(attributed: NSAttributedString, origin: CGPoint, fontSize: CGFloat,
-         maxWidth: CGFloat, boxHeight: CGFloat) {
+         maxWidth: CGFloat, boxHeight: CGFloat, fontName: String? = nil, bold: Bool = false,
+         alignment: NSTextAlignment = .left, background: TextBackground = .none,
+         backgroundColor: NSColor = .black) {
         self.attributed = attributed; self.origin = origin; self.fontSize = fontSize
         self.maxWidth = max(1, maxWidth); self.boxHeight = max(1, boxHeight)
+        self.fontName = fontName; self.bold = bold; self.alignment = alignment
+        self.background = background; self.backgroundColor = backgroundColor
     }
     var text: String { attributed.string }
-    /// The stored rich text with the current uniform font, weight and wrapping laid
-    /// over it, leaving each range's foreground color intact.
+
+    /// The font for this mark: a named family if set (bolded via the font manager when
+    /// requested), else the system font at semibold / bold.
+    private var font: NSFont { resolveTextFont(fontName, size: fontSize, bold: bold) }
+
+    /// The stored rich text with the current uniform font, weight, alignment and
+    /// wrapping laid over it, leaving each range's foreground color intact.
     private func styled() -> NSAttributedString {
         let m = NSMutableAttributedString(attributedString: attributed)
         let full = NSRange(location: 0, length: m.length)
-        let para = NSMutableParagraphStyle(); para.lineBreakMode = .byWordWrapping
-        m.addAttributes([.font: Theme.font(fontSize, .semibold), .paragraphStyle: para], range: full)
+        let para = NSMutableParagraphStyle()
+        para.lineBreakMode = .byWordWrapping
+        para.alignment = alignment
+        m.addAttributes([.font: font, .paragraphStyle: para], range: full)
         return m
     }
     private var textHeight: CGFloat {
         ceil(styled().boundingRect(
-            with: CGSize(width: maxWidth, height: .greatestFiniteMagnitude),
+            with: CGSize(width: textWidth, height: .greatestFiniteMagnitude),
             options: [.usesLineFragmentOrigin, .usesFontLeading]).height)
     }
+    /// Text-drawing width: the box minus the background chip padding on both sides.
+    private var textWidth: CGFloat { max(1, maxWidth - backgroundPad * 2) }
     var bounds: CGRect { CGRect(x: origin.x, y: origin.y, width: maxWidth, height: boxHeight) }
     func draw(in ctx: CGContext) {
-        let dy = max(0, boxHeight - textHeight)
+        if background != .none {
+            let r = bounds
+            let radius = min(8, r.height * 0.2)
+            let path = CGPath(roundedRect: r, cornerWidth: radius, cornerHeight: radius, transform: nil)
+            if background == .filled {
+                ctx.addPath(path); ctx.setFillColor(backgroundColor.cgColor); ctx.fillPath()
+            } else {
+                ctx.addPath(path); ctx.setStrokeColor(backgroundColor.cgColor)
+                ctx.setLineWidth(max(1, fontSize * 0.06)); ctx.strokePath()
+            }
+        }
+        let pad = backgroundPad
+        let dy = max(0, boxHeight - textHeight - pad)
         styled().draw(
-            with: CGRect(x: origin.x, y: origin.y + dy, width: maxWidth, height: textHeight),
+            with: CGRect(x: origin.x + pad, y: origin.y + dy, width: textWidth, height: textHeight),
             options: [.usesLineFragmentOrigin, .usesFontLeading])
     }
     func hit(_ p: CGPoint) -> Bool { bounds.insetBy(dx: -6, dy: -6).contains(p) }
@@ -381,6 +440,12 @@ final class TextAnnotation: Annotation {
         fontSize *= f
         maxWidth *= f
         boxHeight *= f
+    }
+    /// Resize the box on one axis without touching the font (edge-handle drag): the text
+    /// reflows in the new width, and the box height follows the pointer.
+    func resizeBox(width: CGFloat? = nil, height: CGFloat? = nil) {
+        if let w = width { maxWidth = max(fontSize, w) }
+        if let h = height { boxHeight = max(fontSize * 0.6, h) }
     }
 }
 

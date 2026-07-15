@@ -117,6 +117,21 @@ final class CanvasView: NSView, NSTextViewDelegate {
 
     private var textView: AnnotationTextView?
     private var textImageFont: CGFloat = 18
+    /// Current text style for *new* text marks — independent of the stroke width (text
+    /// used to borrow its size from it). The format popover drives these; re-editing an
+    /// existing mark loads its values here so a commit preserves them.
+    var textFontSize: CGFloat = 36
+    var textFontName: String?          // nil = system font
+    var textBold = false
+    var textAlignment: NSTextAlignment = .left
+    var textBackground: TextBackground = .none
+    /// Chip color behind the text when `textBackground` isn't `.none`; a translucent dark
+    /// default reads as a caption highlight behind bright text (kept distinct from the
+    /// text color so a filled chip never hides its own text).
+    var textBackgroundColor: NSColor = NSColor.black.withAlphaComponent(0.55)
+    /// Called whenever the text style/selection changes so the editor can refresh the
+    /// contextual format popover's controls.
+    var onTextStyleChange: (() -> Void)?
     /// While editing an existing mark, the wrap width is locked to its original so
     /// the text keeps wrapping the same way; nil lets a new field grow to fit.
     private var textLockedWidth: CGFloat?
@@ -126,6 +141,10 @@ final class CanvasView: NSView, NSTextViewDelegate {
     private enum TextDrag { case none, move, resize }
     private var textDrag: TextDrag = .none
     private var textDragOffset: CGPoint = .zero
+    /// A text box being resized by one of its eight handles (shared by the Text tool's
+    /// in-place box and the Select tool): edge handles reflow width/height, corner handles
+    /// scale the font.
+    private var textBoxDrag: (mark: TextAnnotation, handle: BoxHandle)?
 
     private var bitmap: NSBitmapImageRep?
     private func rebuildBitmap() {
@@ -213,6 +232,41 @@ final class CanvasView: NSView, NSTextViewDelegate {
     }
 
     var hasOverlays: Bool { annotations.contains { $0 is ImageOverlayAnnotation } }
+
+    /// Insert clipboard text as a new text mark centered on the canvas, using the current
+    /// text style, then leave it selected under the Text tool for immediate move/resize.
+    @discardableResult
+    func insertTextBox(_ string: String) -> Bool {
+        let trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+        commitText()
+        let size = textFontSize
+        let font = editorFont(screenSize: size)
+        let para = NSMutableParagraphStyle()
+        para.lineBreakMode = .byWordWrapping; para.alignment = textAlignment
+        let measured = NSAttributedString(string: trimmed, attributes: [.font: font, .paragraphStyle: para])
+        let cap = max(60, image.size.width * 0.6)
+        let w = min(max(40, ceil(measured.size().width) + 16), cap)
+        let textH = ceil(measured.boundingRect(
+            with: CGSize(width: w, height: .greatestFiniteMagnitude),
+            options: [.usesLineFragmentOrigin, .usesFontLeading]).height)
+        let pad = textBackground == .none ? 0 : size * 0.28
+        let boxW = w + pad * 2, boxH = textH + pad * 2
+        let origin = CGPoint(x: max(0, (image.size.width - boxW) / 2),
+                             y: max(0, (image.size.height - boxH) / 2))
+        let attr = NSAttributedString(string: trimmed, attributes: [.foregroundColor: style.color])
+        let mark = TextAnnotation(attributed: attr, origin: origin, fontSize: size,
+                                  maxWidth: boxW, boxHeight: boxH,
+                                  fontName: textFontName, bold: textBold,
+                                  alignment: textAlignment, background: textBackground,
+                                  backgroundColor: textBackgroundColor)
+        annotations.append(mark); redoStack.removeAll()
+        tool = .text
+        editingText = mark
+        onChange?(); needsDisplay = true
+        onTextStyleChange?()
+        return true
+    }
 
     /// Set the opacity (0–1) of the currently selected overlay (slider drives this).
     func setSelectedOverlayOpacity(_ value: CGFloat) {
@@ -326,13 +380,9 @@ final class CanvasView: NSView, NSTextViewDelegate {
             if eo.rect.contains(p) { NSCursor.openHand.set(); return }
         }
         if tool == .text, textView == nil, let t = editingText {
-            let p = imagePoint(event), hr = 12 / displayScale
-            if hypot(t.bounds.maxX - p.x, t.bounds.minY - p.y) < hr {
-                NSCursor.openHand.set(); return
-            }
-            if t.bounds.contains(p) {
-                NSCursor.pointingHand.set(); return
-            }
+            let p = imagePoint(event)
+            if let h = boxHandle(inRect: t.bounds, at: p) { boxCursor(h).set(); return }
+            if t.bounds.contains(p) { NSCursor.pointingHand.set(); return }
         }
         if tool == .arrow || tool == .line, let ec = editingCurve,
            curveHandle(ec, at: imagePoint(event)) != nil {
@@ -349,6 +399,9 @@ final class CanvasView: NSView, NSTextViewDelegate {
                 NSCursor.openHand.set(); return
             }
             if let sh = selected as? TwoPointAnnotation, let h = boxHandle(for: sh, at: p) {
+                boxCursor(h).set(); return
+            }
+            if let t = selected as? TextAnnotation, let h = boxHandle(inRect: t.bounds, at: p) {
                 boxCursor(h).set(); return
             }
             if let s = selected, resizeAnchor(for: s, at: p) != nil {
@@ -457,15 +510,11 @@ final class CanvasView: NSView, NSTextViewDelegate {
             live = CounterAnnotation(center: p, label: counterFormat.label(counter + 1),
                                      color: style.color, radius: r)
         case .text:
-            let hr = 12 / displayScale
             if event.clickCount >= 2, let hit = annotations.reversed()
                 .first(where: { ($0 as? TextAnnotation)?.hit(p) ?? false }) as? TextAnnotation {
                 beginEditing(hit)
-            } else if let t = editingText, hypot(t.bounds.maxX - p.x, t.bounds.minY - p.y) < hr {
-                textDrag = .resize
-                dragAnchor = CGPoint(x: t.bounds.minX, y: t.bounds.maxY)
-                lastDragPoint = p
-                NSCursor.closedHand.push()
+            } else if let t = editingText, let h = boxHandle(inRect: t.bounds, at: p) {
+                textBoxDrag = (t, h); lastDragPoint = p; boxCursor(h).push()
             } else if let hit = annotations.reversed()
                 .first(where: { ($0 as? TextAnnotation)?.hit(p) ?? false }) as? TextAnnotation {
                 editingText = hit
@@ -530,6 +579,8 @@ final class CanvasView: NSView, NSTextViewDelegate {
                 curveDrag = (c, h); NSCursor.closedHand.push()
             } else if let sh = selected as? TwoPointAnnotation, let h = boxHandle(for: sh, at: p) {
                 boxDrag = (sh, h); lastDragPoint = p; boxCursor(h).push()
+            } else if let t = selected as? TextAnnotation, let h = boxHandle(inRect: t.bounds, at: p) {
+                textBoxDrag = (t, h); lastDragPoint = p; boxCursor(h).push()
             } else if let s = selected, let anchor = resizeAnchor(for: s, at: p) {
                 selectDrag = .resize
                 dragAnchor = anchor
@@ -555,6 +606,7 @@ final class CanvasView: NSView, NSTextViewDelegate {
             }
         }
         needsDisplay = true
+        onTextStyleChange?()   // refresh the contextual text popover after any selection change
     }
 
     override func mouseDragged(with event: NSEvent) {
@@ -594,22 +646,12 @@ final class CanvasView: NSView, NSTextViewDelegate {
             eo.rect = resizeRect(eo.rect, handle: overlayHandle, to: p, min: 24 / displayScale)
             needsDisplay = true; return
         }
-        if textDrag == .move, let t = editingText {
-            t.origin = CGPoint(x: p.x - textDragOffset.x, y: p.y - textDragOffset.y)
+        if let td = textBoxDrag {
+            resizeTextBox(td.mark, handle: td.handle, to: p)
             needsDisplay = true; return
         }
-        if textDrag == .resize, let t = editingText {
-            let prev = hypot(lastDragPoint.x - dragAnchor.x, lastDragPoint.y - dragAnchor.y)
-            let cur = hypot(p.x - dragAnchor.x, p.y - dragAnchor.y)
-            if prev > 0.5 {
-                let f = cur / prev
-                let b = t.bounds
-                let minSide = 8 / displayScale
-                if f >= 1 || (b.width * f >= minSide && b.height * f >= minSide) {
-                    t.scale(by: f, around: dragAnchor)
-                    lastDragPoint = p
-                }
-            }
+        if textDrag == .move, let t = editingText {
+            t.origin = CGPoint(x: p.x - textDragOffset.x, y: p.y - textDragOffset.y)
             needsDisplay = true; return
         }
         if selectDrag == .move, let s = selected {
@@ -670,6 +712,9 @@ final class CanvasView: NSView, NSTextViewDelegate {
             boxDrag = nil
             NSCursor.pop()   // matches the resize-cursor push on knob grab
             onChange?(); needsDisplay = true; return
+        }
+        if textBoxDrag != nil {
+            textBoxDrag = nil; NSCursor.pop(); onChange?(); needsDisplay = true; return
         }
         if textDrag != .none {
             textDrag = .none; NSCursor.pop(); onChange?(); needsDisplay = true; return
@@ -803,11 +848,14 @@ final class CanvasView: NSView, NSTextViewDelegate {
     private func makeTextView(frame: NSRect, font: NSFont, color: NSColor) -> AnnotationTextView {
         let tv = AnnotationTextView(frame: frame)
         tv.isRichText = true
-        tv.drawsBackground = false
-        tv.backgroundColor = .clear
+        // A dark translucent backing while editing: the caret and white placeholder are
+        // otherwise invisible over a bright capture. It's just an editing affordance — the
+        // committed mark keeps whatever background style the user chose (usually none).
+        tv.drawsBackground = true
+        tv.backgroundColor = Theme.surfaceBase.withAlphaComponent(0.72)
         tv.isHorizontallyResizable = false
         tv.isVerticallyResizable = false
-        tv.textContainerInset = .zero
+        tv.textContainerInset = NSSize(width: 4, height: 3)
         tv.textContainer?.lineFragmentPadding = 0
         tv.textContainer?.widthTracksTextView = true
         tv.textContainer?.heightTracksTextView = true
@@ -818,23 +866,31 @@ final class CanvasView: NSView, NSTextViewDelegate {
         tv.colorForNewText = { [weak self] in self?.style.color ?? color }
         tv.delegate = self
         tv.wantsLayer = true
-        tv.layer?.borderColor = Theme.lavender.withAlphaComponent(0.9).cgColor
-        tv.layer?.borderWidth = 1
-        tv.layer?.cornerRadius = 3
+        tv.layer?.borderColor = Theme.lavender.cgColor
+        tv.layer?.borderWidth = 1.5
+        tv.layer?.cornerRadius = 4
         return tv
     }
 
+    /// The editor font at a given on-screen point size, honoring the current family and
+    /// bold flag — mirrors `TextAnnotation.font` so the live editor matches the commit.
+    private func editorFont(screenSize: CGFloat) -> NSFont {
+        resolveTextFont(textFontName, size: screenSize, bold: textBold)
+    }
+
     private func beginTextEditing(viewPoint: CGPoint) {
-        let screenFont = max(20, style.lineWidth * 6) * displayScale
+        let screenFont = textFontSize * displayScale
         let h = screenFont + 8
         let tv = makeTextView(frame: NSRect(x: viewPoint.x, y: viewPoint.y - h, width: 120, height: h),
-                              font: .systemFont(ofSize: screenFont, weight: .semibold), color: style.color)
+                              font: editorFont(screenSize: screenFont), color: style.color)
+        tv.alignment = textAlignment
         addSubview(tv)
         window?.makeFirstResponder(tv)
         textView = tv
-        textImageFont = screenFont / displayScale
+        textImageFont = textFontSize
         textLockedWidth = nil
         fitTextView(tv)
+        onTextStyleChange?()
     }
 
     /// Re-open the editor on an existing text mark (double-click) pre-filled with
@@ -842,14 +898,20 @@ final class CanvasView: NSView, NSTextViewDelegate {
     private func beginEditing(_ mark: TextAnnotation) {
         editingText = nil; selected = nil; selectDrag = .none; textDrag = .none
         if let idx = annotations.firstIndex(where: { $0 === mark }) { annotations.remove(at: idx) }
+        // Load the mark's style so the format popover reflects it and a commit preserves it.
+        textFontSize = mark.fontSize
+        textFontName = mark.fontName; textBold = mark.bold
+        textAlignment = mark.alignment; textBackground = mark.background
+        textBackgroundColor = mark.backgroundColor
         let scale = displayScale
         let frame = NSRect(x: mark.origin.x * scale, y: mark.origin.y * scale,
                            width: mark.maxWidth * scale, height: mark.boxHeight * scale)
-        let screenFont = NSFont.systemFont(ofSize: mark.fontSize * scale, weight: .semibold)
+        let screenFont = editorFont(screenSize: mark.fontSize * scale)
         let baseColor = (mark.attributed.length > 0
             ? mark.attributed.attribute(.foregroundColor, at: 0, effectiveRange: nil) as? NSColor
             : nil) ?? style.color
         let tv = makeTextView(frame: frame, font: screenFont, color: baseColor)
+        tv.alignment = mark.alignment
         // Restore the rich text at screen scale, keeping each range's color.
         let rich = NSMutableAttributedString(attributedString: mark.attributed)
         rich.addAttribute(.font, value: screenFont, range: NSRange(location: 0, length: rich.length))
@@ -862,6 +924,7 @@ final class CanvasView: NSView, NSTextViewDelegate {
         textLockedWidth = mark.maxWidth * scale
         fitTextView(tv)
         redoStack.removeAll(); onChange?(); needsDisplay = true
+        onTextStyleChange?()
     }
 
     func textDidChange(_ notification: Notification) {
@@ -897,9 +960,11 @@ final class CanvasView: NSView, NSTextViewDelegate {
         let measured = NSAttributedString(string: shown, attributes: [.font: font, .paragraphStyle: para])
             .boundingRect(with: CGSize(width: width, height: .greatestFiniteMagnitude),
                           options: [.usesLineFragmentOrigin, .usesFontLeading]).height
-        let height = ceil(max(font.ascender - font.descender, measured))
+        // Add the container inset so the caret/text/backing aren't clipped by it.
+        let inset = tv.textContainerInset
+        let height = ceil(max(font.ascender - font.descender, measured)) + inset.height * 2
         let top = tv.frame.maxY
-        tv.frame = NSRect(x: tv.frame.minX, y: top - height, width: width, height: height)
+        tv.frame = NSRect(x: tv.frame.minX, y: top - height, width: width + inset.width * 2, height: height)
     }
 
     @discardableResult
@@ -914,12 +979,80 @@ final class CanvasView: NSView, NSTextViewDelegate {
         let origin = CGPoint(x: f.minX / displayScale, y: f.minY / displayScale)
         let mark = TextAnnotation(attributed: attributed, origin: origin, fontSize: textImageFont,
                                   maxWidth: f.width / displayScale,
-                                  boxHeight: f.height / displayScale)
+                                  boxHeight: f.height / displayScale,
+                                  fontName: textFontName, bold: textBold,
+                                  alignment: textAlignment, background: textBackground,
+                                  backgroundColor: textBackgroundColor)
         annotations.append(mark)
         editingText = mark
         redoStack.removeAll(); onChange?()
         needsDisplay = true
         return true
+    }
+
+    /// The text mark the format controls act on when not actively typing: the just-placed
+    /// mark under the Text tool, or a text mark chosen with the Select tool.
+    private var targetTextMark: TextAnnotation? { editingText ?? (selected as? TextAnnotation) }
+
+    /// True when a text box is being typed into or a text mark is the current target, so
+    /// the editor knows whether to surface the format popover.
+    var hasTextFocus: Bool { textView != nil || targetTextMark != nil }
+
+    /// Image-space bounds of the current text target, for positioning the format popover.
+    var textFocusRect: CGRect? {
+        if let tv = textView {
+            return CGRect(x: tv.frame.minX / displayScale, y: tv.frame.minY / displayScale,
+                          width: tv.frame.width / displayScale, height: tv.frame.height / displayScale)
+        }
+        return targetTextMark?.bounds
+    }
+
+    /// The current text style, so the format popover can reflect it.
+    var currentTextStyle: (size: CGFloat, fontName: String?, bold: Bool,
+                           alignment: NSTextAlignment, background: TextBackground) {
+        (textFontSize, textFontName, textBold, textAlignment, textBackground)
+    }
+
+    // MARK: Text format setters (driven by the contextual popover)
+
+    func setTextFontSize(_ size: CGFloat) { textFontSize = max(6, size); applyFontStyle() }
+    func setTextFontName(_ name: String?) { textFontName = name; applyFontStyle() }
+    func setTextBold(_ on: Bool) { textBold = on; applyFontStyle() }
+    func setTextAlignment(_ a: NSTextAlignment) { textAlignment = a; applyFontStyle() }
+    func setTextBackground(_ b: TextBackground) { textBackground = b; applyBackgroundStyle() }
+    func setTextBackgroundColor(_ c: NSColor) { textBackgroundColor = c; applyBackgroundStyle() }
+
+    /// Apply font family/size/weight/alignment to the live editor (reflowing it) or, when
+    /// not typing, to the target text mark (scaling its box with the size change).
+    private func applyFontStyle() {
+        if let tv = textView {
+            let font = editorFont(screenSize: textFontSize * displayScale)
+            tv.font = font
+            tv.alignment = textAlignment
+            tv.typingAttributes[.font] = font
+            if let store = tv.textStorage, store.length > 0 {
+                store.addAttribute(.font, value: font, range: NSRange(location: 0, length: store.length))
+            }
+            textImageFont = textFontSize
+            fitTextView(tv)
+        } else if let m = targetTextMark {
+            let ratio = m.fontSize > 0 ? textFontSize / m.fontSize : 1
+            m.fontSize = textFontSize
+            m.maxWidth *= ratio; m.boxHeight *= ratio
+            m.fontName = textFontName; m.bold = textBold; m.alignment = textAlignment
+            onChange?()
+        }
+        needsDisplay = true
+    }
+
+    /// Background chip has no live editor equivalent (the NSTextView stays clear); it
+    /// applies to the target mark now and to a live edit on commit.
+    private func applyBackgroundStyle() {
+        if let m = targetTextMark {
+            m.background = textBackground; m.backgroundColor = textBackgroundColor
+            onChange?()
+        }
+        needsDisplay = true
     }
 
     private func sample(_ p: CGPoint) -> NSColor? {
@@ -1000,6 +1133,41 @@ final class CanvasView: NSView, NSTextViewDelegate {
         editingZoom = nil; selected = nil; selectDrag = .none
         editingText = nil; textDrag = .none
         if editingOverlay != nil { editingOverlay = nil; onOverlaySelected?(nil) }
+    }
+
+    /// Resize a text box by one of its eight handles: edge handles reflow the box on a
+    /// single axis (the text re-wraps, font unchanged); corner handles scale the font
+    /// (and box) uniformly about the opposite corner — like a real text frame.
+    private func resizeTextBox(_ t: TextAnnotation, handle: BoxHandle, to p: CGPoint) {
+        let b = t.bounds
+        let minW = max(8 / displayScale, t.fontSize)
+        let minH = max(8 / displayScale, t.fontSize * 0.6)
+        switch handle {
+        case .left, .right, .top, .bottom:
+            var minX = b.minX, maxX = b.maxX, minY = b.minY, maxY = b.maxY
+            switch handle {
+            case .left:   minX = min(p.x, maxX - minW)
+            case .right:  maxX = max(p.x, minX + minW)
+            case .bottom: minY = min(p.y, maxY - minH)
+            case .top:    maxY = max(p.y, minY + minH)
+            default: break
+            }
+            t.origin = CGPoint(x: minX, y: minY)
+            t.resizeBox(width: maxX - minX, height: maxY - minY)
+        default:
+            // Corner → scale the font about the diagonally opposite corner.
+            let anchor: CGPoint
+            switch handle {
+            case .bottomLeft:  anchor = CGPoint(x: b.maxX, y: b.maxY)
+            case .bottomRight: anchor = CGPoint(x: b.minX, y: b.maxY)
+            case .topLeft:     anchor = CGPoint(x: b.maxX, y: b.minY)
+            default:           anchor = CGPoint(x: b.minX, y: b.minY)   // topRight
+            }
+            let oldW = abs(b.width)
+            guard oldW > 0.5 else { return }
+            let f = max(0.05, abs(p.x - anchor.x) / oldW)
+            t.scale(by: f, around: anchor)
+        }
     }
 
     /// The curve handle under `p` (whichever knob is nearest within grab range), or
@@ -1115,9 +1283,10 @@ final class CanvasView: NSView, NSTextViewDelegate {
         ctx.setStrokeColor(Theme.lavender.cgColor); ctx.setLineWidth(1.5 / displayScale)
         ctx.stroke(b)
         guard s.resizable else { return }
-        // Rect-based shapes get all eight knobs (edges stretch one axis); other
-        // resizable marks scale uniformly, so only their four corners are shown.
-        let pts = s is TwoPointAnnotation ? boxHandlePoints(b).map(\.point) : cornerAnchors(b).map(\.corner)
+        // Rect-based shapes and text boxes get all eight knobs (edges reflow / stretch a
+        // single axis); other resizable marks scale uniformly, so only four corners show.
+        let eightHandles = s is TwoPointAnnotation || s is TextAnnotation
+        let pts = eightHandles ? boxHandlePoints(b).map(\.point) : cornerAnchors(b).map(\.corner)
         let r = 6 / displayScale
         for c in pts {
             let knob = CGRect(x: c.x - r, y: c.y - r, width: r * 2, height: r * 2)
@@ -1142,6 +1311,9 @@ final class CanvasView: NSView, NSTextViewDelegate {
         guard let ctx = NSGraphicsContext.current?.cgContext else { return }
         ctx.saveGState()
         ctx.scaleBy(x: displayScale, y: displayScale)
+        // Clip to the image so a mark that overhangs the edge (e.g. after the region is
+        // trimmed) never paints its cut-off part onto the surrounding backdrop.
+        ctx.clip(to: CGRect(origin: .zero, size: image.size))
         image.draw(in: CGRect(origin: .zero, size: image.size))
         for a in annotations { a.draw(in: ctx) }
         live?.draw(in: ctx)
@@ -1174,13 +1346,7 @@ final class CanvasView: NSView, NSTextViewDelegate {
             }
         }
         if tool == .text, textView == nil, let t = editingText {
-            let b = t.bounds
-            ctx.setStrokeColor(Theme.lavender.cgColor); ctx.setLineWidth(1.5 / displayScale)
-            ctx.stroke(b)
-            let r = 6 / displayScale
-            let knob = CGRect(x: b.maxX - r, y: b.minY - r, width: r * 2, height: r * 2)
-            ctx.setFillColor(NSColor(white: 1, alpha: 0.95).cgColor); ctx.fillEllipse(in: knob)
-            ctx.setStrokeColor(Theme.lavender.cgColor); ctx.setLineWidth(1.5 / displayScale); ctx.strokeEllipse(in: knob)
+            drawResizeBox(t, in: ctx)   // eight handles: edges reflow, corners scale the font
         }
         if tool == .select, let s = selected {
             if let c = s as? CurvedAnnotation {
@@ -1228,7 +1394,7 @@ final class CanvasView: NSView, NSTextViewDelegate {
         (annotations + redoStack).forEach { $0.remap(remap) }
         // A transform (crop especially) can push a mark entirely off the new image.
         // Drop those so they don't linger invisibly off-canvas or resurface on a later
-        // resize — marks still overlapping the image stay and are clipped by the view.
+        // resize — marks still overlapping the image stay and are clipped to the image.
         let frameRect = CGRect(origin: .zero, size: image.size)
         annotations.removeAll { !frameRect.intersects($0.bounds) }
         redoStack.removeAll { !frameRect.intersects($0.bounds) }
@@ -1489,9 +1655,17 @@ final class AnnotationTextView: NSTextView {
 
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         let mods = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-        if event.keyCode == 0, mods == .command || mods == .control {   // A
-            selectAll(nil)
-            return true
+        // Handle the standard editing shortcuts explicitly: the editor's borderless
+        // window has no Edit menu, and the app's ⌘V is otherwise claimed for pasting an
+        // image overlay — so paste into the focused field must be wired here.
+        if mods == .command, let ch = event.charactersIgnoringModifiers?.lowercased() {
+            switch ch {
+            case "a": selectAll(nil); return true
+            case "c": copy(nil); return true
+            case "x": cut(nil); return true
+            case "v": pasteAsPlainText(nil); return true   // plain text adopts the current style
+            default: break
+            }
         }
         return super.performKeyEquivalent(with: event)
     }
