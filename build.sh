@@ -5,7 +5,7 @@ set -euo pipefail
 DIR="$(cd "$(dirname "$0")" && pwd)"
 BUILD="$DIR/build"
 APP="$BUILD/m_capture.app"
-VERSION="1.5.1"
+VERSION="1.5.2"
 
 # `./build.sh --run` quits any running instance, relaunches from build/, and
 # skips the DMG — the fast dev loop. Plain `./build.sh` builds the DMG too.
@@ -50,7 +50,6 @@ cat > "$APP/Contents/Info.plist" <<PLIST
     <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
     <key>LSMinimumSystemVersion</key><string>14.0</string>
     <key>NSHighResolutionCapable</key><true/>
-    <key>LSUIElement</key><true/>
     <key>NSScreenCaptureUsageDescription</key><string>m_capture captures your screen to take screenshots.</string>
     <key>NSHumanReadableCopyright</key><string>© 2026 mesoneer AG. MIT License.</string>${AUTO_INSTALL_PLIST}
 </dict>

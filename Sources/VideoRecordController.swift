@@ -59,13 +59,9 @@ final class VideoRecordController {
         let mouse = NSEvent.mouseLocation
         let keyScreen = NSScreen.screens.first { $0.frame.contains(mouse) }
             ?? NSScreen.main ?? NSScreen.screens[0]
-        // Promote to `.regular` so the overlay — and, later, the recording bar —
-        // can hold keyboard focus (Esc/Space, Esc/Return to stop). A background
-        // `.accessory` agent can't reliably become active, so key events would
-        // never arrive. Stays `.regular` through recording; reverted on cancel
-        // (below) and when recording stops. The Dock icon is hidden behind the
-        // full-screen overlay.
-        NSApp.setActivationPolicy(.regular)
+        // Activate so the overlay — and, later, the recording bar — can hold
+        // keyboard focus (Esc/Space, Esc/Return to stop). The app is already
+        // `.regular` (Dock icon), which is what lets it reliably become active.
         NSApp.activate(ignoringOtherApps: true)
         let coordinator = OverlayCoordinator()
         for screen in NSScreen.screens {
@@ -88,7 +84,6 @@ final class VideoRecordController {
             }
             win.onCancel = { [weak self] in
                 self?.dismissOverlays()
-                self?.revertActivationPolicyIfIdle()
             }
             overlays.append(win)
             if screen == keyScreen {
@@ -136,13 +131,6 @@ final class VideoRecordController {
         // Reset the pointer to the default arrow so the overlay's custom capture cursor
         // isn't left showing (and isn't baked into the first recorded frames).
         NSCursor.arrow.set()
-    }
-
-    /// Drop back to a background agent once nothing on screen needs the Dock
-    /// presence / keyboard focus. Guarded so we don't demote the app while an
-    /// editor is still open.
-    private func revertActivationPolicyIfIdle() {
-        if !EditorWindowController.hasOpenWindows { NSApp.setActivationPolicy(.accessory) }
     }
 
     /// Resolve the screen a picked window mostly lives on, for placing the record bar.
@@ -276,7 +264,6 @@ final class VideoRecordController {
         bar?.close()
         dismissDim()
         clearRecordingUI()
-        revertActivationPolicyIfIdle()
         guard let session = session, let url = currentURL else { return }
         self.session = nil
         self.bar = nil
@@ -341,7 +328,6 @@ final class VideoRecordController {
         dismissDim()
         clearRecordingUI()
         self.session = nil; self.currentURL = nil; self.isPaused = false
-        revertActivationPolicyIfIdle()
         Task {
             await session.stop()
             try? FileManager.default.removeItem(at: url)
@@ -372,7 +358,6 @@ final class VideoRecordController {
         clearRecordingUI()
         let url = currentURL
         self.session = nil; self.currentURL = nil; self.isPaused = false
-        revertActivationPolicyIfIdle()
         Task {
             await session.stop()   // flush whatever frames made it, so the file is playable
             await MainActor.run {
@@ -395,7 +380,6 @@ final class VideoRecordController {
         dismissDim()
         clearRecordingUI()
         session = nil; currentURL = nil; isPaused = false
-        revertActivationPolicyIfIdle()
 
         let isPermission = !ScreenRecordingPermission.isGranted
         if isPermission {

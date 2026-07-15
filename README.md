@@ -11,8 +11,9 @@
 
 Press a hotkey and drag to select a region; an **in-place annotation editor** opens
 immediately, where you can highlight, blur, and add arrows or numbered steps before
-copying the result to the clipboard or saving it to disk. The app runs in the menu
-bar, with no Dock icon.
+copying the result to the clipboard or saving it to disk. The app lives in the menu
+bar — the current version shows on a badge in its menu — with a Dock icon for quick
+access when the menu bar is hidden.
 
 <p align="center">
   <img src="docs/assets/editor.png" alt="The in-place annotation editor — a captured image surrounded by grouped tool clusters" width="760">
@@ -44,7 +45,7 @@ on-device, with no subscriptions, cloud services, or accounts.
 - **Measure & compose** — an on-screen **ruler**, image overlays, and an **eyedropper** for color matching.
 - **Style** — a preset color palette with a custom hue/brightness picker, plus a stroke-width control (thin / medium / thick).
 - **Select & edit** — every placed mark stays editable: with the **Select** tool (`V`) — or right after you draw it — drag it to reposition, resize shapes from **any of eight handles** (four corners plus four edges, so you can stretch one side), reshape arrows and lines by their **endpoints or bend handle**, or press **⌫** to delete.
-- **Transform** — crop, rotate, flip, and aspect-locked resize, all baked into the export.
+- **Transform** — crop, rotate, flip, and adjust the capture region from eight handles (trim inward, or grow outward to re-grab more of the screen), all baked into the export.
 
 **🚀 Share**
 - **Copy text / QR (OCR)** — extract text or decode a QR code from any capture, on-device via Apple Vision.
