@@ -30,8 +30,13 @@ final class CanvasView: NSView, NSTextViewDelegate {
             if tool != .select { selected = nil; selectDrag = .none }
             window?.invalidateCursorRects(for: self)
             needsDisplay = true
+            if tool != oldValue { onToolChange?(tool) }
         }
     }
+    /// Fired when the active tool changes from *inside* the canvas (e.g. auto-selecting
+    /// a freshly-stamped emoji into Select) so the editor can sync the toolbar highlight.
+    /// Handlers must not set `tool` back, or the didSet recurses.
+    var onToolChange: ((Tool) -> Void)?
     var style = DrawStyle(color: Theme.accent, lineWidth: 3)
     var onChange: (() -> Void)?
     var onColorPicked: ((NSColor) -> Void)?
@@ -76,6 +81,8 @@ final class CanvasView: NSView, NSTextViewDelegate {
     private enum OverlayDrag { case none, move, resize }
     private var overlayDrag: OverlayDrag = .none
     private var overlayDragOffset: CGPoint = .zero
+    /// Which of the eight box knobs the current overlay resize is dragging.
+    private var overlayHandle: BoxHandle = .bottomRight
     var onOverlaySelected: ((ImageOverlayAnnotation?) -> Void)?
     var onPaste: (() -> Void)?
 
@@ -148,6 +155,10 @@ final class CanvasView: NSView, NSTextViewDelegate {
         return super.performKeyEquivalent(with: event)
     }
 
+    /// Whether a text annotation is being edited (a field editor is up). The editor's
+    /// paste fallback checks this so ⌘V goes to the text, not a new image overlay.
+    var isEditingText: Bool { textView != nil }
+
     override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
         CanvasView.cgImage(from: sender.draggingPasteboard) != nil ? .copy : []
     }
@@ -160,14 +171,19 @@ final class CanvasView: NSView, NSTextViewDelegate {
     /// Read an image off a pasteboard — either image data (clipboard, dragged
     /// image) or an image file URL (Finder drag). Returns nil if there's no image.
     static func cgImage(from pb: NSPasteboard) -> CGImage? {
-        if let imgs = pb.readObjects(forClasses: [NSImage.self], options: nil) as? [NSImage],
-           let img = imgs.first {
-            return img.cgImage(forProposedRect: nil, context: nil, hints: nil)
-        }
+        // Prefer an actual image file: Finder copies an image as a file URL *plus* a small
+        // icon/thumbnail TIFF, so reading image data first would paste the icon, not the
+        // picture. Fall back to raw image data for app-copied images (and dragged images
+        // that carry no file URL).
         let opts: [NSPasteboard.ReadingOptionKey: Any] =
             [.urlReadingContentsConformToTypes: ["public.image"]]
         if let urls = pb.readObjects(forClasses: [NSURL.self], options: opts) as? [URL],
-           let u = urls.first, let img = NSImage(contentsOf: u) {
+           let u = urls.first, let img = NSImage(contentsOf: u),
+           let cg = img.cgImage(forProposedRect: nil, context: nil, hints: nil) {
+            return cg
+        }
+        if let imgs = pb.readObjects(forClasses: [NSImage.self], options: nil) as? [NSImage],
+           let img = imgs.first {
             return img.cgImage(forProposedRect: nil, context: nil, hints: nil)
         }
         return nil
@@ -303,11 +319,11 @@ final class CanvasView: NSView, NSTextViewDelegate {
             }
         }
         if tool == .overlay, let eo = editingOverlay {
-            let p = imagePoint(event), hr = 12 / displayScale
-            let knob = CGPoint(x: eo.rect.maxX, y: eo.rect.minY)
-            if hypot(knob.x - p.x, knob.y - p.y) < hr || eo.rect.contains(p) {
-                NSCursor.openHand.set(); return
+            let p = imagePoint(event)
+            if let h = boxHandle(inRect: eo.rect, at: p) {
+                boxCursor(h).set(); return
             }
+            if eo.rect.contains(p) { NSCursor.openHand.set(); return }
         }
         if tool == .text, textView == nil, let t = editingText {
             let p = imagePoint(event), hr = 12 / displayScale
@@ -495,10 +511,8 @@ final class CanvasView: NSView, NSTextViewDelegate {
         case .emoji:
             live = EmojiAnnotation(center: p, emoji: currentEmoji, size: 54)
         case .overlay:
-            let hr = 12 / displayScale
-            if let eo = editingOverlay,
-               hypot(eo.rect.maxX - p.x, eo.rect.minY - p.y) < hr {
-                overlayDrag = .resize; NSCursor.closedHand.push()
+            if let eo = editingOverlay, let h = boxHandle(inRect: eo.rect, at: p) {
+                overlayDrag = .resize; overlayHandle = h; boxCursor(h).push()
             } else if let eo = editingOverlay, eo.rect.contains(p) {
                 overlayDrag = .move
                 overlayDragOffset = CGPoint(x: p.x - eo.rect.minX, y: p.y - eo.rect.minY)
@@ -577,10 +591,7 @@ final class CanvasView: NSView, NSTextViewDelegate {
             needsDisplay = true; return
         }
         if overlayDrag == .resize, let eo = editingOverlay {
-            let anchorX = eo.rect.minX, top = eo.rect.maxY
-            let newW = max(24 / displayScale, p.x - anchorX)
-            let newH = newW * eo.aspect
-            eo.rect = CGRect(x: anchorX, y: top - newH, width: newW, height: newH)
+            eo.rect = resizeRect(eo.rect, handle: overlayHandle, to: p, min: 24 / displayScale)
             needsDisplay = true; return
         }
         if textDrag == .move, let t = editingText {
@@ -741,6 +752,13 @@ final class CanvasView: NSView, NSTextViewDelegate {
             redoStack.removeAll()
             live = nil
             onChange?()
+            // Stamps (emoji / counter) have no in-place edit mode of their own, so drop
+            // straight into Select with the new stamp selected — its resize handles show
+            // at once and it can be sized/moved without hunting for the Select tool.
+            if a is EmojiAnnotation || a is CounterAnnotation {
+                tool = .select
+                selected = a
+            }
         }
         needsDisplay = true
     }
@@ -1030,11 +1048,35 @@ final class CanvasView: NSView, NSTextViewDelegate {
 
     /// Which box-resize knob sits under `p` (nearest within grab range), or nil.
     private func boxHandle(for s: TwoPointAnnotation, at p: CGPoint) -> BoxHandle? {
+        boxHandle(inRect: s.bounds, at: p)
+    }
+
+    /// Which of `b`'s eight box knobs sits under `p` (nearest within grab range), or nil.
+    /// Shared by shapes and the image overlay so both get the same 8-handle affordance.
+    private func boxHandle(inRect b: CGRect, at p: CGPoint) -> BoxHandle? {
         let hr = 12 / displayScale
-        return boxHandlePoints(s.bounds)
+        return boxHandlePoints(b)
             .map { ($0.handle, hypot($0.point.x - p.x, $0.point.y - p.y)) }
             .filter { $0.1 < hr }
             .min { $0.1 < $1.1 }?.0
+    }
+
+    /// Resize `b` by dragging box `handle` to `p`: grabbed edge(s) follow the pointer, the
+    /// opposite edge(s) stay put, clamped to a `min` size. Aspect is free (edges stretch a
+    /// single axis, corners both) — used by the image overlay's 8-handle resize.
+    private func resizeRect(_ b: CGRect, handle: BoxHandle, to p: CGPoint, min m: CGFloat) -> CGRect {
+        var minX = b.minX, maxX = b.maxX, minY = b.minY, maxY = b.maxY
+        switch handle {
+        case .left, .topLeft, .bottomLeft:    minX = Swift.min(p.x, maxX - m)
+        case .right, .topRight, .bottomRight: maxX = Swift.max(p.x, minX + m)
+        default: break
+        }
+        switch handle {
+        case .bottom, .bottomLeft, .bottomRight: minY = Swift.min(p.y, maxY - m)
+        case .top, .topLeft, .topRight:          maxY = Swift.max(p.y, minY + m)
+        default: break
+        }
+        return CGRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
     }
 
     /// Resize a rect-based shape by dragging one of its eight knobs to `p`: the grabbed
@@ -1122,10 +1164,14 @@ final class CanvasView: NSView, NSTextViewDelegate {
         if tool == .overlay, let eo = editingOverlay {
             ctx.setStrokeColor(Theme.lavender.cgColor); ctx.setLineWidth(1.5 / displayScale)
             ctx.stroke(eo.rect)
+            // Eight knobs (four corners + four edge midpoints) — edges stretch a single
+            // axis, corners both, matching the shape resize box.
             let r = 6 / displayScale
-            let knob = CGRect(x: eo.rect.maxX - r, y: eo.rect.minY - r, width: r * 2, height: r * 2)
-            ctx.setFillColor(NSColor(white: 1, alpha: 0.95).cgColor); ctx.fillEllipse(in: knob)
-            ctx.setStrokeColor(Theme.lavender.cgColor); ctx.setLineWidth(1.5 / displayScale); ctx.strokeEllipse(in: knob)
+            for pt in boxHandlePoints(eo.rect).map(\.point) {
+                let knob = CGRect(x: pt.x - r, y: pt.y - r, width: r * 2, height: r * 2)
+                ctx.setFillColor(NSColor(white: 1, alpha: 0.95).cgColor); ctx.fillEllipse(in: knob)
+                ctx.setStrokeColor(Theme.lavender.cgColor); ctx.strokeEllipse(in: knob)
+            }
         }
         if tool == .text, textView == nil, let t = editingText {
             let b = t.bounds
@@ -1179,9 +1225,14 @@ final class CanvasView: NSView, NSTextViewDelegate {
         frame = NSRect(origin: frame.origin,
                        size: NSSize(width: image.size.width * displayScale,
                                     height: image.size.height * displayScale))
-        let all = annotations + redoStack
-        for a in all { a.remap(remap) }
-        for a in all {
+        (annotations + redoStack).forEach { $0.remap(remap) }
+        // A transform (crop especially) can push a mark entirely off the new image.
+        // Drop those so they don't linger invisibly off-canvas or resurface on a later
+        // resize — marks still overlapping the image stay and are clipped by the view.
+        let frameRect = CGRect(origin: .zero, size: image.size)
+        annotations.removeAll { !frameRect.intersects($0.bounds) }
+        redoStack.removeAll { !frameRect.intersects($0.bounds) }
+        for a in annotations + redoStack {
             if let s = a as? SpotlightAnnotation { s.fullSize = image.size }
             if let b = a as? BlurAnnotation { b.patch = gaussianBlur(b.rect) }
             if let z = a as? ZoomAnnotation { z.patch = croppedCGImage(rect: z.source) }
@@ -1263,7 +1314,7 @@ final class CanvasView: NSView, NSTextViewDelegate {
 
     private var resampleSource: NSBitmapImageRep?
     private var resampleSourceImage: NSImage?
-    private var resampleCumulative: CGFloat = 1
+    private var resampleCumulative = CGSize(width: 1, height: 1)
 
     /// Resample the whole capture to `scale`× its current on-screen size. Bakes the
     /// current annotations into the new base image (they're no longer separately
@@ -1271,23 +1322,28 @@ final class CanvasView: NSView, NSTextViewDelegate {
     /// resample is non-destructive: it always comes from the pristine pre-resize
     /// image (see `resampleSource`), so shrink-then-grow doesn't accumulate blur.
     /// The caller relays out.
-    func bakeResample(scale: CGFloat) {
-        guard scale > 0, abs(scale - 1) > 0.001 else { return }
+    func bakeResample(scale: CGFloat) { bakeResample(scaleX: scale, scaleY: scale) }
+
+    /// Resample width and height independently (edge handles stretch a single axis,
+    /// corner handles both). A uniform `scaleX == scaleY` preserves aspect as before.
+    func bakeResample(scaleX: CGFloat, scaleY: CGFloat) {
+        guard scaleX > 0, scaleY > 0, abs(scaleX - 1) > 0.001 || abs(scaleY - 1) > 0.001 else { return }
         if resampleSource == nil || resampleSourceImage !== image || !annotations.isEmpty {
             guard let flat = flatten() else { return }
             resampleSource = flat
-            resampleCumulative = 1
+            resampleCumulative = CGSize(width: 1, height: 1)
         }
         guard let src = resampleSource else { return }
-        let cumulative = resampleCumulative * scale
+        let cumulative = CGSize(width: resampleCumulative.width * scaleX,
+                                height: resampleCumulative.height * scaleY)
         // Snap the on-screen size (points × displayScale) to whole device points so the
         // resized canvas lands on the pixel grid. A fractional frame otherwise forces
         // CoreGraphics to resample the whole canvas on every redraw — invisible on a
         // Retina panel, visibly soft on a 1× external display (the capture path dodges
         // the same trap by snapping its selection to `.integral`). Pixels are derived
         // from the snapped point size so the baked image and its frame stay locked.
-        let frameW = max(1, (src.size.width * cumulative * displayScale).rounded())
-        let frameH = max(1, (src.size.height * cumulative * displayScale).rounded())
+        let frameW = max(1, (src.size.width * cumulative.width * displayScale).rounded())
+        let frameH = max(1, (src.size.height * cumulative.height * displayScale).rounded())
         let newPointSize = NSSize(width: frameW / displayScale, height: frameH / displayScale)
         let newW = max(1, Int((CGFloat(src.pixelsWide) * newPointSize.width / src.size.width).rounded()))
         let newH = max(1, Int((CGFloat(src.pixelsHigh) * newPointSize.height / src.size.height).rounded()))

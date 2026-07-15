@@ -120,6 +120,11 @@ final class SelectionView: NSView {
     /// Focus follows the pointer across displays: the overlay under the cursor becomes
     /// key so keyboard events (Esc) target the right screen and its cursor updates.
     override func mouseEntered(with event: NSEvent) {
+        // Never re-key mid-drag: a region drag that crosses displays fires this on the
+        // overlay it enters (button still held), and `makeKeyAndOrderFront` there would
+        // hijack the in-progress event tracking — dropping the `mouseUp` and leaving the
+        // overlay stuck with a half-drawn selection that Esc can no longer discard.
+        guard NSEvent.pressedMouseButtons == 0 else { return }
         guard window?.isKeyWindow == false else { return }
         window?.makeKeyAndOrderFront(nil)
         window?.makeFirstResponder(self)
@@ -176,8 +181,12 @@ final class SelectionView: NSView {
     /// capture, not just its edges (see `ScreenshotController.finish`).
     private var selectionRect: CGRect? {
         guard let a = startPoint, let b = currentPoint else { return nil }
-        return CGRect(x: min(a.x, b.x), y: min(a.y, b.y),
-                      width: abs(a.x - b.x), height: abs(a.y - b.y)).integral
+        let r = CGRect(x: min(a.x, b.x), y: min(a.y, b.y),
+                       width: abs(a.x - b.x), height: abs(a.y - b.y)).integral
+        // Clamp to this display: a drag that crosses onto another screen can't produce a
+        // valid single-display capture, so keep only the portion on the origin screen.
+        let clipped = r.intersection(bounds)
+        return clipped.isNull ? nil : clipped
     }
 
     /// Deliver clicks even when the overlay isn't the frontmost app's key window

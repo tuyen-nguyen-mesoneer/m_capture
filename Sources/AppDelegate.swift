@@ -26,15 +26,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.updateRecordingIndicator(active: active, elapsed: elapsed, paused: paused)
         }
 
-        // First-run welcome: point at the menu-bar icon, list the hotkeys, and — with
-        // the user's consent — prime Screen Recording and enable launch-at-login.
-        // (We no longer silently register a login item behind the user's back.)
-        let welcomeKey = "didShowWelcome"
-        if !UserDefaults.standard.bool(forKey: welcomeKey) {
-            UserDefaults.standard.set(true, forKey: welcomeKey)
-            DispatchQueue.main.async { [weak self] in self?.showWelcome() }
-        }
-
         Updater.reconcileAfterRelaunch()
         Updater.scheduleBackgroundChecks()
 
@@ -229,22 +220,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private static func clockString(_ t: TimeInterval) -> String {
         let s = Int(t), h = Int(t) / 3600, m = (s % 3600) / 60, sec = s % 60
         return h > 0 ? String(format: "%d:%02d:%02d", h, m, sec) : String(format: "%d:%02d", m, sec)
-    }
-
-    /// First-run welcome: orients the user (menu-bar app, no Dock icon), shows the live
-    /// hotkeys, and — only on the user's choice — primes Screen Recording and enables
-    /// launch-at-login. Nothing is registered without an explicit click.
-    private func showWelcome() {
-        let s = Settings.shared
-        let sc = { (a: ShortcutAction) in s.shortcut(a).displayString }
-        let msg = "m_capture lives in your menu bar — no Dock icon.\n"
-            + "Screenshot \(sc(.screenshot))  ·  Record \(sc(.record))  ·  Quick Screen \(sc(.quickScreen))"
-        NSApp.activate(ignoringOtherApps: true)
-        let r = BrandAlert(title: "Welcome to m_capture",
-                           message: msg,
-                           titles: ["Grant Access", "Not Now"],
-                           primary: 0, cancel: 1, icon: "hand.wave.fill").runModal()
-        if r == 0 { ScreenRecordingPermission.prime() }
     }
 
     /// Force Quit: also force-terminates any other m_capture process still

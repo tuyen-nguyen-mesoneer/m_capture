@@ -28,6 +28,10 @@ final class ToolButton: NSButton {
     /// Overrides the bar thickness for a `.lineWeight` tile at runtime (the cycling
     /// stroke-width control updates this as it cycles).
     var overrideLineWeight: CGFloat? { didSet { needsDisplay = true } }
+    /// Which of the three stacked bars in a `.lineWeight` tile is the active preset
+    /// (0 = thin, 1 = medium, 2 = thick). The active bar is drawn in accent purple so
+    /// the current stroke width reads at a glance instead of the tile looking inert.
+    var activeLineWeightIndex: Int? { didSet { needsDisplay = true } }
 
     private let style: Style
     let radius: CGFloat
@@ -215,10 +219,13 @@ final class ToolButton: NSButton {
         let x0 = bounds.midX - w / 2, x1 = bounds.midX + w / 2
         let weights: [CGFloat] = [1.3, 2.6, 4.2]   // thin → thick, top → bottom
         let spacing = w * 0.30
-        ctx.setStrokeColor(inkColor.cgColor)
         ctx.setLineCap(.round)
+        // Bars run top→bottom as thin→thick; the active preset's bar is highlighted
+        // in accent purple so the current width is obvious even when the tile isn't hovered.
         for (i, t) in weights.enumerated() {
             let y = bounds.midY + spacing - CGFloat(i) * spacing   // top, middle, bottom
+            let isActive = (activeLineWeightIndex == i)
+            ctx.setStrokeColor((isActive ? Theme.accent : inkColor).cgColor)
             ctx.setLineWidth(t)
             ctx.move(to: CGPoint(x: x0, y: y)); ctx.addLine(to: CGPoint(x: x1, y: y))
             ctx.strokePath()

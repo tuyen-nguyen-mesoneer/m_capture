@@ -17,6 +17,7 @@ final class VideoRecordController {
     private var bar: VideoRecordBar?
     private var updateTimer: DispatchSourceTimer?
     private var overlays: [OverlayWindow] = []
+    private var dimWindows: [RecordingDimWindow] = []
     private var isPaused = false
     private var currentURL: URL?
 
@@ -101,6 +102,33 @@ final class VideoRecordController {
 
     // MARK: - Private
 
+    /// Put up a click-through dark overlay on every screen, cutting out the recording
+    /// region so the captured bounds are unmistakable. Returns the dim windows' numbers so
+    /// the caller can exclude them from the SCStream. `global` is in AppKit screen coords.
+    @discardableResult
+    private func showDim(forRegion global: CGRect) -> [CGWindowID] {
+        dismissDim()
+        var ids: [CGWindowID] = []
+        for screen in NSScreen.screens {
+            let inter = screen.frame.intersection(global)
+            let hole = inter.isNull ? nil
+                : CGRect(x: inter.minX - screen.frame.minX, y: inter.minY - screen.frame.minY,
+                         width: inter.width, height: inter.height)
+            // A screen the region fully covers needs no dimming — skip it.
+            if let h = hole, h.width >= screen.frame.width - 0.5, h.height >= screen.frame.height - 0.5 { continue }
+            let win = RecordingDimWindow(screen: screen, holeInScreen: hole)
+            win.orderFront(nil)
+            dimWindows.append(win)
+            ids.append(CGWindowID(win.windowNumber))
+        }
+        return ids
+    }
+
+    private func dismissDim() {
+        dimWindows.forEach { $0.orderOut(nil) }
+        dimWindows.removeAll()
+    }
+
     private func dismissOverlays() {
         overlays.forEach { $0.orderOut(nil) }
         overlays.removeAll()
@@ -176,14 +204,23 @@ final class VideoRecordController {
         let url = videoURL()
         currentURL = url
 
-        // Phase 2c — create session with the bar excluded from capture. (Window
+        // Phase 2b′ — darken everything outside the recorded region so it's obvious what's
+        // being captured. Region captures have a fixed on-screen rect; a window target moves,
+        // so it's left undimmed. The dim windows are excluded from capture below (and the
+        // region's `sourceRect` crop already keeps the surround out of the video).
+        var excluded = [CGWindowID(recordBar.windowNumber)]
+        if case let .region(rect, _) = target {
+            excluded += showDim(forRegion: rect)
+        }
+
+        // Phase 2c — create session with the bar (and dim) excluded from capture. (Window
         // targets ignore the exclusion list — a window filter never captures the bar.)
         let recordSession = VideoRecordSession(
             target: target,
             quality: Settings.shared.videoQuality,
             audioSource: audioSource,
             outputURL: url,
-            excludedWindowIDs: [CGWindowID(recordBar.windowNumber)]
+            excludedWindowIDs: excluded
         )
         session = recordSession
         recordSession.onUnexpectedStop = { [weak self] reason in self?.handleUnexpectedStop(reason) }
@@ -226,6 +263,7 @@ final class VideoRecordController {
         updateTimer?.cancel()
         updateTimer = nil
         bar?.close()
+        dismissDim()
         clearRecordingUI()
         revertActivationPolicyIfIdle()
         guard let session = session, let url = currentURL else { return }
@@ -263,6 +301,7 @@ final class VideoRecordController {
         guard let session = session, let url = currentURL else { return }
         updateTimer?.cancel(); updateTimer = nil
         bar?.close(); bar = nil
+        dismissDim()
         self.session = nil; self.currentURL = nil; self.isPaused = false
         let done = DispatchSemaphore(value: 0)
         Task.detached { await session.stop(); done.signal() }
@@ -288,6 +327,7 @@ final class VideoRecordController {
         guard confirm == 0 else { return }
         updateTimer?.cancel(); updateTimer = nil
         bar?.close(); bar = nil
+        dismissDim()
         clearRecordingUI()
         self.session = nil; self.currentURL = nil; self.isPaused = false
         revertActivationPolicyIfIdle()
@@ -317,6 +357,7 @@ final class VideoRecordController {
         guard let session = session else { return }
         updateTimer?.cancel(); updateTimer = nil
         bar?.close(); bar = nil
+        dismissDim()
         clearRecordingUI()
         let url = currentURL
         self.session = nil; self.currentURL = nil; self.isPaused = false
@@ -340,6 +381,7 @@ final class VideoRecordController {
     private func handleStartError(_ error: Error) {
         updateTimer?.cancel(); updateTimer = nil
         bar?.close(); bar = nil
+        dismissDim()
         clearRecordingUI()
         session = nil; currentURL = nil; isPaused = false
         revertActivationPolicyIfIdle()
@@ -360,4 +402,51 @@ final class VideoRecordController {
     /// Produces a timestamped `.mp4` URL in the (validated, uniquified) save
     /// directory, independent of the image-format setting in `Settings`.
     private func videoURL() -> URL { Settings.shared.fileURL(ext: "mp4") }
+}
+
+/// A click-through dark overlay covering one screen while recording, with the recording
+/// region cut out so it reads as a bright "hole" framed by the brand accent. Never
+/// intercepts events (the app under it stays fully interactive) and is excluded from the
+/// SCStream so it never lands in the video.
+@available(macOS 14, *)
+final class RecordingDimWindow: NSWindow {
+    /// `holeInScreen` is the recording rect in this screen's local coords, or nil to dim
+    /// the whole screen (the region lives entirely on another display).
+    init(screen: NSScreen, holeInScreen: CGRect?) {
+        super.init(contentRect: screen.frame, styleMask: .borderless, backing: .buffered, defer: false)
+        isOpaque = false
+        backgroundColor = .clear
+        hasShadow = false
+        ignoresMouseEvents = true
+        // Above regular app windows (so they dim) but below the floating record bar.
+        level = NSWindow.Level(rawValue: NSWindow.Level.floating.rawValue - 1)
+        collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary, .ignoresCycle]
+        let v = RecordingDimView(frame: NSRect(origin: .zero, size: screen.frame.size))
+        v.hole = holeInScreen
+        contentView = v
+    }
+}
+
+@available(macOS 14, *)
+private final class RecordingDimView: NSView {
+    var hole: CGRect?
+
+    override func draw(_ dirtyRect: NSRect) {
+        guard let ctx = NSGraphicsContext.current?.cgContext else { return }
+        // Match the capture selection overlay exactly (see SelectionOverlay): the same
+        // surfaceBase dim and lavender region outline, so the record backdrop reads as
+        // the same surface the user just dragged their region on.
+        ctx.setFillColor(Theme.surfaceBase.withAlphaComponent(0.3).cgColor)
+        guard let h = hole else { ctx.fill(bounds); return }
+        // Fill the four bands around the hole so the region itself stays clear.
+        let b = bounds
+        ctx.fill(CGRect(x: 0, y: h.maxY, width: b.width, height: b.maxY - h.maxY))
+        ctx.fill(CGRect(x: 0, y: 0, width: b.width, height: h.minY))
+        ctx.fill(CGRect(x: 0, y: h.minY, width: h.minX, height: h.height))
+        ctx.fill(CGRect(x: h.maxX, y: h.minY, width: b.maxX - h.maxX, height: h.height))
+        let lw: CGFloat = 2
+        ctx.setStrokeColor(Theme.lavender.cgColor)
+        ctx.setLineWidth(lw)
+        ctx.stroke(h.insetBy(dx: lw / 2, dy: lw / 2))
+    }
 }
