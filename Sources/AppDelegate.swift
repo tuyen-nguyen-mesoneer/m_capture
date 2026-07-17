@@ -56,6 +56,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// reopen) drops the status menu down from the menu-bar item — matching what a
     /// user expects when they click to "open" the app.
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        // A reopen event can reach an instance that bailed out of `applicationDidFinishLaunching`
+        // early (a duplicate quitting itself, or a relocation relaunch) — before `statusItem`
+        // exists. Force-unwrapping it then traps, so no-op until the status item is live.
+        guard let statusItem else { return true }
         if !flag {
             buildMenu()
             if let button = statusItem.button { menu.toggle(from: button) }

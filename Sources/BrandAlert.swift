@@ -33,7 +33,11 @@ final class BrandAlert: NSObject {
         let titleFont = Theme.font(17, .bold), msgFont = Theme.font(13)
         let neededWidth = max(BrandAlert.singleLineWidth(title, font: titleFont),
                               BrandAlert.singleLineWidth(message, font: msgFont))
-        let contentWidth = min(max(minContentWidth, ceil(neededWidth)), maxContentWidth)
+        // +8 pt slack: a wrapping label reserves a few points of internal padding, so it
+        // flows onto a second line unless its width clears the single-line text width by
+        // that margin (see `wrapping`). Pad past the measured width to keep short messages
+        // like the relaunch prompt on one tidy line.
+        let contentWidth = min(max(minContentWidth, ceil(neededWidth) + 8), maxContentWidth)
         let panelWidth = contentWidth + side * 2
         let topMargin: CGFloat = 26
         let iconSize: CGFloat = 52, gIconTitle: CGFloat = 16
@@ -155,10 +159,10 @@ final class BrandAlert: NSObject {
         f.textColor = color
         f.alignment = .center
         f.preferredMaxLayoutWidth = width
-        let height = (text as NSString).boundingRect(
-            with: NSSize(width: width, height: .greatestFiniteMagnitude),
-            options: [.usesLineFragmentOrigin, .usesFontLeading],
-            attributes: [.font: font]).height
+        // Take the height from the field's own layout, not an independent `boundingRect`:
+        // the two measurement paths disagree at the margin, so a `boundingRect` one-line
+        // height could clip a label the field actually wraps onto a second line.
+        let height = f.sizeThatFits(NSSize(width: width, height: .greatestFiniteMagnitude)).height
         f.frame = NSRect(x: 0, y: 0, width: width, height: ceil(height) + 2)
         return f
     }
