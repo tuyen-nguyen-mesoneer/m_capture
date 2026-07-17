@@ -1514,6 +1514,11 @@ final class CanvasView: NSView, NSTextViewDelegate {
             if !includingOverlays, a is ImageOverlayAnnotation { continue }
             a.draw(in: gctx.cgContext)
         }
+        // Bake the in-progress mark too. A mark only moves from `live` into `annotations`
+        // on mouseUp; if that never fired (e.g. the shape-drag lost mouse tracking to a
+        // display switch or a panel taking focus) the mark is on screen but stranded in
+        // `live` — so an export that skipped it would drop a square the user clearly drew.
+        live?.draw(in: gctx.cgContext)
         NSGraphicsContext.restoreGraphicsState()
         return rep
     }
