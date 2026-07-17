@@ -169,6 +169,9 @@ final class EditorWindowController: NSObject {
     private var clusterViews: [NSView] = []
     private var ring: NSView!
     private var cropButtons: [NSView] = []
+    /// Tool panels temporarily slid aside so the crop bar has room, with their original
+    /// origins — restored in `hideCropConfirm` when the crop ends.
+    private var displacedPanels: [(view: NSView, origin: NSPoint)] = []
     private var currentSwatch: Int? = 0
 
     private var currentBackground: Background = Settings.shared.defaultBackground
@@ -1316,28 +1319,80 @@ final class EditorWindowController: NSObject {
         let scale = canvas.displayScale, f = canvas.frame
         let cr = NSRect(x: f.minX + pc.minX * scale, y: f.minY + pc.minY * scale,
                         width: pc.width * scale, height: pc.height * scale)
+
+        // Slide any tool panel out of the crop region first: on a whole-screen capture
+        // (Quick Screen) the panel is centered right over the image, so a centered crop
+        // would otherwise cover it — and the crop bar with it.
+        moveClustersClear(of: cr, in: content)
+
         let r: CGFloat = 16
         let sz = ToolButton.size(radius: r)
-        let gap: CGFloat = 6
+        let gap: CGFloat = 6, pad: CGFloat = 5
         let totalW = sz.width * 2 + gap
-        let x = min(max(8, cr.midX - totalW / 2), content.bounds.width - totalW - 8)
-        var y = cr.maxY + gap
-        if y + sz.height > content.bounds.height - 8 { y = cr.minY - gap - sz.height }
-        y = max(8, y)
+        let barW = totalW + pad * 2, barH = sz.height + pad * 2
+        let x = min(max(8, cr.midX - barW / 2), content.bounds.width - barW - 8)
+
+        // Place the bar just outside the crop rect (top, then bottom), then tucked inside
+        // if neither outside edge is on-screen — taking the first spot that clears the
+        // (now-relocated) panels.
+        let candidateYs = [cr.maxY + gap, cr.minY - gap - barH, cr.maxY - gap - barH, cr.minY + gap]
+        let fits: (CGFloat) -> Bool = { candY in
+            guard candY >= 8, candY + barH <= content.bounds.height - 8 else { return false }
+            let bar = NSRect(x: x, y: candY, width: barW, height: barH)
+            return !self.clusterViews.contains { $0.frame.intersects(bar) }
+        }
+        let y = candidateYs.first(where: fits)
+            ?? max(8, min(cr.maxY + gap, content.bounds.height - 8 - barH))
+
+        // A bordered brand bar behind the buttons, so the ✓/✗ read clearly against any
+        // image instead of floating as bare glyphs on the dim backdrop.
+        let bar = NSView(frame: NSRect(x: x, y: y, width: barW, height: barH))
+        bar.wantsLayer = true
+        if let layer = bar.layer {
+            layer.cornerRadius = 8
+            layer.borderColor = Theme.lavender.withAlphaComponent(0.9).cgColor
+            layer.borderWidth = 1
+            layer.shadowColor = NSColor.black.cgColor
+            layer.shadowOpacity = 0.55
+            layer.shadowRadius = 16
+            layer.shadowOffset = CGSize(width: 0, height: -5)
+        }
+        Theme.applyPanelGradient(to: bar, cornerRadius: 8)
+        content.addSubview(bar)
 
         let ok = ToolButton(style: .tool("checkmark"), radius: r, target: self, action: #selector(applyCropPressed))
         ok.tip = "Apply crop  (↵)"; wireHover(ok)
         let cancel = ToolButton(style: .tool("xmark"), radius: r, target: self, action: #selector(cancelCropPressed))
         cancel.tip = "Cancel crop"; wireHover(cancel)
-        content.addSubview(ok); content.addSubview(cancel)
-        ok.frame = NSRect(x: x, y: y, width: sz.width, height: sz.height)
-        cancel.frame = NSRect(x: x + sz.width + gap, y: y, width: sz.width, height: sz.height)
-        cropButtons = [ok, cancel]
+        bar.addSubview(ok); bar.addSubview(cancel)
+        ok.frame = NSRect(x: pad, y: pad, width: sz.width, height: sz.height)
+        cancel.frame = NSRect(x: pad + sz.width + gap, y: pad, width: sz.width, height: sz.height)
+        cropButtons = [bar]
+    }
+
+    /// Slide each tool panel that overlaps `cr` to the nearest screen corner that clears
+    /// it, remembering the original origin so `hideCropConfirm` can put it back.
+    private func moveClustersClear(of cr: CGRect, in content: NSView) {
+        let m: CGFloat = 16
+        for p in clusterViews where p.frame.intersects(cr) {
+            let w = p.frame.width, h = p.frame.height
+            let corners = [
+                NSPoint(x: m, y: content.bounds.height - h - m),                    // top-left
+                NSPoint(x: content.bounds.width - w - m, y: content.bounds.height - h - m), // top-right
+                NSPoint(x: m, y: m),                                                // bottom-left
+                NSPoint(x: content.bounds.width - w - m, y: m),                     // bottom-right
+            ]
+            guard let spot = corners.first(where: { !NSRect(origin: $0, size: p.frame.size).intersects(cr) }) else { continue }
+            displacedPanels.append((p, p.frame.origin))
+            p.animator().setFrameOrigin(spot)
+        }
     }
 
     private func hideCropConfirm() {
         cropButtons.forEach { $0.removeFromSuperview() }
         cropButtons = []
+        displacedPanels.forEach { $0.view.animator().setFrameOrigin($0.origin) }
+        displacedPanels = []
     }
 }
 
