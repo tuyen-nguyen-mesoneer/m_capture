@@ -100,10 +100,40 @@ final class ScreenshotController {
     private func dismiss() {
         overlays.forEach { $0.orderOut(nil) }
         overlays.removeAll()
-        // Reset the pointer to the default arrow: the overlay's custom capture cursor
-        // otherwise lingers (nothing moves the mouse in the brief pre-capture delay) and
-        // gets baked into the shot when `showsCursor` is on.
-        NSCursor.arrow.set()
+        ScreenshotController.forcePointerReset()
+    }
+
+    /// Reset the pointer to the pointing hand — matching the Window/Screen pick modes'
+    /// cursor — immediately: the overlay's crosshair otherwise lingers (nothing moves
+    /// the mouse in the brief pre-capture delay) and gets baked into the shot when
+    /// `showsCursor` is on.
+    ///
+    /// `.set()`, hide/unhide, and `CGWarpMouseCursorPosition` all failed to force a
+    /// redraw here (confirmed: only an actual click cleared it) — those either need a
+    /// real hardware input event or, for the warp, Accessibility permission this app
+    /// doesn't request. Instead this briefly puts up another real window with a cursor
+    /// rect over the whole screen — the exact mechanism that successfully drew the
+    /// crosshair in the first place — so the window server has to re-evaluate and draw
+    /// the new cursor, then removes it a beat later once that's taken effect.
+    static func forcePointerReset() {
+        let screen = NSScreen.screens.first { $0.frame.contains(NSEvent.mouseLocation) }
+            ?? NSScreen.main ?? NSScreen.screens[0]
+        let win = CursorResetWindow(contentRect: screen.frame, styleMask: .borderless,
+                                    backing: .buffered, defer: false)
+        win.isOpaque = false
+        win.backgroundColor = .clear
+        win.hasShadow = false
+        // Hit-testable (not click-through) and briefly key — cursor-rect ownership is
+        // tied to actually being the front, hit-testable window under the pointer, same
+        // as the real capture overlay it's replacing. It's up for only ~50ms.
+        win.level = NSWindow.Level(rawValue: NSWindow.Level.screenSaver.rawValue + 1)
+        win.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
+        let v = CursorResetView(frame: NSRect(origin: .zero, size: screen.frame.size))
+        win.contentView = v
+        win.makeKeyAndOrderFront(nil)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            win.orderOut(nil)
+        }
     }
 
     /// Hand a fresh capture to the configured destination: the annotation editor
@@ -285,6 +315,18 @@ final class ScreenshotController {
             }
         }
     }
+}
+
+/// Borderless window used only to briefly reclaim cursor ownership after a capture
+/// overlay is dismissed — see `ScreenshotController.forcePointerReset`.
+private final class CursorResetWindow: NSWindow {
+    override var canBecomeKey: Bool { true }
+}
+
+/// Full-screen view whose only job is to claim the pointing-hand cursor via a
+/// standard AppKit cursor rect.
+private final class CursorResetView: NSView {
+    override func resetCursorRects() { addCursorRect(bounds, cursor: .pointingHand) }
 }
 
 extension NSScreen {

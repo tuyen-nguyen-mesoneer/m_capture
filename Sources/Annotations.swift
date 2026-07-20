@@ -328,12 +328,21 @@ final class SpotlightAnnotation: TwoPointAnnotation {
     var fullSize: CGSize = .zero
     override func draw(in ctx: CGContext) {
         let r = rect
+        // The four bands butt exactly against the hole with zero gap or overlap by
+        // construction — but `r` sits at fractional (sub-pixel) drag coordinates, so
+        // antialiasing softens that shared edge into a thin translucent seam (reads as
+        // a stray light line against the dim). These are plain axis-aligned rects with
+        // no diagonal/curved edge to smooth, so disabling AA for just this fill removes
+        // the seam without affecting anything else drawn after it.
+        ctx.saveGState()
+        ctx.setShouldAntialias(false)
         ctx.setFillColor(NSColor(white: 0, alpha: 0.55).cgColor)
         let W = fullSize.width, H = fullSize.height
         ctx.fill(CGRect(x: 0, y: r.maxY, width: W, height: H - r.maxY))
         ctx.fill(CGRect(x: 0, y: 0, width: W, height: r.minY))
         ctx.fill(CGRect(x: 0, y: r.minY, width: r.minX, height: r.height))
         ctx.fill(CGRect(x: r.maxX, y: r.minY, width: W - r.maxX, height: r.height))
+        ctx.restoreGState()
     }
     override func hit(_ p: CGPoint) -> Bool { !rect.contains(p) }
 }
@@ -485,7 +494,7 @@ enum CounterFormat: CaseIterable {
 
 final class CounterAnnotation: Annotation {
     var center: CGPoint
-    let label: String
+    var label: String
     var color: NSColor
     var radius: CGFloat
     init(center: CGPoint, label: String, color: NSColor, radius: CGFloat) {
@@ -558,10 +567,12 @@ final class EmojiAnnotation: Annotation {
 final class MeasureAnnotation: Annotation {
     var start: CGPoint
     var end: CGPoint
-    let style: DrawStyle
+    var style: DrawStyle
     init(start: CGPoint, end: CGPoint, style: DrawStyle) {
         self.start = start; self.end = end; self.style = style
     }
+    func recolor(_ c: NSColor) { style.color = c }
+    func restroke(_ width: CGFloat) { style.lineWidth = width }
     /// Length in the image's logical points — i.e. on-screen pixels. The capture's
     /// point space is 1:1 with screen coordinates, so no Retina scaling is applied
     /// (a Retina grab's device pixels are 2× this).

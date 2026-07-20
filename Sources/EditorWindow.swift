@@ -12,6 +12,9 @@ private final class KeyableWindow: NSWindow {
 /// the card background move it). Lets the user reposition tools off the capture.
 private final class DraggablePanel: NSView {
     private var grabOffset: CGPoint?
+    /// Fires on every drag move — lets a caller know the panel was manually
+    /// repositioned (e.g. so auto-positioning logic stops fighting the user).
+    var onDrag: (() -> Void)?
     override func mouseDown(with event: NSEvent) {
         guard let sv = superview else { return }
         let p = sv.convert(event.locationInWindow, from: nil)
@@ -23,6 +26,7 @@ private final class DraggablePanel: NSView {
         let x = min(max(0, p.x - off.x), sv.bounds.width - frame.width)
         let y = min(max(0, p.y - off.y), sv.bounds.height - frame.height)
         setFrameOrigin(NSPoint(x: x, y: y))
+        onDrag?()
     }
     override func resetCursorRects() { addCursorRect(bounds, cursor: .openHand) }
 }
@@ -163,6 +167,24 @@ final class EditorWindowController: NSObject {
     private weak var counterFormatButton: ToolButton?
     private weak var emojiButton: ToolButton?
     private var colorPicker: ColorPickerPanel?
+    private var textBgColorPicker: ColorPickerPanel?
+
+    // MARK: Text format bar — a small inline toolbar shown while the Text tool is
+    // active: a font-size dropdown, a Bold toggle, alignment tiles, and a dropdown +
+    // swatch for the text box's own background (not the text itself).
+    private var textFormatBar: NSView?
+    private weak var textSizePopup: BrandPopUpButton?
+    private weak var textBoldButton: ToolButton?
+    private var alignButtons: [NSTextAlignment: ToolButton] = [:]
+    private weak var textBgPopup: BrandPopUpButton?
+    private weak var textBgColorSwatch: ToolButton?
+    /// Once the user drags the bar, auto-positioning backs off until a *different*
+    /// text box becomes current (tracked via `lastTextFocusToken`).
+    private var textFormatBarUserMoved = false
+    private var lastTextFocusToken: ObjectIdentifier?
+    private let textFontSizes: [CGFloat] = [12, 14, 18, 24, 32, 48, 64]
+    private let textBackgrounds: [TextBackground] = [.none, .filled, .outlined]
+    private let textBackgroundNames = ["No background", "Filled box", "Outlined box"]
     private var emojiPicker: EmojiPickerPanel?
     private var formatPicker: CounterFormatPicker?
 
@@ -267,6 +289,17 @@ final class EditorWindowController: NSObject {
         canvas.onToolChange = { [weak self] t in
             guard let self else { return }
             for (tool, b) in self.toolButtons { b.selectedState = (tool == t) }
+            if t == .text { self.showTextFormatBar() } else { self.hideTextFormatBar() }
+        }
+        canvas.onChange = { [weak self] in
+            guard let self, self.canvas.tool == .text else { return }
+            self.syncTextFormatBar(); self.positionTextFormatBar()
+        }
+        // Fires on every new/edited/selected text mark (including the moment a fresh
+        // box is started) so the bar jumps straight to whichever box is now current.
+        canvas.onTextStyleChange = { [weak self] in
+            guard let self, self.canvas.tool == .text else { return }
+            self.syncTextFormatBar(); self.positionTextFormatBar()
         }
         canvas.onPaste = { [weak self] in self?.pasteOverlay() }
         pasteMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
@@ -325,7 +358,7 @@ final class EditorWindowController: NSObject {
             counterBtn,
             emojiBtn,
             toolButton(.zoom, "plus.magnifyingglass", "Zoom — magnify a region into a callout  (Z)"),
-            toolButton(.ruler, "ruler", "Ruler — press ↑↓ or ←→, move to measure, click to imprint"),
+            toolButton(.ruler, "ruler", "Ruler — drag to measure  (hold ⇧ to snap horizontal/vertical)"),
             overlayBtn,
             actionButton("text.viewfinder", "Copy text / QR (OCR) — drag over text or a QR code  (⌘T)", key: "t", mods: [.command], #selector(copyTextPressed))], perRow: 4)
         let shapes = makeCluster("Shape", [
@@ -706,7 +739,6 @@ final class EditorWindowController: NSObject {
         }
         canvas.tool = t
         for (tool, b) in toolButtons { b.selectedState = (tool == t) }
-        if t == .ruler { flashMessage("Press ↑↓ or ←→, then move to measure") }
     }
 
     @objc private func swatchPressed(_ sender: ToolButton) { selectSwatch(sender.tag) }
@@ -734,6 +766,9 @@ final class EditorWindowController: NSObject {
         else { selectTool(.counter) }
     }
     @objc private func formatPressed() {
+        // Pressing the counter tile again while the popover is already open should
+        // close it, not stack a second, unreachable one on top.
+        if let existing = formatPicker, existing.isShowing { existing.close(); return }
         formatPicker = CounterFormatPicker(
             current: canvas.counterFormat,
             onPick: { [weak self] f in
@@ -1109,7 +1144,10 @@ final class EditorWindowController: NSObject {
                                 icon: "trash.fill", destructive: [1]).runModal()
         if choice == 1 { close() }
     }
-    private func close() { colorPicker?.close(); bgColorPicker?.close(); window.close() }
+    private func close() {
+        colorPicker?.close(); bgColorPicker?.close(); textBgColorPicker?.close()
+        window.close()
+    }
 
     @objc private func rotateRightPressed() { rotate(left: false) }
 
@@ -1393,6 +1431,178 @@ final class EditorWindowController: NSObject {
         cropButtons = []
         displacedPanels.forEach { $0.view.animator().setFrameOrigin($0.origin) }
         displacedPanels = []
+    }
+
+    // MARK: - Text format bar
+
+    private func showTextFormatBar() {
+        guard let content = window.contentView else { return }
+        if textFormatBar == nil {
+            let bar = buildTextFormatBar()
+            content.addSubview(bar)
+            textFormatBar = bar
+        }
+        textFormatBar?.isHidden = false
+        syncTextFormatBar()
+        positionTextFormatBar()
+    }
+
+    private func hideTextFormatBar() {
+        textFormatBar?.isHidden = true
+    }
+
+    /// A floating brand bar (same chrome as the crop-confirm bar): a font-size dropdown,
+    /// a Bold toggle, three alignment tiles, and — clearly separate from the text
+    /// itself — a dropdown + swatch for the text **box's** own background.
+    private func buildTextFormatBar() -> NSView {
+        let r: CGFloat = 13
+        let btn = ToolButton.size(radius: r)
+        let pad: CGFloat = 6, gap: CGFloat = 4, groupGap: CGFloat = 12
+        let popupH: CGFloat = 24
+
+        func tile(_ style: ToolButton.Style, _ tip: String, _ action: Selector) -> ToolButton {
+            let b = ToolButton(style: style, radius: r, target: self, action: action)
+            b.tip = tip; wireHover(b)
+            return b
+        }
+        /// Sizes the popup to fit its widest title (plus the chevron/inset) so no
+        /// item — in the button or its dropdown list — is ever clipped.
+        func popup(titles: [String], action: Selector) -> BrandPopUpButton {
+            let font = Theme.font(12)
+            let widest = titles.map { ($0 as NSString).size(withAttributes: [.font: font]).width }.max() ?? 40
+            let width = ceil(widest) + BrandControl.textInset + 26
+            let p = BrandPopUpButton(frame: NSRect(x: 0, y: 0, width: width, height: popupH), pullsDown: false)
+            titles.forEach { p.addItem(withTitle: $0) }
+            p.target = self; p.action = action
+            p.showsCheckmark = false   // the button's own title already shows the current value
+            return p
+        }
+
+        let sizePopup = popup(titles: textFontSizes.map { "\(Int($0))pt" },
+                              action: #selector(textSizePopupChanged(_:)))
+        textSizePopup = sizePopup
+
+        let bold = tile(.text("B"), "Bold", #selector(textBoldPressed))
+        textBoldButton = bold
+
+        let alignL = tile(.tool("text.alignleft"), "Align left", #selector(textAlignLeftPressed))
+        let alignC = tile(.tool("text.aligncenter"), "Align center", #selector(textAlignCenterPressed))
+        let alignR = tile(.tool("text.alignright"), "Align right", #selector(textAlignRightPressed))
+        alignButtons = [.left: alignL, .center: alignC, .right: alignR]
+
+        let bgPopup = popup(titles: textBackgroundNames, action: #selector(textBgPopupChanged(_:)))
+        textBgPopup = bgPopup
+
+        let swatch = ToolButton(style: .swatch(canvas.textBackgroundColor), radius: r,
+                                target: self, action: #selector(textBgColorPressed))
+        swatch.tip = "Text box background color — click to choose"; wireHover(swatch)
+        textBgColorSwatch = swatch
+
+        let views: [NSView] = [sizePopup, bold, alignL, alignC, alignR, bgPopup, swatch]
+        let gapsBefore: [CGFloat] = [0, groupGap, groupGap, gap, gap, groupGap, gap]
+
+        let rowH = max(popupH, btn.height)
+        var x = pad
+        for (i, v) in views.enumerated() {
+            x += gapsBefore[i]
+            let isPopup = v is BrandPopUpButton
+            let h = isPopup ? popupH : btn.height
+            let w = isPopup ? v.frame.width : btn.width
+            v.frame = NSRect(x: x, y: pad + (rowH - h) / 2, width: w, height: h)
+            x += w
+        }
+        let barSize = NSSize(width: x + pad, height: rowH + pad * 2)
+
+        let inner = NSView(frame: NSRect(origin: .zero, size: barSize))
+        views.forEach { inner.addSubview($0) }
+        // `cardFit` gives the same brand chrome as every other tool cluster, wrapped
+        // in a `DraggablePanel` — the bar can be grabbed and moved anywhere, same as
+        // the tool clusters, while its own tiles/dropdowns still get their clicks.
+        let bar = cardFit(inner)
+        (bar as? DraggablePanel)?.onDrag = { [weak self] in self?.textFormatBarUserMoved = true }
+        return bar
+    }
+
+    /// Reflects the canvas's current text style on the bar's controls — called after
+    /// every change so they never drift from what the mark actually looks like.
+    private func syncTextFormatBar() {
+        let s = canvas.currentTextStyle
+        if let idx = textFontSizes.enumerated().min(by: { abs($0.element - s.size) < abs($1.element - s.size) })?.offset {
+            textSizePopup?.selectItem(at: idx)
+        }
+        textBoldButton?.selectedState = s.bold
+        for (a, b) in alignButtons { b.selectedState = (a == s.alignment) }
+        if let idx = textBackgrounds.firstIndex(of: s.background) { textBgPopup?.selectItem(at: idx) }
+        textBgColorSwatch?.setStyle(.swatch(canvas.textBackgroundColor))
+    }
+
+    /// Places the bar just above (else below) the active text box, or the selection
+    /// center when nothing is focused yet — mirroring the crop-confirm bar's placement.
+    /// Backs off once the user has dragged the bar, until a *different* text box
+    /// becomes current (a new one started, or another mark selected).
+    private func positionTextFormatBar() {
+        guard let bar = textFormatBar, let content = window.contentView else { return }
+        let token = canvas.textFocusToken
+        if token != lastTextFocusToken { lastTextFocusToken = token; textFormatBarUserMoved = false }
+        guard !textFormatBarUserMoved else { return }
+        let scale = canvas.displayScale, f = canvas.frame
+        let target = canvas.textFocusRect ?? CGRect(origin: .zero, size: canvas.image.size)
+        let r = NSRect(x: f.minX + target.minX * scale, y: f.minY + target.minY * scale,
+                       width: target.width * scale, height: target.height * scale)
+        let barW = bar.frame.width, barH = bar.frame.height
+        let gap: CGFloat = 10
+        let x = min(max(8, r.midX - barW / 2), content.bounds.width - barW - 8)
+        let candidateYs = [r.maxY + gap, r.minY - gap - barH]
+        let y = candidateYs.first(where: { $0 >= 8 && $0 + barH <= content.bounds.height - 8 })
+            ?? max(8, min(r.maxY + gap, content.bounds.height - 8 - barH))
+        bar.setFrameOrigin(NSPoint(x: x, y: y))
+    }
+
+    @objc private func textSizePopupChanged(_ sender: NSPopUpButton) {
+        let idx = sender.indexOfSelectedItem
+        guard idx >= 0, idx < textFontSizes.count else { return }
+        canvas.setTextFontSize(textFontSizes[idx])
+        positionTextFormatBar()
+    }
+
+    @objc private func textBoldPressed() {
+        canvas.setTextBold(!canvas.currentTextStyle.bold)
+        syncTextFormatBar()
+    }
+
+    @objc private func textAlignLeftPressed() { setTextAlign(.left) }
+    @objc private func textAlignCenterPressed() { setTextAlign(.center) }
+    @objc private func textAlignRightPressed() { setTextAlign(.right) }
+    private func setTextAlign(_ a: NSTextAlignment) {
+        canvas.setTextAlignment(a)
+        syncTextFormatBar()
+    }
+
+    @objc private func textBgPopupChanged(_ sender: NSPopUpButton) {
+        let idx = sender.indexOfSelectedItem
+        guard idx >= 0, idx < textBackgrounds.count else { return }
+        canvas.setTextBackground(textBackgrounds[idx])
+        positionTextFormatBar()
+    }
+
+    /// Custom color for the text **box's** background — picking one while the
+    /// background is off promotes it to Filled so the choice is immediately visible.
+    @objc private func textBgColorPressed() {
+        if textBgColorPicker == nil {
+            textBgColorPicker = ColorPickerPanel(
+                onPick: { [weak self] c in
+                    guard let self else { return }
+                    canvas.setTextBackgroundColor(c)
+                    if canvas.currentTextStyle.background == .none { canvas.setTextBackground(.filled) }
+                    syncTextFormatBar()
+                },
+                onClose: { [weak self] in
+                    self?.window.makeKeyAndOrderFront(nil)
+                    self?.window.makeFirstResponder(self?.canvas)
+                })
+        }
+        guard let picker = textBgColorPicker, let swatch = textBgColorSwatch else { return }
+        picker.show(near: swatch, initial: canvas.textBackgroundColor)
     }
 }
 

@@ -127,9 +127,11 @@ final class VideoRecordController {
     private func dismissOverlays() {
         overlays.forEach { $0.orderOut(nil) }
         overlays.removeAll()
-        // Reset the pointer to the default arrow so the overlay's custom capture cursor
-        // isn't left showing (and isn't baked into the first recorded frames).
-        NSCursor.arrow.set()
+        // Reset the pointer to the pointing hand — matching the Window/Screen pick
+        // modes' cursor — so the overlay's crosshair isn't left showing (and isn't
+        // baked into the first recorded frames). See `ScreenshotController.forcePointerReset`
+        // for why this sets/hides/unhides twice (immediately, then again a beat later).
+        ScreenshotController.forcePointerReset()
     }
 
     /// Resolve the screen a picked window mostly lives on, for placing the record bar.

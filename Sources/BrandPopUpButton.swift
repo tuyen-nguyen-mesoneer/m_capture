@@ -19,6 +19,9 @@ final class BrandPopUpButton: NSPopUpButton {
     /// Own title label, drawn left-aligned. The cell's built-in title is
     /// suppressed (it centers and resists styling), so this is the visible title.
     private let titleLabel = NSTextField(labelWithString: "")
+    /// Set false to drop the selected-row checkmark in the dropdown list — useful
+    /// where the button's own title already makes the current value obvious.
+    var showsCheckmark = true
 
     override init(frame: NSRect, pullsDown: Bool) {
         super.init(frame: frame, pullsDown: pullsDown)
@@ -75,7 +78,7 @@ final class BrandPopUpButton: NSPopUpButton {
 
     override func mouseDown(with event: NSEvent) {
         guard isEnabled, list == nil else { return }
-        let l = BrandPopUpList(button: self,
+        let l = BrandPopUpList(button: self, showsCheckmark: showsCheckmark,
                                onSelect: { [weak self] idx in
                                    guard let self else { return }
                                    self.list = nil
@@ -129,6 +132,7 @@ private final class FlippedView: NSView { override var isFlipped: Bool { true } 
 /// purple hover, closes on outside click.
 final class BrandPopUpList {
     private let button: NSPopUpButton
+    private let showsCheckmark: Bool
     private let onSelect: (Int) -> Void
     private let onClose: () -> Void
     private var window: PopUpListWindow?
@@ -136,8 +140,10 @@ final class BrandPopUpList {
     private let rowH: CGFloat = 32
     private let pad: CGFloat = 6
 
-    init(button: NSPopUpButton, onSelect: @escaping (Int) -> Void, onClose: @escaping () -> Void) {
+    init(button: NSPopUpButton, showsCheckmark: Bool = true,
+         onSelect: @escaping (Int) -> Void, onClose: @escaping () -> Void) {
         self.button = button
+        self.showsCheckmark = showsCheckmark
         self.onSelect = onSelect
         self.onClose = onClose
     }
@@ -153,7 +159,8 @@ final class BrandPopUpList {
         Theme.stylePanel(container)
 
         for (i, title) in titles.enumerated() {
-            let row = PopUpRow(width: width, height: rowH, title: title, checked: i == selected) { [weak self] in
+            let row = PopUpRow(width: width, height: rowH, title: title,
+                               checked: i == selected, showsCheckmark: showsCheckmark) { [weak self] in
                 self?.close()
                 self?.onSelect(i)
             }
@@ -205,7 +212,8 @@ private final class PopUpRow: NSView {
     private static let hInset: CGFloat = 6
     private static let vInset: CGFloat = 3
 
-    init(width: CGFloat, height: CGFloat, title: String, checked: Bool, onClick: @escaping () -> Void) {
+    init(width: CGFloat, height: CGFloat, title: String, checked: Bool, showsCheckmark: Bool = true,
+         onClick: @escaping () -> Void) {
         self.onClick = onClick
         super.init(frame: NSRect(x: 0, y: 0, width: width, height: height))
         wantsLayer = true
@@ -218,8 +226,10 @@ private final class PopUpRow: NSView {
         addSubview(highlight)
 
         let checkX = Self.hInset + 8
-        let textX = checkX + 20
-        if checked, let img = NSImage(systemSymbolName: "checkmark", accessibilityDescription: nil) {
+        // Without a checkmark, the text starts where the checkmark would have —
+        // no dead indent reserved for an icon that isn't there.
+        let textX = showsCheckmark ? checkX + 20 : checkX
+        if checked, showsCheckmark, let img = NSImage(systemSymbolName: "checkmark", accessibilityDescription: nil) {
             let cfg = NSImage.SymbolConfiguration(pointSize: 11, weight: .semibold)
             let iv = NSImageView(frame: NSRect(x: checkX, y: (height - 12) / 2, width: 13, height: 12))
             iv.image = img.withSymbolConfiguration(cfg)
@@ -231,7 +241,9 @@ private final class PopUpRow: NSView {
         let name = NSTextField(labelWithString: title)
         name.font = Theme.font(12, checked ? .semibold : .regular)
         name.textColor = Theme.textPrimary
-        name.frame = NSRect(x: textX, y: (height - 16) / 2, width: width - textX - Self.hInset - 6, height: 16)
+        name.alignment = .left
+        name.lineBreakMode = .byClipping
+        name.frame = NSRect(x: textX, y: (height - 16) / 2, width: width - textX - Self.hInset, height: 16)
         addSubview(name)
     }
     required init?(coder: NSCoder) { fatalError() }
