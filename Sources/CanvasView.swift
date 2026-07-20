@@ -28,6 +28,7 @@ final class CanvasView: NSView, NSTextViewDelegate {
             if tool != .overlay, editingOverlay != nil { editingOverlay = nil; onOverlaySelected?(nil) }
             if tool != .ruler { measureAxis = .none; measureAnchor = nil }
             if tool != .select { selected = nil; selectDrag = .none }
+            if tool != .eraser { eraserHover = nil }
             window?.invalidateCursorRects(for: self)
             needsDisplay = true
             if tool != oldValue { onToolChange?(tool) }
@@ -56,7 +57,7 @@ final class CanvasView: NSView, NSTextViewDelegate {
     private var zoomStart: CGPoint?
     private var zoomRect: CGRect?
     private var editingZoom: ZoomAnnotation?
-    private enum ZoomDrag { case none, move, resize }
+    private enum ZoomDrag { case none, move, resize, moveSource }
     private var zoomDrag: ZoomDrag = .none
     private var zoomDragOffset: CGPoint = .zero
 
@@ -106,6 +107,12 @@ final class CanvasView: NSView, NSTextViewDelegate {
     private var dragAnchor: CGPoint = .zero
     private var lastDragPoint: CGPoint = .zero
 
+    /// The mark the Eraser is currently hovering — highlighted so it's clear
+    /// what a click will remove before it's gone.
+    private var eraserHover: Annotation? {
+        didSet { if eraserHover !== oldValue { needsDisplay = true } }
+    }
+
     private var annotations: [Annotation] = []
     private var redoStack: [Annotation] = []
     private var live: Annotation?
@@ -147,8 +154,15 @@ final class CanvasView: NSView, NSTextViewDelegate {
     private var textBoxDrag: (mark: TextAnnotation, handle: BoxHandle)?
 
     private var bitmap: NSBitmapImageRep?
+    /// Rebuilds the eyedropper's pixel-sample source straight from the image's
+    /// existing `CGImage` — a TIFF encode/decode round-trip here once froze the
+    /// UI for a moment on large/multi-monitor captures, since this runs
+    /// synchronously on the main thread right as the editor opens.
     private func rebuildBitmap() {
-        bitmap = image.tiffRepresentation.flatMap { NSBitmapImageRep(data: $0) }
+        guard let cg = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
+            bitmap = nil; return
+        }
+        bitmap = NSBitmapImageRep(cgImage: cg)
     }
 
     init(image: NSImage, displayScale: CGFloat) {
@@ -365,11 +379,15 @@ final class CanvasView: NSView, NSTextViewDelegate {
         }
         lastMousePoint = imagePoint(event)
         if tool == .ruler, measureAxis != .none { needsDisplay = true }
-        if tool == .zoom, let ez = editingZoom {
+        if tool == .zoom {
             let p = imagePoint(event), hr = 12 / displayScale
-            let knob = CGPoint(x: ez.dest.maxX, y: ez.dest.minY)
-            if hypot(knob.x - p.x, knob.y - p.y) < hr || ez.dest.contains(p) {
-                NSCursor.openHand.set(); return
+            let ez = editingZoom ?? annotations.reversed().compactMap { $0 as? ZoomAnnotation }
+                .first { $0.dest.contains(p) || $0.source.contains(p) }
+            if let ez {
+                let knob = CGPoint(x: ez.dest.maxX, y: ez.dest.minY)
+                if hypot(knob.x - p.x, knob.y - p.y) < hr || ez.dest.contains(p) || ez.source.contains(p) {
+                    NSCursor.openHand.set(); return
+                }
             }
         }
         if tool == .overlay, let eo = editingOverlay {
@@ -393,6 +411,11 @@ final class CanvasView: NSView, NSTextViewDelegate {
             if let h = boxHandle(for: es, at: p) { boxCursor(h).set(); return }
             if es.hit(p) { NSCursor.openHand.set(); return }
         }
+        if tool == .eraser {
+            let p = imagePoint(event)
+            eraserHover = annotations.reversed().first { $0.hit(p, pixelsPerPoint: 1 / displayScale) }
+            return
+        }
         if tool == .select {
             let p = imagePoint(event)
             if let c = selected as? CurvedAnnotation, curveHandle(c, at: p) != nil {
@@ -407,7 +430,7 @@ final class CanvasView: NSView, NSTextViewDelegate {
             if let s = selected, resizeAnchor(for: s, at: p) != nil {
                 NSCursor.openHand.set(); return
             }
-            (annotations.contains { $0.hit(p) } ? NSCursor.openHand : NSCursor.arrow).set()
+            (annotations.contains { $0.hit(p, pixelsPerPoint: 1 / displayScale) } ? NSCursor.openHand : NSCursor.arrow).set()
             return
         }
         toolCursor.set()
@@ -531,9 +554,10 @@ final class CanvasView: NSView, NSTextViewDelegate {
         case .eyedropper:
             if let c = sample(p) { style.color = c; onColorPicked?(c) }
         case .eraser:
-            if let idx = annotations.lastIndex(where: { $0.hit(p) }) {
+            if let idx = annotations.lastIndex(where: { $0.hit(p, pixelsPerPoint: 1 / displayScale) }) {
                 annotations.remove(at: idx); redoStack.removeAll(); onChange?()
             }
+            eraserHover = nil
         case .crop:
             cropStart = p
             pendingCrop = CGRect(origin: p, size: .zero)
@@ -542,14 +566,26 @@ final class CanvasView: NSView, NSTextViewDelegate {
             ocrStart = p
             ocrRect = CGRect(origin: p, size: .zero)
         case .zoom:
-            if let ez = editingZoom {
+            // Grab any existing zoom callout under the cursor, not just the one just
+            // placed — so an older callout can be moved with the Zoom tool itself,
+            // without switching to Select.
+            let target = editingZoom ?? annotations.reversed().compactMap { $0 as? ZoomAnnotation }
+                .first { $0.dest.contains(p) || $0.source.contains(p) }
+            if let ez = target {
                 let hr = 12 / displayScale
                 let knob = CGPoint(x: ez.dest.maxX, y: ez.dest.minY)
                 if hypot(knob.x - p.x, knob.y - p.y) < hr {
+                    editingZoom = ez
                     zoomDrag = .resize; NSCursor.closedHand.push()
                 } else if ez.dest.contains(p) {
+                    editingZoom = ez
                     zoomDrag = .move
                     zoomDragOffset = CGPoint(x: p.x - ez.dest.minX, y: p.y - ez.dest.minY)
+                    NSCursor.closedHand.push()
+                } else if ez.source.contains(p) {
+                    editingZoom = ez
+                    zoomDrag = .moveSource
+                    zoomDragOffset = CGPoint(x: p.x - ez.source.minX, y: p.y - ez.source.minY)
                     NSCursor.closedHand.push()
                 } else {
                     editingZoom = nil; zoomStart = p; zoomRect = CGRect(origin: p, size: .zero)
@@ -586,7 +622,7 @@ final class CanvasView: NSView, NSTextViewDelegate {
                 dragAnchor = anchor
                 lastDragPoint = p
                 NSCursor.closedHand.push()
-            } else if let hit = annotations.reversed().first(where: { $0.hit(p) }) {
+            } else if let hit = annotations.reversed().first(where: { $0.hit(p, pixelsPerPoint: 1 / displayScale) }) {
                 selected = hit
                 selectDrag = .move
                 lastDragPoint = p
@@ -628,7 +664,10 @@ final class CanvasView: NSView, NSTextViewDelegate {
             resizeBox(bd.shape, handle: bd.handle, to: p); needsDisplay = true; return
         }
         if zoomDrag == .move, let ez = editingZoom {
-            ez.dest.origin = CGPoint(x: p.x - zoomDragOffset.x, y: p.y - zoomDragOffset.y)
+            let W = image.size.width, H = image.size.height
+            let x = max(0, min(W - ez.dest.width, p.x - zoomDragOffset.x))
+            let y = max(0, min(H - ez.dest.height, p.y - zoomDragOffset.y))
+            ez.dest.origin = CGPoint(x: x, y: y)
             needsDisplay = true; return
         }
         if zoomDrag == .resize, let ez = editingZoom {
@@ -636,6 +675,14 @@ final class CanvasView: NSView, NSTextViewDelegate {
             let newW = max(24 / displayScale, p.x - anchorX)
             let newH = newW * (ez.source.height / max(1, ez.source.width))
             ez.dest = CGRect(x: anchorX, y: top - newH, width: newW, height: newH)
+            needsDisplay = true; return
+        }
+        if zoomDrag == .moveSource, let ez = editingZoom {
+            let W = image.size.width, H = image.size.height
+            let x = max(0, min(W - ez.source.width, p.x - zoomDragOffset.x))
+            let y = max(0, min(H - ez.source.height, p.y - zoomDragOffset.y))
+            ez.source.origin = CGPoint(x: x, y: y)
+            ez.patch = croppedCGImage(rect: ez.source)
             needsDisplay = true; return
         }
         if overlayDrag == .move, let eo = editingOverlay {
@@ -797,10 +844,12 @@ final class CanvasView: NSView, NSTextViewDelegate {
             redoStack.removeAll()
             live = nil
             onChange?()
-            // Stamps (emoji / counter) have no in-place edit mode of their own, so drop
-            // straight into Select with the new stamp selected — its resize handles show
-            // at once and it can be sized/moved without hunting for the Select tool.
-            if a is EmojiAnnotation || a is CounterAnnotation {
+            // Emoji stamps have no in-place edit mode of their own, so drop straight
+            // into Select with the new stamp selected — its resize handles show at
+            // once and it can be sized/moved without hunting for the Select tool.
+            // Counter stays on its own tool so consecutive numbers can be dropped
+            // without reselecting it each time.
+            if a is EmojiAnnotation {
                 tool = .select
                 selected = a
             }
@@ -1278,6 +1327,15 @@ final class CanvasView: NSView, NSTextViewDelegate {
 
     /// Draw a resizable mark's selection outline plus a white knob at each of its four
     /// corners — the shared affordance for the Select tool and a live shape.
+    /// Outlines the mark the Eraser is hovering in a thin coral box, so it's
+    /// clear what a click will remove before it's gone.
+    private func drawEraserHighlight(_ a: Annotation, in ctx: CGContext) {
+        let b = a.bounds.insetBy(dx: -3 / displayScale, dy: -3 / displayScale)
+        ctx.setStrokeColor(Theme.accent.cgColor)
+        ctx.setLineWidth(1 / displayScale)
+        ctx.stroke(b)
+    }
+
     private func drawResizeBox(_ s: Annotation, in ctx: CGContext) {
         let b = s.bounds
         ctx.setStrokeColor(Theme.lavender.cgColor); ctx.setLineWidth(1.5 / displayScale)
@@ -1347,6 +1405,9 @@ final class CanvasView: NSView, NSTextViewDelegate {
         }
         if tool == .text, textView == nil, let t = editingText {
             drawResizeBox(t, in: ctx)   // eight handles: edges reflow, corners scale the font
+        }
+        if tool == .eraser, let h = eraserHover {
+            drawEraserHighlight(h, in: ctx)
         }
         if tool == .select, let s = selected {
             if let c = s as? CurvedAnnotation {

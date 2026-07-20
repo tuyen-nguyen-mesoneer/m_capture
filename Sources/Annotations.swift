@@ -11,6 +11,12 @@ struct DrawStyle {
 protocol Annotation: AnyObject {
     func draw(in ctx: CGContext)
     func hit(_ p: CGPoint) -> Bool
+    /// Like `hit(_:)`, but for path-proximity marks (freehand, curved line/arrow)
+    /// whose click tolerance is a fixed distance in image space — on a
+    /// high-resolution capture that distance shrinks to a sliver of screen
+    /// points. `pixelsPerPoint` (the capture's resolution scale) lets those
+    /// marks keep a constant on-screen click tolerance. Other marks ignore it.
+    func hit(_ p: CGPoint, pixelsPerPoint: CGFloat) -> Bool
     func remap(_ f: (CGPoint) -> CGPoint)
     /// Tight bounding box in image space — drives the Select tool's outline + handle.
     var bounds: CGRect { get }
@@ -30,6 +36,7 @@ protocol Annotation: AnyObject {
 }
 extension Annotation {
     func hit(_ p: CGPoint) -> Bool { false }
+    func hit(_ p: CGPoint, pixelsPerPoint: CGFloat) -> Bool { hit(p) }
     var resizable: Bool { true }
     func scale(by f: CGFloat, around a: CGPoint) {
         remap { CGPoint(x: a.x + ($0.x - a.x) * f, y: a.y + ($0.y - a.y) * f) }
@@ -74,8 +81,10 @@ class FreehandAnnotation: Annotation {
         for p in points.dropFirst() { ctx.addLine(to: p) }
         ctx.strokePath()
     }
-    func hit(_ p: CGPoint) -> Bool {
-        points.contains { hypot($0.x - p.x, $0.y - p.y) < max(8, strokeWidth) }
+    func hit(_ p: CGPoint) -> Bool { hit(p, pixelsPerPoint: 1) }
+    func hit(_ p: CGPoint, pixelsPerPoint: CGFloat) -> Bool {
+        let tolerance = max(8, strokeWidth) * pixelsPerPoint
+        return points.contains { hypot($0.x - p.x, $0.y - p.y) < tolerance }
     }
 }
 
@@ -147,13 +156,15 @@ class CurvedAnnotation: Annotation {
     }
     func draw(in ctx: CGContext) {}
 
-    func hit(_ p: CGPoint) -> Bool {
+    func hit(_ p: CGPoint) -> Bool { hit(p, pixelsPerPoint: 1) }
+    func hit(_ p: CGPoint, pixelsPerPoint: CGFloat) -> Bool {
+        let tolerance = max(12, style.lineWidth) * pixelsPerPoint
         let n = 24
         for i in 0...n {
             let t = CGFloat(i) / CGFloat(n), mt = 1 - t
             let x = mt * mt * start.x + 2 * mt * t * control.x + t * t * end.x
             let y = mt * mt * start.y + 2 * mt * t * control.y + t * t * end.y
-            if hypot(x - p.x, y - p.y) < max(8, style.lineWidth) { return true }
+            if hypot(x - p.x, y - p.y) < tolerance { return true }
         }
         return false
     }
@@ -499,7 +510,7 @@ final class CounterAnnotation: Annotation {
         let sz = s.size()
         s.draw(at: CGPoint(x: center.x - sz.width / 2, y: center.y - sz.height / 2))
     }
-    func hit(_ p: CGPoint) -> Bool { box.contains(p) }
+    func hit(_ p: CGPoint) -> Bool { box.insetBy(dx: -6, dy: -6).contains(p) }
     func remap(_ f: (CGPoint) -> CGPoint) { center = f(center) }
     func recolor(_ c: NSColor) { color = c }
     var bounds: CGRect { box }
