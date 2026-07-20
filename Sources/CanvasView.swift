@@ -26,7 +26,7 @@ final class CanvasView: NSView, NSTextViewDelegate {
             if editingShapeTool != tool { editingShape = nil; editingShapeTool = nil }
             if tool != .zoom { editingZoom = nil }
             if tool != .overlay, editingOverlay != nil { editingOverlay = nil; onOverlaySelected?(nil) }
-            if tool != .ruler { measureAxis = .none; measureAnchor = nil }
+            if tool != .ruler { editingMeasure = nil }
             if tool != .select { selected = nil; selectDrag = .none }
             if tool != .eraser { eraserHover = nil }
             window?.invalidateCursorRects(for: self)
@@ -87,18 +87,31 @@ final class CanvasView: NSView, NSTextViewDelegate {
     var onOverlaySelected: ((ImageOverlayAnnotation?) -> Void)?
     var onPaste: (() -> Void)?
 
-    private enum MeasureAxis { case none, vertical, horizontal }
-    private var measureAxis: MeasureAxis = .none
-    private var measureAnchor: CGPoint?
-    private var lastMousePoint: CGPoint = .zero
+    /// The ruler mark just placed, kept live so its endpoint handles show (and it can
+    /// be reshaped/moved) without switching to Select — mirrors `editingCurve`.
+    private var editingMeasure: MeasureAnnotation?
+    private enum MeasureHandle { case start, end }
+    private var measureDrag: (mark: MeasureAnnotation, handle: MeasureHandle)?
     /// The capture's Retina factor — device pixels per image point.
     private var pixelsPerPoint: CGFloat {
         guard let b = bitmap, image.size.width > 0 else { return 1 }
         return CGFloat(b.pixelsWide) / image.size.width
     }
-    /// The current measurement's far endpoint, locked to the active axis.
-    private func measureEnd(at p: CGPoint, from a: CGPoint) -> CGPoint {
-        measureAxis == .vertical ? CGPoint(x: a.x, y: p.y) : CGPoint(x: p.x, y: a.y)
+    /// The endpoint handle under `p` (start or end), or nil.
+    private func measureHandle(_ m: MeasureAnnotation, at p: CGPoint) -> MeasureHandle? {
+        let hr = 12 / displayScale
+        let candidates: [(MeasureHandle, CGPoint)] = [(.start, m.start), (.end, m.end)]
+        return candidates
+            .map { ($0.0, hypot($0.1.x - p.x, $0.1.y - p.y)) }
+            .filter { $0.1 < hr }
+            .min { $0.1 < $1.1 }?.0
+    }
+    /// Holding Shift snaps the far point to a strict horizontal/vertical line from
+    /// `anchor` — freeform otherwise.
+    private func snappedIfShift(_ p: CGPoint, from anchor: CGPoint, _ event: NSEvent) -> CGPoint {
+        guard event.modifierFlags.contains(.shift) else { return p }
+        let dx = abs(p.x - anchor.x), dy = abs(p.y - anchor.y)
+        return dx > dy ? CGPoint(x: p.x, y: anchor.y) : CGPoint(x: anchor.x, y: p.y)
     }
 
     private var selected: Annotation?
@@ -117,8 +130,17 @@ final class CanvasView: NSView, NSTextViewDelegate {
     private var redoStack: [Annotation] = []
     private var live: Annotation?
     private var counter = 0
+    /// Switching format must immediately relabel every placed counter — otherwise
+    /// existing badges stay in the old format while newly placed ones use the new
+    /// one (a visibly mixed sequence), and since `counter` used to just reset to 0,
+    /// the next new badge could even collide with an existing label once some later
+    /// unrelated delete/undo triggered `renumberCounters()` to catch the old ones up.
     var counterFormat: CounterFormat = .number {
-        didSet { if counterFormat != oldValue { counter = 0 } }
+        didSet {
+            guard counterFormat != oldValue else { return }
+            renumberCounters()
+            onChange?(); needsDisplay = true
+        }
     }
     var currentEmoji = "⭐️"
 
@@ -328,7 +350,7 @@ final class CanvasView: NSView, NSTextViewDelegate {
         // blob over the exact start point you're aiming at.
         case .line, .arrow, .rect, .roundedRect, .ellipse, .triangle, .diamond,
              .star, .checkmark, .pentagon, .hexagon, .octagon,
-             .blur, .spotlight: return "plus"
+             .blur, .spotlight, .ruler: return "plus"
         case .text:        return "character.textbox"
         case .counter:     return "number.circle.fill"
         case .eyedropper:  return "eyedropper.full"
@@ -338,7 +360,6 @@ final class CanvasView: NSView, NSTextViewDelegate {
         case .zoom:        return "plus.magnifyingglass"
         case .emoji:       return "face.smiling.inverse"
         case .overlay:     return "photo.fill"
-        case .ruler:       return "ruler.fill"
         case .select:      return nil
         }
     }
@@ -377,8 +398,10 @@ final class CanvasView: NSView, NSTextViewDelegate {
         if let hit = window?.contentView?.hitTest(event.locationInWindow), hit !== self {
             return
         }
-        lastMousePoint = imagePoint(event)
-        if tool == .ruler, measureAxis != .none { needsDisplay = true }
+        if tool == .ruler, let em = editingMeasure {
+            let p = imagePoint(event)
+            if measureHandle(em, at: p) != nil || em.hit(p) { NSCursor.openHand.set(); return }
+        }
         if tool == .zoom {
             let p = imagePoint(event), hr = 12 / displayScale
             let ez = editingZoom ?? annotations.reversed().compactMap { $0 as? ZoomAnnotation }
@@ -421,6 +444,9 @@ final class CanvasView: NSView, NSTextViewDelegate {
             if let c = selected as? CurvedAnnotation, curveHandle(c, at: p) != nil {
                 NSCursor.openHand.set(); return
             }
+            if let m = selected as? MeasureAnnotation, measureHandle(m, at: p) != nil {
+                NSCursor.openHand.set(); return
+            }
             if let sh = selected as? TwoPointAnnotation, let h = boxHandle(for: sh, at: p) {
                 boxCursor(h).set(); return
             }
@@ -437,35 +463,25 @@ final class CanvasView: NSView, NSTextViewDelegate {
     }
 
     override func keyDown(with event: NSEvent) {
-        if tool == .ruler {
-            switch event.keyCode {
-            case 126, 125:
-                measureAxis = .vertical; measureAnchor = lastMousePoint; needsDisplay = true; return
-            case 123, 124:
-                measureAxis = .horizontal; measureAnchor = lastMousePoint; needsDisplay = true; return
-            case 53 where measureAxis != .none:
-                measureAxis = .none; measureAnchor = nil; needsDisplay = true; return
-            default: break
-            }
-        }
         if event.keyCode == 53 { onCancel?(); return }
         if pendingCrop != nil, event.keyCode == 36 || event.keyCode == 76 {
             onCropConfirm?(); return
         }
         if tool == .select, let s = selected, event.keyCode == 51 || event.keyCode == 117 {
             if let idx = annotations.firstIndex(where: { $0 === s }) { annotations.remove(at: idx) }
-            selected = nil; selectDrag = .none; redoStack.removeAll(); onChange?(); needsDisplay = true
+            selected = nil; selectDrag = .none; redoStack.removeAll(); renumberCounters(); onChange?(); needsDisplay = true
             return
         }
         // Backspace/Delete also removes a just-drawn shape or arrow/line still showing
         // its handles under its own tool — the instinctive "undo that mark" gesture.
         if event.keyCode == 51 || event.keyCode == 117 {
             let live: Annotation? = Self.isShapeTool(tool) ? editingShape
-                : ((tool == .arrow || tool == .line) ? editingCurve : nil)
+                : ((tool == .arrow || tool == .line) ? editingCurve
+                : (tool == .ruler ? editingMeasure : nil))
             if let m = live {
                 if let idx = annotations.firstIndex(where: { $0 === m }) { annotations.remove(at: idx) }
-                editingShape = nil; editingShapeTool = nil; editingCurve = nil
-                curveDrag = nil; boxDrag = nil
+                editingShape = nil; editingShapeTool = nil; editingCurve = nil; editingMeasure = nil
+                curveDrag = nil; boxDrag = nil; measureDrag = nil
                 redoStack.removeAll(); onChange?(); needsDisplay = true
                 return
             }
@@ -555,7 +571,7 @@ final class CanvasView: NSView, NSTextViewDelegate {
             if let c = sample(p) { style.color = c; onColorPicked?(c) }
         case .eraser:
             if let idx = annotations.lastIndex(where: { $0.hit(p, pixelsPerPoint: 1 / displayScale) }) {
-                annotations.remove(at: idx); redoStack.removeAll(); onChange?()
+                annotations.remove(at: idx); redoStack.removeAll(); renumberCounters(); onChange?()
             }
             eraserHover = nil
         case .crop:
@@ -613,6 +629,8 @@ final class CanvasView: NSView, NSTextViewDelegate {
                 beginEditing(hit)
             } else if let c = selected as? CurvedAnnotation, let h = curveHandle(c, at: p) {
                 curveDrag = (c, h); NSCursor.closedHand.push()
+            } else if let m = selected as? MeasureAnnotation, let h = measureHandle(m, at: p) {
+                measureDrag = (m, h); NSCursor.closedHand.push()
             } else if let sh = selected as? TwoPointAnnotation, let h = boxHandle(for: sh, at: p) {
                 boxDrag = (sh, h); lastDragPoint = p; boxCursor(h).push()
             } else if let t = selected as? TextAnnotation, let h = boxHandle(inRect: t.bounds, at: p) {
@@ -632,13 +650,14 @@ final class CanvasView: NSView, NSTextViewDelegate {
                 selectDrag = .none
             }
         case .ruler:
-            if measureAxis != .none, let a = measureAnchor {
-                let end = measureEnd(at: p, from: a)
-                if hypot(end.x - a.x, end.y - a.y) >= 2 {
-                    annotations.append(MeasureAnnotation(start: a, end: end, style: style))
-                    redoStack.removeAll(); onChange?()
-                }
-                measureAnchor = p
+            if let em = editingMeasure, let h = measureHandle(em, at: p) {
+                measureDrag = (em, h); NSCursor.closedHand.push()
+            } else if let em = editingMeasure, em.hit(p) {
+                selected = em; selectDrag = .move; lastDragPoint = p
+                NSCursor.closedHand.push()
+            } else {
+                editingMeasure = nil
+                live = MeasureAnnotation(start: p, end: p, style: style)
             }
         }
         needsDisplay = true
@@ -647,16 +666,20 @@ final class CanvasView: NSView, NSTextViewDelegate {
 
     override func mouseDragged(with event: NSEvent) {
         let p = imagePoint(event)
-        if tool == .ruler {
-            lastMousePoint = p
-            if measureAxis != .none { needsDisplay = true }
-            return
-        }
         if let cd = curveDrag {
             switch cd.handle {
             case .start: cd.curve.start = p
             case .end:   cd.curve.end = p
             case .apex:  cd.curve.bend(through: p)
+            }
+            needsDisplay = true; return
+        }
+        if let md = measureDrag {
+            let anchor = md.handle == .start ? md.mark.end : md.mark.start
+            let np = snappedIfShift(p, from: anchor, event)
+            switch md.handle {
+            case .start: md.mark.start = np
+            case .end:   md.mark.end = np
             }
             needsDisplay = true; return
         }
@@ -740,6 +763,7 @@ final class CanvasView: NSView, NSTextViewDelegate {
         }
         if let a = live as? FreehandAnnotation { a.add(p) }
         else if let a = live as? CurvedAnnotation { a.end = p; a.straighten() }
+        else if let a = live as? MeasureAnnotation { a.end = snappedIfShift(p, from: a.start, event) }
         else if let a = live as? TwoPointAnnotation { a.end = p }
         else if let a = live as? CounterAnnotation { a.center = p }
         else if let a = live as? EmojiAnnotation {
@@ -758,6 +782,11 @@ final class CanvasView: NSView, NSTextViewDelegate {
             if let b = bd.shape as? BlurAnnotation { b.patch = gaussianBlur(b.rect) }
             boxDrag = nil
             NSCursor.pop()   // matches the resize-cursor push on knob grab
+            onChange?(); needsDisplay = true; return
+        }
+        if measureDrag != nil {
+            measureDrag = nil
+            NSCursor.pop()   // matches the closedHand push on handle grab
             onChange?(); needsDisplay = true; return
         }
         if textBoxDrag != nil {
@@ -833,11 +862,19 @@ final class CanvasView: NSView, NSTextViewDelegate {
                 live = nil; needsDisplay = true; return
             }
         }
+        // A click with no real drag shouldn't leave a zero-length ruler mark.
+        if tool == .ruler, let a = live as? MeasureAnnotation {
+            let minLen = 6 / displayScale
+            if hypot(a.end.x - a.start.x, a.end.y - a.start.y) < minLen {
+                live = nil; needsDisplay = true; return
+            }
+        }
         if let b = live as? BlurAnnotation { b.patch = gaussianBlur(b.rect) }
         if let a = live {
             annotations.append(a)
             if a is CounterAnnotation { counter += 1 }
             if let cc = a as? CurvedAnnotation { editingCurve = cc }
+            if let mm = a as? MeasureAnnotation { editingMeasure = mm }
             if Self.isShapeTool(tool), let sh = a as? TwoPointAnnotation {
                 editingShape = sh; editingShapeTool = tool
             }
@@ -897,11 +934,6 @@ final class CanvasView: NSView, NSTextViewDelegate {
     private func makeTextView(frame: NSRect, font: NSFont, color: NSColor) -> AnnotationTextView {
         let tv = AnnotationTextView(frame: frame)
         tv.isRichText = true
-        // A dark translucent backing while editing: the caret and white placeholder are
-        // otherwise invisible over a bright capture. It's just an editing affordance — the
-        // committed mark keeps whatever background style the user chose (usually none).
-        tv.drawsBackground = true
-        tv.backgroundColor = Theme.surfaceBase.withAlphaComponent(0.72)
         tv.isHorizontallyResizable = false
         tv.isVerticallyResizable = false
         tv.textContainerInset = NSSize(width: 4, height: 3)
@@ -915,10 +947,32 @@ final class CanvasView: NSView, NSTextViewDelegate {
         tv.colorForNewText = { [weak self] in self?.style.color ?? color }
         tv.delegate = self
         tv.wantsLayer = true
-        tv.layer?.borderColor = Theme.lavender.cgColor
-        tv.layer?.borderWidth = 1.5
         tv.layer?.cornerRadius = 4
+        styleTextViewBackground(tv)
         return tv
+    }
+
+    /// Previews the chosen text-box background live in the editor, so switching it
+    /// from the format bar shows up immediately instead of only after commit (↵).
+    /// `.none` falls back to a dark translucent backing — an editing affordance so the
+    /// caret and white placeholder stay visible over a bright capture.
+    private func styleTextViewBackground(_ tv: AnnotationTextView) {
+        switch textBackground {
+        case .none:
+            tv.drawsBackground = true
+            tv.backgroundColor = Theme.surfaceBase.withAlphaComponent(0.72)
+            tv.layer?.borderColor = Theme.lavender.cgColor
+            tv.layer?.borderWidth = 1.5
+        case .filled:
+            tv.drawsBackground = true
+            tv.backgroundColor = textBackgroundColor
+            tv.layer?.borderColor = Theme.lavender.cgColor
+            tv.layer?.borderWidth = 1.5
+        case .outlined:
+            tv.drawsBackground = false
+            tv.layer?.borderColor = textBackgroundColor.cgColor
+            tv.layer?.borderWidth = 2
+        }
     }
 
     /// The editor font at a given on-screen point size, honoring the current family and
@@ -1047,6 +1101,16 @@ final class CanvasView: NSView, NSTextViewDelegate {
     /// the editor knows whether to surface the format popover.
     var hasTextFocus: Bool { textView != nil || targetTextMark != nil }
 
+    /// Identity of whichever text box currently has focus (the live editor or a
+    /// targeted mark) — changes exactly when the *box* changes, so a caller can tell
+    /// "still the same box" (e.g. don't fight a manually repositioned format bar)
+    /// from "a different box is now current" (do re-follow it).
+    var textFocusToken: ObjectIdentifier? {
+        if let tv = textView { return ObjectIdentifier(tv) }
+        if let m = targetTextMark { return ObjectIdentifier(m) }
+        return nil
+    }
+
     /// Image-space bounds of the current text target, for positioning the format popover.
     var textFocusRect: CGRect? {
         if let tv = textView {
@@ -1094,10 +1158,10 @@ final class CanvasView: NSView, NSTextViewDelegate {
         needsDisplay = true
     }
 
-    /// Background chip has no live editor equivalent (the NSTextView stays clear); it
-    /// applies to the target mark now and to a live edit on commit.
     private func applyBackgroundStyle() {
-        if let m = targetTextMark {
+        if let tv = textView {
+            styleTextViewBackground(tv)
+        } else if let m = targetTextMark {
             m.background = textBackground; m.backgroundColor = textBackgroundColor
             onChange?()
         }
@@ -1140,8 +1204,20 @@ final class CanvasView: NSView, NSTextViewDelegate {
         return CIContext().createCGImage(out, from: CGRect(origin: .zero, size: size))
     }
 
-    func undo() { clearSelections(); if let a = annotations.popLast() { redoStack.append(a); onChange?(); needsDisplay = true } }
-    func redo() { clearSelections(); if let a = redoStack.popLast() { annotations.append(a); onChange?(); needsDisplay = true } }
+    func undo() { clearSelections(); if let a = annotations.popLast() { redoStack.append(a); renumberCounters(); onChange?(); needsDisplay = true } }
+    func redo() { clearSelections(); if let a = redoStack.popLast() { annotations.append(a); renumberCounters(); onChange?(); needsDisplay = true } }
+
+    /// Keeps counter badges labeled 1, 2, 3… in placement order after any
+    /// insertion/removal (delete, eraser, undo/redo, crop) disturbs the sequence.
+    private func renumberCounters() {
+        var n = 0
+        for a in annotations {
+            guard let c = a as? CounterAnnotation else { continue }
+            n += 1
+            c.label = counterFormat.label(n)
+        }
+        counter = n
+    }
 
     /// Restyle the mark the user is currently working with — the Select-tool
     /// selection, or a text mark still active under the Text tool — so choosing a
@@ -1181,6 +1257,7 @@ final class CanvasView: NSView, NSTextViewDelegate {
         editingCurve = nil; curveDrag = nil; boxDrag = nil; editingShape = nil; editingShapeTool = nil
         editingZoom = nil; selected = nil; selectDrag = .none
         editingText = nil; textDrag = .none
+        editingMeasure = nil; measureDrag = nil
         if editingOverlay != nil { editingOverlay = nil; onOverlaySelected?(nil) }
     }
 
@@ -1365,6 +1442,19 @@ final class CanvasView: NSView, NSTextViewDelegate {
         }
     }
 
+    /// Draw a ruler mark's two endpoint knobs as white dots ringed in `tint` —
+    /// same idiom as `drawCurveHandles`, minus the bend/apex knob (a ruler stays
+    /// straight so its distance label always matches what's drawn).
+    private func drawMeasureHandles(_ m: MeasureAnnotation, in ctx: CGContext, tint: NSColor) {
+        let r = 6 / displayScale
+        ctx.setLineWidth(1.5 / displayScale)
+        for pt in [m.start, m.end] {
+            let box = CGRect(x: pt.x - r, y: pt.y - r, width: r * 2, height: r * 2)
+            ctx.setFillColor(NSColor(white: 1, alpha: 0.95).cgColor); ctx.fillEllipse(in: box)
+            ctx.setStrokeColor(tint.cgColor); ctx.strokeEllipse(in: box)
+        }
+    }
+
     override func draw(_ dirtyRect: NSRect) {
         guard let ctx = NSGraphicsContext.current?.cgContext else { return }
         ctx.saveGState()
@@ -1384,6 +1474,9 @@ final class CanvasView: NSView, NSTextViewDelegate {
         }
         if tool == .arrow || tool == .line, let ec = editingCurve {
             drawCurveHandles(ec, in: ctx, tint: style.color)
+        }
+        if tool == .ruler, let em = editingMeasure {
+            drawMeasureHandles(em, in: ctx, tint: style.color)
         }
         if tool == .zoom, let ez = editingZoom {
             let r = 6 / displayScale
@@ -1414,16 +1507,14 @@ final class CanvasView: NSView, NSTextViewDelegate {
                 // Curves show their three drag knobs instead of a bounds box — the box
                 // around a diagonal arrow is large and reads as a phantom rectangle.
                 drawCurveHandles(c, in: ctx, tint: Theme.lavender)
+            } else if let m = s as? MeasureAnnotation {
+                drawMeasureHandles(m, in: ctx, tint: Theme.lavender)
             } else {
                 drawResizeBox(s, in: ctx)
             }
         }
         // A shape tool's just-drawn shape shows the same corner handles in place.
         if Self.isShapeTool(tool), let es = editingShape { drawResizeBox(es, in: ctx) }
-        if tool == .ruler, measureAxis != .none, let a = measureAnchor {
-            MeasureAnnotation(start: a, end: measureEnd(at: lastMousePoint, from: a),
-                              style: style).draw(in: ctx)
-        }
         ctx.restoreGState()
     }
 
@@ -1459,6 +1550,7 @@ final class CanvasView: NSView, NSTextViewDelegate {
         let frameRect = CGRect(origin: .zero, size: image.size)
         annotations.removeAll { !frameRect.intersects($0.bounds) }
         redoStack.removeAll { !frameRect.intersects($0.bounds) }
+        renumberCounters()
         for a in annotations + redoStack {
             if let s = a as? SpotlightAnnotation { s.fullSize = image.size }
             if let b = a as? BlurAnnotation { b.patch = gaussianBlur(b.rect) }
@@ -1469,7 +1561,7 @@ final class CanvasView: NSView, NSTextViewDelegate {
         editingZoom = nil
         selected = nil; selectDrag = .none
         if editingOverlay != nil { editingOverlay = nil; onOverlaySelected?(nil) }
-        measureAxis = .none; measureAnchor = nil
+        editingMeasure = nil; measureDrag = nil
         pendingCrop = nil
         needsDisplay = true
         onChange?()

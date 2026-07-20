@@ -24,6 +24,10 @@ final class CounterFormatPicker: NSObject {
         self.current = current; self.onPick = onPick; self.onClose = onClose
     }
 
+    /// Whether the popover is currently on screen — callers should close (not replace)
+    /// an already-open picker instead of stacking a second, unreachable one.
+    var isShowing: Bool { window != nil }
+
     /// `avoid` (screen coords) is the tool panel — the popover is placed above it
     /// (or below if there's no room) so it never overlaps the card.
     func show(near button: NSView, avoiding avoid: CGRect? = nil) {

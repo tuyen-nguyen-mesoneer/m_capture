@@ -40,9 +40,9 @@ on-device, with no subscriptions, cloud services, or accounts.
 **✏️ Annotate & edit** — an in-place editor in which every tool is a single keystroke, with full undo and redo.
 - **Draw** — pencil, highlighter, and eraser.
 - **Shapes** — arrows (with bendable curves), lines, rectangles, ellipses, triangles, diamonds, stars, polygons (pentagon, hexagon, octagon), rounded rectangles, and checkmarks.
-- **Text & counters** — inline text labels, auto-incrementing badges (numbers, letters, or Roman numerals), and emoji stamps.
+- **Text & counters** — inline text labels with a live size/bold/alignment/background toolbar, auto-incrementing badges (numbers, letters, or Roman numerals — renumbered automatically if you delete one), and emoji stamps.
 - **Focus & redaction** — **blur** to obscure sensitive information, **spotlight** to dim the surroundings, and **zoom** callouts to magnify detail.
-- **Measure & compose** — an on-screen **ruler**, image overlays, and an **eyedropper** for color matching.
+- **Measure & compose** — an on-screen **ruler** (drag at any angle, hold `⇧` to snap horizontal/vertical), image overlays, and an **eyedropper** for color matching.
 - **Style** — a preset color palette with a custom hue/brightness picker, plus a stroke-width control (thin / medium / thick).
 - **Select & edit** — every placed mark stays editable: with the **Select** tool (`V`) — or right after you draw it — drag it to reposition, resize shapes from **any of eight handles** (four corners plus four edges, so you can stretch one side), reshape arrows and lines by their **endpoints or bend handle**, or press **⌫** to delete.
 - **Transform** — crop, rotate, flip, and adjust the capture region from eight handles (trim inward, or grow outward to re-grab more of the screen), all baked into the export.

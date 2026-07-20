@@ -113,13 +113,13 @@ the clusters gather into one draggable panel so they never cover the image.
 | Pencil         | `P`  | Freehand thin stroke.                                                                  |
 | Highlighter    | `H`  | Thick, translucent marker.                                                             |
 | Eraser         | `E`  | Remove the annotation under the click.                                                 |
-| Text           | `T`  | Click to place a label and type inline.                                                |
+| Text           | `T`  | Click to place a label and type inline. A floating bar lets you set size, bold, alignment and the box's own background (fill/outline + color) while you type.  |
 | Blur           | `B`  | Soften a region (redact sensitive content).                                            |
 | Spotlight      | `S`  | Dim everything outside a rectangle.                                                    |
-| Counter        | `C`  | Auto-incrementing badge — numbers, letters or Roman.                                   |
+| Counter        | `C`  | Auto-incrementing badge — numbers, letters or Roman. Deleting one renumbers the rest so the sequence stays in order. |
 | Emoji          |  —   | Stamp an emoji (click the tile to choose).                                             |
 | Zoom           | `Z`  | Magnify a region into a callout bubble.                                                |
-| Ruler          |  —   | Measure: press `↑↓`/`←→`, move to size it, click to imprint.                           |
+| Ruler          |  —   | Drag to measure at any angle (hold `⇧` to snap horizontal/vertical); the placed mark stays live to reshape by its endpoints or move it. |
 | Overlay image  |  —   | Add an image — paste (`⌘V`), drop a file, or click to choose (with an opacity slider). |
 | Copy text / QR | `⌘T` | OCR — drag over text or a QR code to recognize & copy it.                              |
 
@@ -138,7 +138,7 @@ switching tools.
 
 ### Transform & actions
 
-- **Select / edit** (`V`) — click any placed mark to select it, then **drag** to reposition or press `⌫` to delete it. **Shapes** resize from **eight handles** — four corners (free) and four edge midpoints (stretch a single side, e.g. widen a triangle). **Arrows and lines** show three handles — both **endpoints** and a **bend** handle at the apex — so you can reshape them. Text, emoji, counters, blur, spotlight, overlays and zoom callouts resize from a corner knob; freehand strokes and the ruler are move-only. Everything can also be edited right after you draw it, without switching to Select.
+- **Select / edit** (`V`) — click any placed mark to select it, then **drag** to reposition or press `⌫` to delete it. **Shapes** resize from **eight handles** — four corners (free) and four edge midpoints (stretch a single side, e.g. widen a triangle). **Arrows and lines** show three handles — both **endpoints** and a **bend** handle at the apex. The **ruler** shows two endpoint handles (no bend, so its distance label always matches what's drawn). Text, emoji, counters, blur, spotlight, overlays and zoom callouts resize from a corner knob; freehand strokes are move-only. Everything can also be edited right after you draw it, without switching to Select.
 - **Crop** — drag a region, then `↵` (or **✓**) to apply.
 - **Rotate** — 90° right (clockwise).
 - **Flip horizontal** — mirror the image left↔right.

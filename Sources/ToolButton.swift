@@ -33,7 +33,10 @@ final class ToolButton: NSButton {
     /// the current stroke width reads at a glance instead of the tile looking inert.
     var activeLineWeightIndex: Int? { didSet { needsDisplay = true } }
 
-    private let style: Style
+    /// Mutable so a tile can be repurposed at runtime (e.g. the Style cluster's
+    /// cycling tile switches between stroke-width and text-background while the
+    /// Text tool is active).
+    private var style: Style { didSet { needsDisplay = true } }
     let radius: CGFloat
     private var hovering = false { didSet { needsDisplay = true } }
 
@@ -57,6 +60,9 @@ final class ToolButton: NSButton {
         heightAnchor.constraint(equalToConstant: s.height).isActive = true
     }
     required init?(coder: NSCoder) { fatalError() }
+
+    /// Repurposes an already-built tile to a different glyph/behavior (see `style`).
+    func setStyle(_ s: Style) { style = s }
 
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
