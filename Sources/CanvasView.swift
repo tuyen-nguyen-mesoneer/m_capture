@@ -16,7 +16,7 @@ final class CanvasView: NSView, NSTextViewDelegate {
     private(set) var image: NSImage
     let displayScale: CGFloat
 
-    var tool: Tool = .pencil {
+    var tool: Tool = .arrow {
         didSet {
             if tool != .text { commitText(); editingText = nil; textDrag = .none }
             if !((tool == .arrow && editingCurve is CurvedArrowAnnotation) ||
