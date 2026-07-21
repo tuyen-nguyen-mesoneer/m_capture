@@ -310,7 +310,7 @@ final class EditorWindowController: NSObject {
             self.pasteOverlay()
             return nil   // consume
         }
-        selectTool(.pencil)
+        selectTool(.arrow)
         selectSwatch(0)
         canvas.style.lineWidth = 6
 

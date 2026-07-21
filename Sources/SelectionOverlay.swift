@@ -223,7 +223,7 @@ final class SelectionView: NSView {
             if let r = selectionRect, r.width >= 3, r.height >= 3 { onComplete?(r) } else { onCancel?() }
         case .window:
             refreshHoveredWindow()
-            if let win = hoveredWindow { onCompleteWindow?(win.id) }
+            if let win = hoveredWindow { onCompleteWindow?(win.id) } else { onCompleteScreen?() }
         case .screen:
             break
         }
@@ -348,11 +348,11 @@ final class SelectionView: NSView {
 
     /// Window-pick mode: highlight the window under the pointer with a bright cutout
     /// and outline — no label, so releasing anywhere over the highlighted window
-    /// captures it (macOS-style). Falls back to a centred hint when the pointer is over
-    /// empty desktop so the mode never looks inert.
+    /// captures it (macOS-style). Falls back to the whole-screen outline when the
+    /// pointer is over empty desktop, since a release there captures the screen.
     private func drawWindowMode(_ ctx: CGContext) {
         guard let r = hoveredWindowViewRect else {
-            drawCenteredChip("Move over a window to capture it")
+            drawScreenMode(ctx)
             return
         }
         punchHole(ctx, r)
@@ -362,23 +362,6 @@ final class SelectionView: NSView {
         ctx.stroke(r.insetBy(dx: lw / 2, dy: lw / 2))
     }
 
-    /// A single chip centred in the overlay — used for the "move over a window" hint.
-    /// Sits below the (also centred) mode banner so the two never overlap.
-    private func drawCenteredChip(_ text: String) {
-        let attrs: [NSAttributedString.Key: Any] = [
-            .font: Theme.font(13, .semibold), .foregroundColor: Theme.textPrimary,
-        ]
-        let ts = text.size(withAttributes: attrs)
-        let pad: CGFloat = 8
-        let bh = ts.height + pad
-        let box = CGRect(x: bounds.midX - (ts.width + pad * 2) / 2, y: bounds.midY - bh / 2 - modeBannerClearance,
-                         width: ts.width + pad * 2, height: bh)
-        fillChip(box)
-        text.draw(at: CGPoint(x: box.minX + pad, y: box.minY + pad / 2), withAttributes: attrs)
-    }
-
-    /// Vertical gap reserved below the centred mode banner for `drawCenteredChip`.
-    private var modeBannerClearance: CGFloat { 56 }
 
     /// The SF Symbol that best represents each capture mode, shown at the mode
     /// banner's leading edge.

@@ -212,3 +212,9 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
 - Editor coordinates stay in full-resolution image space (see `CanvasView`).
 - **Comments explain *why*, not *what*** — put a single `///` doc comment on the
   method or type; don't annotate the body line by line with inline `//` notes.
+- **Release notes (`docs/index.html`) are exactly 2 lines** — each `rel.N.note` string,
+  in both the `en` and `de` i18n dicts, must stay short enough to wrap to 2 lines at
+  the `.note` column width: roughly 80-160 characters. Write one clause, comma, and a
+  second clause ("X, and Y."), not a longer list. Every new release adds a `rel.N.date`
+  / `rel.N.note` pair to *both* language dicts plus the matching `<div class="release">`
+  block (newest first) — don't add the HTML without the i18n keys (or vice versa).
