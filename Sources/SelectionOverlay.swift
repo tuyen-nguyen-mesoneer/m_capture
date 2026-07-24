@@ -42,13 +42,15 @@ final class OverlayWindow: NSWindow {
     ///   - recording: When `true`, window/screen modes show a video cursor instead of
     ///     the camera, distinguishing the record flow from screenshots.
     init(screen: NSScreen, coordinator: OverlayCoordinator,
-         allowsWindowMode: Bool = true, allowsFullScreenMode: Bool = true, recording: Bool = false) {
+         allowsWindowMode: Bool = true, allowsFullScreenMode: Bool = true, recording: Bool = false,
+         previousRect: CGRect? = nil) {
         captureScreen = screen
         selectionView = SelectionView(frame: NSRect(origin: .zero, size: screen.frame.size),
                                      coordinator: coordinator,
                                      allowsWindowMode: allowsWindowMode,
                                      allowsFullScreenMode: allowsFullScreenMode,
                                      recording: recording)
+        selectionView.previousRect = previousRect
         super.init(contentRect: screen.frame, styleMask: .borderless,
                    backing: .buffered, defer: false)
         isOpaque = false
@@ -93,6 +95,10 @@ final class SelectionView: NSView {
     private let allowsWindowMode: Bool
     private let allowsFullScreenMode: Bool
     private let recording: Bool
+
+    /// The previous capture's region on this display (view-local), re-offered as a
+    /// dashed outline in region mode — Return re-captures it without re-dragging.
+    var previousRect: CGRect?
 
     /// The window currently under the pointer in window-pick mode, or `nil` when the
     /// pointer is over empty desktop. Drives the highlight; the capture commits when
@@ -203,13 +209,17 @@ final class SelectionView: NSView {
             refreshHoveredWindow()
         case .region:
             let p = convert(event.locationInWindow, from: nil)
-            startPoint = p; currentPoint = p; needsDisplay = true
+            let old = selectionRect
+            startPoint = p; currentPoint = p
+            invalidateSelection(old, selectionRect)
         }
     }
     override func mouseDragged(with event: NSEvent) {
         switch captureMode {
         case .region:
-            currentPoint = convert(event.locationInWindow, from: nil); needsDisplay = true
+            let old = selectionRect
+            currentPoint = convert(event.locationInWindow, from: nil)
+            invalidateSelection(old, selectionRect)
         case .window:
             refreshHoveredWindow()   // keep the highlight following the pointer while held
         case .screen:
@@ -241,9 +251,28 @@ final class SelectionView: NSView {
         let pid = ProcessInfo.processInfo.processIdentifier
         let found = WindowList.topmost(atCGPoint: cgPoint, excludingPID: pid)
         if found?.id != hoveredWindow?.id {
+            let old = hoveredWindowViewRect
             hoveredWindow = found
-            needsDisplay = true
+            let new = hoveredWindowViewRect
+            // A nil rect means the whole-screen fallback outline is (or was) showing,
+            // so the change touches the entire view — otherwise repaint just the two
+            // highlight areas.
+            if old == nil || new == nil { needsDisplay = true }
+            else { invalidateSelection(old, new) }
         }
+    }
+
+    /// Repaint only what a selection/highlight change touches. Marking the whole view
+    /// dirty per mouse event software-redraws the entire (non-layer-backed) screen —
+    /// on a large external display that alone can blow the frame budget, queue up
+    /// pointer events, and read as a freeze while selecting. The outset covers the
+    /// selection outline plus the size label drawn beside the region.
+    private func invalidateSelection(_ old: CGRect?, _ new: CGRect?) {
+        var dirty = CGRect.null
+        if let o = old { dirty = dirty.union(o) }
+        if let n = new { dirty = dirty.union(n) }
+        guard !dirty.isNull else { return }
+        setNeedsDisplay(dirty.insetBy(dx: -160, dy: -40))
     }
 
     /// The `hoveredWindow` frame in this view's local (bottom-left) coordinates,
@@ -262,6 +291,13 @@ final class SelectionView: NSView {
 
     override func keyDown(with event: NSEvent) {
         if event.keyCode == 53 { onCancel?(); return }
+        // Return / keypad-Enter re-captures the previous region (region mode, no
+        // drag in progress).
+        if event.keyCode == 36 || event.keyCode == 76,
+           captureMode == .region, startPoint == nil, let prev = previousRect {
+            onComplete?(prev.integral)
+            return
+        }
         if event.keyCode == 49, availableModes.count > 1 {
             // Cycle the shared mode — the coordinator notifies every overlay (this one
             // included) via `modeDidChange`, so all displays switch together.
@@ -312,6 +348,15 @@ final class SelectionView: NSView {
     }
 
     private func drawRegionMode(_ ctx: CGContext) {
+        // Offer the previous region as a dashed ghost until a fresh drag starts.
+        if selectionRect == nil, startPoint == nil, let prev = previousRect {
+            ctx.saveGState()
+            ctx.setStrokeColor(Theme.lavender.withAlphaComponent(0.7).cgColor)
+            ctx.setLineWidth(1.5)
+            ctx.setLineDash(phase: 0, lengths: [6, 4])
+            ctx.stroke(prev.insetBy(dx: 0.75, dy: 0.75))
+            ctx.restoreGState()
+        }
         guard let r = selectionRect else { return }
         ctx.setBlendMode(.clear)
         ctx.fill(r)
@@ -380,19 +425,23 @@ final class SelectionView: NSView {
     private func drawModeBanner() {
         let modeName: String
         switch captureMode {
-        case .region: modeName = "Region"
-        case .window: modeName = "Window"
-        case .screen: modeName = "Screen"
+        case .region: modeName = L("Region")
+        case .window: modeName = L("Window")
+        case .screen: modeName = L("Screen")
         }
-        // Only advertise the Space shortcut when there's more than one mode to cycle.
-        let showsHint = availableModes.count > 1
+        // Only advertise shortcuts that apply right now: Space when there's more
+        // than one mode to cycle, Return when a previous region can be re-captured.
+        var hints: [String] = []
+        if availableModes.count > 1 { hints.append(L("Space to cycle")) }
+        if captureMode == .region, previousRect != nil { hints.append(L("⏎ last region")) }
+        let showsHint = !hints.isEmpty
         let nameAttrs: [NSAttributedString.Key: Any] = [
             .font: Theme.font(19, .bold), .foregroundColor: Theme.textPrimary,
         ]
         let hintAttrs: [NSAttributedString.Key: Any] = [
             .font: Theme.font(13, .medium), .foregroundColor: Theme.textSecondary,
         ]
-        let hintText = "Space to cycle"
+        let hintText = hints.joined(separator: "  ·  ")
         let nameSize = modeName.size(withAttributes: nameAttrs)
         let hintSize = showsHint ? hintText.size(withAttributes: hintAttrs) : .zero
 

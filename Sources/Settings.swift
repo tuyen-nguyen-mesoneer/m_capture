@@ -54,7 +54,25 @@ enum ImageFormat: String, CaseIterable {
 /// appears — lets you set up menus / hover states first.
 enum CaptureDelay: Int, CaseIterable {
     case none = 0, three = 3, five = 5, ten = 10
-    var label: String { self == .none ? "None" : "\(rawValue)s" }
+    var label: String { self == .none ? L("None") : "\(rawValue)s" }
+}
+
+/// The UI language: follow the primary system language, or force one of the
+/// shipped languages regardless of Language & Region.
+enum AppLanguage: String, CaseIterable {
+    case system
+    case english = "en"
+    case german = "de"
+    case vietnamese = "vi"
+    /// Native names, the convention for language pickers; only "System" localizes.
+    var label: String {
+        switch self {
+        case .system:     return L("System")
+        case .english:    return "English"
+        case .german:     return "Deutsch"
+        case .vietnamese: return "Tiếng Việt"
+        }
+    }
 }
 
 /// What happens the instant a screenshot is captured: open the annotation
@@ -64,9 +82,9 @@ enum CaptureBehavior: String, CaseIterable {
     case editor, save, copy
     var label: String {
         switch self {
-        case .editor: return "Open editor"
-        case .save:   return "Save to file"
-        case .copy:   return "Copy to clipboard"
+        case .editor: return L("Open editor")
+        case .save:   return L("Save to file")
+        case .copy:   return L("Copy to clipboard")
         }
     }
 }
@@ -84,10 +102,10 @@ enum ShortcutAction: String, CaseIterable {
 
     var label: String {
         switch self {
-        case .screenshot:  return "Screenshot"
-        case .record:      return "Record"
-        case .quickScreen: return "Quick Screen"
-        case .forceQuit:   return "Force Quit"
+        case .screenshot:  return L("Screenshot")
+        case .record:      return L("Record")
+        case .quickScreen: return L("Quick Screen")
+        case .forceQuit:   return L("Force Quit")
         }
     }
 
@@ -110,7 +128,7 @@ enum ShortcutAction: String, CaseIterable {
 enum PaddingSize: String, CaseIterable {
     case small, medium, large
     var scale: CGFloat { self == .small ? 0.02 : self == .medium ? 0.03 : 0.045 }
-    var label: String { rawValue.capitalized }
+    var label: String { L(rawValue.capitalized) }
 }
 
 /// Corner-rounding amount for share-ready backgrounds. `.none` = square corners;
@@ -125,7 +143,7 @@ enum RadiusSize: String, CaseIterable {
         case .large: return 1.75
         }
     }
-    var label: String { self == .none ? "Square" : rawValue.capitalized }
+    var label: String { self == .none ? L("Square") : L(rawValue.capitalized) }
 }
 
 /// HEVC recording bitrate preset. `bitrate(for:)` scales the base rate by pixel
@@ -134,9 +152,9 @@ enum VideoQuality: String, CaseIterable {
     case high, medium, low
     var label: String {
         switch self {
-        case .high:   return "High (8 Mbps)"
-        case .medium: return "Medium (4 Mbps)"
-        case .low:    return "Low (2 Mbps)"
+        case .high:   return L("High (8 Mbps)")
+        case .medium: return L("Medium (4 Mbps)")
+        case .low:    return L("Low (2 Mbps)")
         }
     }
     func bitrate(for resolution: CGSize) -> Int {
@@ -158,10 +176,10 @@ enum VideoAudioSource: String, CaseIterable {
     case none, system, mic, both
     var label: String {
         switch self {
-        case .none:   return "None"
-        case .system: return "System Audio"
-        case .mic:    return "Microphone"
-        case .both:   return "System + Mic"
+        case .none:   return L("None")
+        case .system: return L("System Audio")
+        case .mic:    return L("Microphone")
+        case .both:   return L("System + Mic")
         }
     }
     var capturesSystemAudio: Bool { self == .system || self == .both }
@@ -184,6 +202,10 @@ final class Settings {
         static let behavior = "captureBehavior", prefix = "filenamePrefix"
         static let confirmDiscard = "confirmDiscard"
         static let videoQuality = "videoQuality", videoAudioSource = "videoAudioSource"
+        static let videoFrameRate = "videoFrameRate", videoShowClicks = "videoShowClicks"
+        static let videoCountdown = "videoCountdown", videoBarMinimized = "videoBarMinimized"
+        static let lastRegion = "lastRegion"
+        static let appLanguage = "appLanguage"
     }
 
     private let defaultPrefix = "m_capture_"
@@ -258,6 +280,13 @@ final class Settings {
         set { d.set(newValue, forKey: Key.sound) }
     }
 
+    /// The UI language: follow the system, or an explicit in-app override.
+    /// Read once at launch by `L10n.table` — changes apply after a relaunch.
+    var appLanguage: AppLanguage {
+        get { d.string(forKey: Key.appLanguage).flatMap(AppLanguage.init) ?? .system }
+        set { d.set(newValue.rawValue, forKey: Key.appLanguage) }
+    }
+
     /// Seconds to wait before the selection overlay appears (0 = immediate).
     var captureDelay: CaptureDelay {
         get { CaptureDelay(rawValue: d.integer(forKey: Key.delay)) ?? .none }
@@ -282,9 +311,51 @@ final class Settings {
         set { d.set(newValue.rawValue, forKey: Key.videoQuality) }
     }
 
-    /// Which audio streams to record alongside the video (default system audio).
+    /// Recording frame rate (default 30; 60 for smoother motion at ~2× file size).
+    var videoFrameRate: Int {
+        get { let v = d.integer(forKey: Key.videoFrameRate); return v == 60 ? 60 : 30 }
+        set { d.set(newValue, forKey: Key.videoFrameRate) }
+    }
+
+    /// Show a ripple over mouse clicks while recording, so clicks read in the video.
+    var videoShowClicks: Bool {
+        get { d.bool(forKey: Key.videoShowClicks) }
+        set { d.set(newValue, forKey: Key.videoShowClicks) }
+    }
+
+    /// Start recordings with the floating bar minimized to the menu bar (default on).
+    /// Unset reads as on; once the user toggles it, their choice is respected.
+    var videoStartBarMinimized: Bool {
+        get { d.object(forKey: Key.videoBarMinimized) == nil ? true : d.bool(forKey: Key.videoBarMinimized) }
+        set { d.set(newValue, forKey: Key.videoBarMinimized) }
+    }
+
+    /// Seconds counted down (over the recorded region) after the region is picked,
+    /// before the recording starts (0 = start immediately).
+    var videoCountdown: CaptureDelay {
+        get { CaptureDelay(rawValue: d.integer(forKey: Key.videoCountdown)) ?? .none }
+        set { d.set(newValue.rawValue, forKey: Key.videoCountdown) }
+    }
+
+    /// The last drag-selected region (screen-local, bottom-left origin) and the
+    /// display it was on — lets the overlay re-offer it (Return re-captures it).
+    /// Persisted across launches so "same region as yesterday" also works.
+    var lastRegion: (rect: CGRect, displayID: CGDirectDisplayID)? {
+        get {
+            guard let a = d.array(forKey: Key.lastRegion) as? [Double], a.count == 5 else { return nil }
+            return (CGRect(x: a[0], y: a[1], width: a[2], height: a[3]), CGDirectDisplayID(a[4]))
+        }
+        set {
+            guard let v = newValue else { d.removeObject(forKey: Key.lastRegion); return }
+            d.set([v.rect.minX, v.rect.minY, v.rect.width, v.rect.height, Double(v.displayID)],
+                  forKey: Key.lastRegion)
+        }
+    }
+
+    /// Which audio streams to record alongside the video (default none — opt in to
+    /// audio rather than being surprised by a recorded mic/system track).
     var videoAudioSource: VideoAudioSource {
-        get { d.string(forKey: Key.videoAudioSource).flatMap(VideoAudioSource.init) ?? .system }
+        get { d.string(forKey: Key.videoAudioSource).flatMap(VideoAudioSource.init) ?? .none }
         set { d.set(newValue.rawValue, forKey: Key.videoAudioSource) }
     }
 

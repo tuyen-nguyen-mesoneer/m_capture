@@ -2,7 +2,24 @@
 // SPDX-License-Identifier: MIT
 import AppKit
 
-/// A borderless, square-cornered panel window for About / Settings. macOS rounds the
+/// One app panel at a time: opening any panel (Settings, History, Trim) closes the
+/// others, and starting a capture or recording closes them all — the app's panels
+/// never stack up over each other or linger under a capture overlay. Each panel's
+/// own close path (`onClose`) runs so per-panel teardown (e.g. Trim's playback)
+/// happens properly.
+enum AppPanels {
+    static func closeAll(except keep: NSWindow? = nil) {
+        for w in NSApp.windows where w is PanelWindow && w !== keep && w.isVisible {
+            if let panel = w as? PanelWindow, let close = panel.onClose {
+                close()
+            } else {
+                w.orderOut(nil)
+            }
+        }
+    }
+}
+
+/// A borderless, square-cornered panel window for Settings / Trim. macOS rounds the
 /// corners of `.titled` windows and offers no API to square them, so these panels are
 /// borderless and supply their own chrome: a `PanelCloseButton`, Esc / ⌘W to close, and
 /// drag-anywhere-to-move (`isMovableByWindowBackground`). A soft drop shadow defines the
@@ -43,6 +60,10 @@ final class PanelWindow: NSWindow {
 /// A small custom-drawn close button (an "×"), since a borderless window has no native
 /// traffic lights. Quiet by default, brightening with a subtle disc on hover.
 final class PanelCloseButton: NSView {
+    override func isAccessibilityElement() -> Bool { true }
+    override func accessibilityRole() -> NSAccessibility.Role? { .button }
+    override func accessibilityLabel() -> String? { L("Close") }
+
     static let size: CGFloat = 22
     var onClick: (() -> Void)?
     private var hovering = false { didSet { if hovering != oldValue { needsDisplay = true } } }

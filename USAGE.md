@@ -8,6 +8,7 @@ see the [README](README.md).
 - [Taking a screenshot](#taking-a-screenshot)
 - [Recording](#recording)
 - [The annotation editor](#the-annotation-editor)
+- [History](#history)
 - [Settings](#settings)
 - [Troubleshooting](#troubleshooting)
 
@@ -22,27 +23,34 @@ version on a badge. If the menu bar is hidden (notch, menu-bar hider), click the
 opening the menu.
 
 <p align="center">
-  <img src="docs/assets/menu.png" alt="The m_capture menu-bar dropdown with Screenshot, Record, Library, Settings, About and Quit" height="300">
+  <img src="docs/assets/menu.png" alt="The m_capture menu-bar dropdown with Screenshot, Record Video, Quick Screen, History, Library, Settings, Check for Updates and Quit" height="300">
   <br>
   <em>The branded menu-bar dropdown.</em>
 </p>
 
-| Menu item             | Hotkey | What it does                                                                                                                    |
-|-----------------------|:------:|---------------------------------------------------------------------------------------------------------------------------------|
-| **Screenshot**        | `⌃⇧S`  | Dim the screen; drag a region, or press **Space** to pick a window or the whole screen; open the editor.                        |
-| **Record**            | `⌃⇧R`  | Dim the screen; pick a region, a window, or the whole screen; record it in-app to an MP4.                                       |
-| **Quick Screen**      | `⌃⇧Q`  | Instantly grab the screen under the pointer — no overlay, no delay.                                                             |
-| **Library**           |   —    | Open the save folder in Finder.                                                                                                 |
-| **Settings**          |   —    | Shortcuts, capture delay, save location, format, backgrounds, more.                                                             |
-| **Usage Guide**       |   —    | Open this reference on GitHub.                                                                                                  |
-| **About**             |   —    | Show the About panel (version + license).                                                                                       |
-| **Check for Updates** |   —    | Check GitHub Releases for a newer version.                                                                                      |
-| **Report a Bug**      |   —    | Open a [pre-filled GitHub issue](https://github.com/tuyen-nguyen-mesoneer/m_capture/issues/new) (app + macOS version attached). |
-| **Quit**              |   —    | Quit `m_capture`.                                                                                                               |
+| Menu item             | Hotkey | What it does                                                                                              |
+|-----------------------|:------:|------------------------------------------------------------------------------------------------------------|
+| **Screenshot**        | `⌃⇧S`  | Dim the screen; drag a region, or press **Space** to pick a window or the whole screen; open the editor.  |
+| **Record Video**      | `⌃⇧R`  | Dim the screen; pick a region, a window, or the whole screen; record it in-app to an MP4.                 |
+| **Quick Screen**      | `⌃⇧Q`  | Instantly grab the screen under the pointer — no overlay, no delay.                                       |
+| **History**           |   —    | Open the [History](#history) panel — the most recent captures with quick actions.                         |
+| **Library**           |   —    | Open the save folder in Finder.                                                                           |
+| **Settings**          |   —    | Language, shortcuts, capture delay, save location, format, video options, more.                           |
+| **Check for Updates** |   —    | Check GitHub Releases for a newer version.                                                                |
+| **Quit**              |   —    | Quit `m_capture`.                                                                                         |
+
+**Usage Guide**, **Report a Bug**, and the version/license information live in
+**Settings → About** — an identity card with the logo, version, the MIT · ©
+[mesoneer AG](https://www.mesoneer.io/?r=0) line, and buttons for both actions.
 
 While a recording is in progress, the menu also shows **Stop Recording**,
+**Stop & Save as GIF**, **Stop & Trim…**, **Discard Recording**,
 **Pause / Resume Recording**, and — if the floating bar is minimized — **Show
 Recording Bar**, so the whole recording can be driven from the menu bar.
+
+The app shows **one panel at a time**: opening Settings, History, or the trim
+panel closes the others, opening the menu closes any open panel, and starting a
+capture or recording closes them all so nothing ends up in the shot.
 
 ---
 
@@ -56,8 +64,11 @@ Recording Bar**, so the whole recording can be driven from the menu bar.
    capture just that window; and **Screen** — the whole display is tinted and a
    single click captures it. Space again returns to region selection. All three
    modes work on every connected display, not just the one you started on.
+   The **previous region** shows as a dashed outline on its display — press
+   **Return** to re-capture it without re-dragging (the banner hints when it's
+   available; it persists across launches).
 3. Release — the [editor](#the-annotation-editor) opens with your capture, its
-   cursor switching to match whichever tool is active (pencil by default).
+   cursor switching to match whichever tool is active (arrow by default).
 4. Annotate, then **Copy** (`⌘C`) or **Save** (`⌘S`). `Esc` cancels.
 
 <p align="center">
@@ -74,27 +85,45 @@ filename format, location, image format and auto-copy are all configurable in
 
 ## Recording
 
-1. Press `⌃⇧R`. The screen dims — the same overlay as a screenshot.
+1. Press `⌃⇧R`. The screen dims — the same overlay as a screenshot (with the
+   previous region re-offered on **Return**, exactly like a screenshot).
 2. Choose what to record: **drag** a region, or press **Space** to cycle to
    **Window** (hover a window to tint it, release the mouse over it to record just
    that window) or **Screen** (the display is tinted; click to record it whole). All
-   three work on any connected display.
-3. Recording starts with a floating bar showing a live timer, the estimated file
-   size, and a quality badge, plus **pause/resume** and **stop** — drag anywhere on
-   the bar's background to move it out of the way (the cursor shows an open hand).
-4. **Stop** (or **Return**) finalises the `.mp4` (HEVC video, optional AAC audio) into
-   your save folder and reveals it in Finder. **Esc discards** the recording after a
-   confirmation — the take is deleted, nothing is saved.
+   three work on any connected display. An optional **countdown** (3/5/10 s,
+   Settings → Video) counts down over the region before frames start.
+3. Recording starts right away — the shareable-content lookup is prefetched while
+   you drag, so the timer starts moving almost immediately. The floating bar
+   (live timer, estimated file size, quality badge, pause/stop) starts
+   **minimized to the menu bar** by default; use **Show Recording Bar** in the
+   menu to reveal it, or turn the default off in **Settings → Video**. When
+   visible, drag anywhere on the bar's background to move it (open-hand cursor).
+4. **Stop** — press `⌃⇧R` again (the record hotkey toggles), click **Stop** on the
+   bar, or use the menu's **Stop Recording**. The `.mp4` (HEVC video, optional AAC
+   audio) finalizes into your save folder and the [History](#history) panel opens
+   with it on top. Two more stop variants live in the menu:
+   - **Stop & Save as GIF** — converts the take to a looping 10 fps GIF (capped at
+     960 px) and keeps only the GIF; the menu-bar icon shows **GIF…** while it
+     converts.
+   - **Stop & Trim…** — opens a trim panel with a live preview and draggable
+     in/out handles; **Save** cuts losslessly (no re-encode) over the file.
+5. **Discard** — `⌥` + the record hotkey (`⌥⌃⇧R` by default), the menu's
+   **Discard Recording**, or **Esc** while the bar is visible; a confirmation
+   protects the take. (**Esc**/**Return** work only while the bar is shown and
+   focused — with the bar minimized, use the hotkeys or the menu.)
 
 **Knowing it's recording, and controlling it from the menu bar:** while recording, the
 menu-bar **m.** icon becomes a **red dot with a live timer** (grey "Paused" when
-paused). Click the **–** button on the floating bar to **minimize** it to the menu bar;
-you can then **Pause / Resume / Stop** — and **Show Recording Bar** — from the menu.
+paused); the whole flow — stop (plain, GIF, trim), discard, pause/resume, show the
+bar — is available from the menu.
 
-Quality and the audio source (system, microphone, or both) live in
-**Settings → Video**. If the microphone is requested but permission is denied, the
-recording continues without the mic track. Quitting the app mid-recording still
-finalizes a playable file.
+Quality, **frame rate** (30 or 60 fps), the countdown, a **mouse-click ripple**
+overlay (clicks show as expanding rings in the video), the minimized-bar default,
+and the audio source live in **Settings → Video**. Audio defaults to **None** —
+opt into system audio, the microphone, or both. If the microphone is requested but
+permission is denied, the recording continues without the mic track. Quitting the
+app mid-recording still finalizes a playable file, and if the recorded display is
+disconnected the recording stops itself and saves the partial file.
 
 ---
 
@@ -123,9 +152,10 @@ the clusters gather into one draggable panel so they never cover the image.
 | Overlay image  |  —   | Add an image — paste (`⌘V`), drop a file, or click to choose (with an opacity slider). |
 | Copy text / QR | `⌘T` | OCR — drag over text or a QR code to recognize & copy it.                              |
 
-**Shapes** — drag to draw; all hollow outlines. A just-drawn shape stays live with its
-handles showing, so you can resize or move it (or press `⌫` to remove it) without
-switching tools.
+**Shapes** — drag to draw; all hollow outlines. Shapes, arrows and lines are
+**drag-only**: a bare click places nothing, so stray clicks never litter the
+canvas. A just-drawn shape stays live with its handles showing, so you can resize
+or move it (or press `⌫` to remove it) without switching tools.
 
 | Tool              | Key | Tool      | Key |
 |-------------------|:---:|-----------|:---:|
@@ -169,8 +199,8 @@ Save and Pin (OCR always uses the un-framed image).
 |-------------------|------------------------------------------------------|
 | `⌘Z` / `⇧⌘Z`      | Undo / Redo                                          |
 | `⌘C`              | Copy to clipboard & close                            |
-| `⌘S`              | Save to your save folder & close                     |
-| `⇧⌘S`             | Save As… — choose location & close                   |
+| `⌘S`              | Save to your save folder & close (opens History)     |
+| `⇧⌘S`             | Save As… — choose location & close (opens History)   |
 | `⌘T`              | Copy text / QR (OCR) — then drag over text or a code |
 | `⌘P`              | Pin to screen & close                                |
 | `↵`               | Apply a pending crop                                 |
@@ -182,20 +212,46 @@ Save and Pin (OCR always uses the un-framed image).
 
 ---
 
+## History
+
+**History** in the menu opens a panel with the **24 newest captures** from the
+save folder — screenshots and recordings alike, newest first, as thumbnail cards
+showing the filename, capture date, and a play badge on videos. The panel sizes
+itself to what's there (fewer files, smaller panel) and also opens automatically
+whenever a recording finishes or the editor saves a capture.
+
+Hover a card for its actions:
+
+| Action               | Applies to | What it does                                                        |
+|----------------------|:----------:|----------------------------------------------------------------------|
+| **Copy**             |    all     | Image to the clipboard (videos copy the file); confirms with a toast. |
+| **Pin to screen**    |   images   | Float it always-on-top, like the editor's Pin.                       |
+| **Trim**             |   videos   | Open the lossless trim panel on that recording.                      |
+| **Reveal in Finder** |    all     | Select the file in Finder.                                           |
+| **Move to Trash**    |    all     | Asks first, then trashes the file and confirms with a toast.         |
+
+**Double-click** a card to open the file in its default app. History is a live
+view over the save folder — files moved elsewhere simply don't appear.
+
+---
+
 ## Settings
 
-Open **Settings** from the menu. Options are grouped into **General**,
-**Shortcuts**, **Capture**, **Output** and **Video**. Info dots (ⓘ) next to the less
-obvious rows explain what they do.
+Open **Settings** from the menu. It's an icon **sidebar** — **General**,
+**Shortcuts**, **Capture**, **Output**, **Video** and **About** — showing one
+section at a time in a fixed-size panel. Info dots (ⓘ) next to the less obvious
+rows explain what they do.
 
 <p align="center">
-  <img src="docs/assets/settings.png" alt="The dark, brand-styled Settings panel with the General, Shortcuts, Capture and Output groups" height="480">
+  <img src="docs/assets/settings.png" alt="The dark, brand-styled Settings panel with an icon sidebar and the active section's rows" height="480">
   <br>
-  <em>The Settings panel — General, Shortcuts, Capture and Output groups.</em>
+  <em>The Settings panel — an icon sidebar with one section shown at a time.</em>
 </p>
 
-- **General** — launch at login; capture delay (with menu-bar countdown);
-  after-capture behavior (open editor / save to file / copy to clipboard).
+- **General** — **language** (System / English / Deutsch / Tiếng Việt — the whole
+  UI is localized; changing it offers an immediate restart to apply); launch at
+  login; capture delay (with menu-bar countdown); after-capture behavior (open
+  editor / save to file / copy to clipboard).
 - **Shortcuts** — rebind the **Screenshot**, **Record**, **Quick Screen** and
   **Force Quit** hotkeys (click a field, press the new combination).
 - **Capture** — include the mouse cursor; play the shutter sound (off by default);
@@ -203,7 +259,11 @@ obvious rows explain what they do.
 - **Output** — save location; filename prefix (default `m_capture_`); image format
   (PNG / JPEG / HEIC / TIFF); background padding and corner radius (Square →
   Large); default editor background; also copy to clipboard when saving.
-- **Video** — recording quality and the audio source (system / microphone / both).
+- **Video** — recording quality; audio source (**None** by default / system /
+  microphone / both); frame rate (30 or 60 fps); start countdown (Off / 3 / 5 /
+  10 s); show mouse clicks in recordings; start with the recording bar minimized.
+- **About** — the app card (logo, version, MIT license · © mesoneer AG) with
+  **Usage Guide** and **Report a Bug** buttons.
 
 Settings persist across launches and apply to the editor's **Save**, the
 pinned-window **Save**, and **Library**. Files are named
@@ -225,4 +285,5 @@ Recording**, then relaunch. Hotkeys use Carbon and need no extra permission.
 | Hotkeys do nothing                    | Another app may own them, or `m_capture` isn't running — relaunch it.                                                                                                                                                                                                          |
 | "App can't be opened" on first launch | Not notarized. Install to `~/Applications`, then run `cd ~/Applications && xattr -dr com.apple.quarantine m_capture.app` before opening.                                                                                                                                       |
 | No menu-bar icon                      | The menu bar may be hidden (notch / menu-bar hider) — click the **m.** Dock icon to drop the menu; if there's no Dock icon either, the app isn't running, so launch `m_capture.app` again.                                                                                       |
-| Can't find a saved screenshot         | Use **Library** to open the save folder.                                                                                                                                                                                                                                       |
+| Can't find a saved screenshot         | Use **History** for the newest captures, or **Library** to open the save folder.                                                                                                                                                                                                |
+| Hotkeys stop responding after a display change | Fixed captures time out and recover on their own; if a hotkey still does nothing, the editor may be open on another display — close it, or relaunch the app.                                                                                                            |

@@ -10,6 +10,22 @@ final class ScreenshotController {
     static let shared = ScreenshotController()
     private var overlays: [OverlayWindow] = []
 
+    /// True while the drag-to-select overlay is on screen. `Updater` checks this so a
+    /// background-update alert never opens underneath the full-screen overlays.
+    var isSelecting: Bool { !overlays.isEmpty }
+
+    /// A display appearing or vanishing mid-selection leaves overlays sized/positioned
+    /// for a screen layout that no longer exists (or covering a gone display) — tear
+    /// the selection down rather than leaving stale dim windows up.
+    private init() {
+        NotificationCenter.default.addObserver(
+            forName: NSApplication.didChangeScreenParametersNotification,
+            object: nil, queue: .main) { [weak self] _ in
+            guard let self, !self.overlays.isEmpty else { return }
+            self.dismiss()
+        }
+    }
+
     /// True from the moment a capture starts (overlay shown, or a quick-screen
     /// grab kicked off) until it's fully handed off to `deliver`, plus for as
     /// long as an editor window from a prior capture is still open. `overlays`
@@ -26,6 +42,7 @@ final class ScreenshotController {
             ScreenRecordingPermission.handleDenied()
             return
         }
+        AppPanels.closeAll()   // no app panel should sit under (or in) the shot
 
         let mouse = NSEvent.mouseLocation
         let keyScreen = NSScreen.screens.first { $0.frame.contains(mouse) }
@@ -35,8 +52,10 @@ final class ScreenshotController {
         // Space to toggle mode).
         NSApp.activate(ignoringOtherApps: true)
         let coordinator = OverlayCoordinator()
+        let last = Settings.shared.lastRegion
         for screen in NSScreen.screens {
-            let win = OverlayWindow(screen: screen, coordinator: coordinator)
+            let win = OverlayWindow(screen: screen, coordinator: coordinator,
+                                    previousRect: screen.displayID == last?.displayID ? last?.rect : nil)
             win.onComplete = { [weak self] viewRect in
                 self?.finish(viewRect: viewRect, screen: screen, showsCursor: Settings.shared.captureCursor)
             }
@@ -67,6 +86,7 @@ final class ScreenshotController {
             ScreenRecordingPermission.handleDenied()
             return
         }
+        AppPanels.closeAll()
         let mouse = NSEvent.mouseLocation
         let screen = NSScreen.screens.first { $0.frame.contains(mouse) }
             ?? NSScreen.main ?? NSScreen.screens[0]
@@ -175,15 +195,15 @@ final class ScreenshotController {
             let ok = Settings.shared.encode(rep).map { (try? $0.write(to: url)) != nil } ?? false
             DispatchQueue.main.async {
                 if !ok {
-                    _ = BrandAlert(title: "Couldn't save the capture",
-                                   message: "Saving failed. Check your save folder in Settings → Output.",
-                                   titles: ["OK"], primary: 0, cancel: 0,
-                                   icon: "exclamationmark.triangle").runModal()
+                    BrandAlert(title: L("Unable to save the capture"),
+                               message: L("Saving failed. Check your save folder in Settings → Output."),
+                               titles: ["OK"], primary: 0, cancel: 0,
+                               icon: "exclamationmark.triangle").present()
                 } else if fellBack {
-                    _ = BrandAlert(title: "Saved to the Desktop",
-                                   message: "Your save folder wasn't available, so this went to the Desktop. Update it in Settings → Output.",
-                                   titles: ["OK"], primary: 0, cancel: 0,
-                                   icon: "folder.badge.questionmark").runModal()
+                    BrandAlert(title: L("Saved to the Desktop"),
+                               message: L("The save folder was unavailable; the file was saved to the Desktop. Update it in Settings → Output."),
+                               titles: ["OK"], primary: 0, cancel: 0,
+                               icon: "folder.badge.questionmark").present()
                 }
             }
         }
@@ -212,8 +232,35 @@ final class ScreenshotController {
     /// Returns the exact scale alongside the image: the editor needs this same
     /// authoritative value rather than re-deriving it from the selection rect (see
     /// `EditorWindowController.init`).
+    /// Race an async ScreenCaptureKit operation against a deadline. `SCShareableContent`
+    /// / `SCScreenshotManager` can stall indefinitely right after a display-configuration
+    /// change (a monitor plugged/unplugged, display sleep). Without a bound, the awaiting
+    /// caller never resumes, `capturePending` stays `true`, and every later hotkey press
+    /// is silently swallowed by `isBusy` until relaunch — a permanent perceived freeze.
+    private static func withTimeout<T: Sendable>(
+        seconds: TimeInterval, _ op: @escaping @Sendable () async -> T?) async -> T? {
+        await withTaskGroup(of: T?.self) { group in
+            group.addTask { await op() }
+            group.addTask {
+                try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+                return nil
+            }
+            let first = await group.next() ?? nil
+            group.cancelAll()
+            return first
+        }
+    }
+
     private static func captureRegion(displayID: CGDirectDisplayID, sourceRect: CGRect,
                                       showsCursor: Bool) async -> (cg: CGImage, scale: CGFloat)? {
+        await withTimeout(seconds: 10) {
+            await captureRegionUnbounded(displayID: displayID, sourceRect: sourceRect,
+                                         showsCursor: showsCursor)
+        }
+    }
+
+    private static func captureRegionUnbounded(displayID: CGDirectDisplayID, sourceRect: CGRect,
+                                               showsCursor: Bool) async -> (cg: CGImage, scale: CGFloat)? {
         do {
             let content = try await SCShareableContent.current
             guard let display = content.displays.first(where: { $0.displayID == displayID }) else { return nil }
@@ -245,6 +292,18 @@ final class ScreenshotController {
     /// global frame and hosting screen, which the editor uses to place its live canvas.
     private static func captureWindow(windowID: CGWindowID, showsCursor: Bool)
         async -> (cg: CGImage, scale: CGFloat, globalRect: CGRect, screen: NSScreen)? {
+        // Resolve the hosting NSScreen outside the timeout race: NSScreen is
+        // explicitly non-Sendable, so it can't cross the task-group boundary.
+        guard let r = await withTimeout(seconds: 10, {
+            await captureWindowUnbounded(windowID: windowID, showsCursor: showsCursor)
+        }) else { return nil }
+        let screen = NSScreen.screens.first { $0.frame.intersects(r.globalRect) }
+            ?? NSScreen.main ?? NSScreen.screens[0]
+        return (r.cg, r.scale, r.globalRect, screen)
+    }
+
+    private static func captureWindowUnbounded(windowID: CGWindowID, showsCursor: Bool)
+        async -> (cg: CGImage, scale: CGFloat, globalRect: CGRect)? {
         do {
             let content = try await SCShareableContent.current
             guard let scWindow = content.windows.first(where: { $0.windowID == windowID }) else { return nil }
@@ -256,11 +315,10 @@ final class ScreenshotController {
             config.showsCursor = showsCursor
             config.captureResolution = .best
             let cg = try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: config)
-            // SCWindow.frame is CG global (top-left). Flip into AppKit space and pick the
-            // screen it mostly lives on for the editor backdrop.
+            // SCWindow.frame is CG global (top-left). Flip into AppKit space; the caller
+            // picks the hosting screen for the editor backdrop.
             let appKit = WindowList.appKitRect(fromCG: scWindow.frame)
-            let screen = NSScreen.screens.first { $0.frame.intersects(appKit) } ?? NSScreen.main ?? NSScreen.screens[0]
-            return (cg, scale, appKit, screen)
+            return (cg, scale, appKit)
         } catch {
             return nil
         }
@@ -287,6 +345,10 @@ final class ScreenshotController {
     }
 
     private func finish(viewRect: CGRect, screen: NSScreen, showsCursor: Bool) {
+        // A real region drag (not whole-screen) becomes the re-offerable "last region".
+        if viewRect.size != screen.frame.size, let id = screen.displayID {
+            Settings.shared.lastRegion = (viewRect, id)
+        }
         let global = CGRect(x: screen.frame.minX + viewRect.minX,
                             y: screen.frame.minY + viewRect.minY,
                             width: viewRect.width, height: viewRect.height)
@@ -343,6 +405,14 @@ extension ScreenshotController {
     /// the real content behind it. `sourceRect` is display-local, top-left origin (points).
     static func recaptureRegion(displayID: CGDirectDisplayID, sourceRect: CGRect,
                                 excluding windowIDs: [CGWindowID]) async -> (cg: CGImage, scale: CGFloat)? {
+        await withTimeout(seconds: 10) {
+            await recaptureRegionUnbounded(displayID: displayID, sourceRect: sourceRect,
+                                           excluding: windowIDs)
+        }
+    }
+
+    private static func recaptureRegionUnbounded(displayID: CGDirectDisplayID, sourceRect: CGRect,
+                                                 excluding windowIDs: [CGWindowID]) async -> (cg: CGImage, scale: CGFloat)? {
         do {
             let content = try await SCShareableContent.current
             guard let display = content.displays.first(where: { $0.displayID == displayID }) else { return nil }

@@ -25,38 +25,52 @@ final class BrandAlert: NSObject {
         self.cancelIndex = cancel
         self.result = cancel
 
-        let side: CGFloat = 26
-        // Width the message needs to lay out on a single line (up to a cap), so short
-        // confirmations like "Discard capture?" read as one tidy line instead of
-        // wrapping under the fixed 260 pt column.
-        let minContentWidth: CGFloat = 260, maxContentWidth: CGFloat = 420
-        let titleFont = Theme.font(17, .bold), msgFont = Theme.font(13)
+        // Native-alert composition: icon badge on the left, left-aligned title and
+        // message beside it, buttons bottom-right — the shape people's eyes already
+        // know from NSAlert, in brand colors. (The old centered stack read slower.)
+        let side: CGFloat = 22
+        let iconSize: CGFloat = 40, gIconText: CGFloat = 14
+        let textX: CGFloat = icon != nil ? side + iconSize + gIconText : side
+        let minTextWidth: CGFloat = 280, maxTextWidth: CGFloat = 380
+        let titleFont = Theme.font(14, .bold), msgFont = Theme.font(12)
         let neededWidth = max(BrandAlert.singleLineWidth(title, font: titleFont),
                               BrandAlert.singleLineWidth(message, font: msgFont))
         // +8 pt slack: a wrapping label reserves a few points of internal padding, so it
         // flows onto a second line unless its width clears the single-line text width by
-        // that margin (see `wrapping`). Pad past the measured width to keep short messages
-        // like the relaunch prompt on one tidy line.
-        let contentWidth = min(max(minContentWidth, ceil(neededWidth) + 8), maxContentWidth)
-        let panelWidth = contentWidth + side * 2
-        let topMargin: CGFloat = 26
-        let iconSize: CGFloat = 52, gIconTitle: CGFloat = 16
-        let gTitleMsg: CGFloat = 8, gMsgButtons: CGFloat = 20
-        let buttonH: CGFloat = 36, bottom: CGFloat = 26
+        // that margin (see `wrapping`).
+        var textWidth = min(max(minTextWidth, ceil(neededWidth) + 8), maxTextWidth)
+        // The button row must also fit: buttons are right-aligned under the text.
+        let btnFont = Theme.font(13, .semibold)   // matches BrandButton's title font
+        let btnWidths = titles.map { max(84, ceil(($0 as NSString).size(withAttributes: [.font: btnFont]).width) + 32) }
+        let btnGap: CGFloat = 8
+        let btnRowWidth = btnWidths.reduce(0, +) + btnGap * CGFloat(max(0, titles.count - 1))
+        textWidth = max(textWidth, btnRowWidth)
+        let panelWidth = textX + textWidth + side
+        let topMargin: CGFloat = 20
+        let gTitleMsg: CGFloat = 5, gMsgButtons: CGFloat = 18
+        let buttonH: CGFloat = 30, bottom: CGFloat = 18
 
         let titleField = BrandAlert.wrapping(title, font: titleFont,
-                                             color: Theme.textPrimary, width: contentWidth)
+                                             color: Theme.textPrimary, width: textWidth)
         let msgField = BrandAlert.wrapping(message, font: msgFont,
-                                           color: Theme.textMuted, width: contentWidth)
+                                           color: Theme.textMuted, width: textWidth)
         let titleH = titleField.frame.height, msgH = msgField.frame.height
-        let iconH: CGFloat = icon != nil ? iconSize + gIconTitle : 0
 
-        let height = topMargin + iconH + titleH + gTitleMsg + msgH + gMsgButtons + buttonH + bottom
+        let textBlock = titleH + gTitleMsg + msgH
+        // The icon column never dictates extra height unless the text is shorter
+        // than the badge.
+        let bodyH = max(textBlock, icon != nil ? iconSize : 0)
+        let height = topMargin + bodyH + gMsgButtons + buttonH + bottom
         let size = NSSize(width: panelWidth, height: ceil(height))
 
         panel = AlertPanel(contentRect: NSRect(origin: .zero, size: size),
                            styleMask: .borderless, backing: .buffered, defer: false)
         panel.isReleasedWhenClosed = false
+        // Above the capture overlays (`.screenSaver`): an alert at the default `.normal`
+        // level that fires while an overlay dims every display opens *underneath* it —
+        // invisible and unclickable while `runModal` holds the app, which reads as a
+        // total freeze. Alerts are rare and modal, so always-on-top is the safe default.
+        panel.level = NSWindow.Level(rawValue: NSWindow.Level.screenSaver.rawValue + 2)
         panel.appearance = NSAppearance(named: .darkAqua)
         panel.backgroundColor = Theme.surfaceBase
         panel.hasShadow = true
@@ -67,39 +81,37 @@ final class BrandAlert: NSObject {
 
         super.init()
 
-        var top = size.height - topMargin
+        let top = size.height - topMargin
 
+        // Icon badge tops-aligned with the title, in its own left column.
         if let icon {
             let badge = BrandAlert.iconBadge(icon, size: iconSize)
-            badge.setFrameOrigin(NSPoint(x: (size.width - iconSize) / 2, y: top - iconSize))
+            badge.setFrameOrigin(NSPoint(x: side, y: top - iconSize))
             content.addSubview(badge)
-            top -= iconSize + gIconTitle
         }
 
-        titleField.setFrameOrigin(NSPoint(x: side, y: top - titleH))
+        titleField.setFrameOrigin(NSPoint(x: textX, y: top - titleH))
         content.addSubview(titleField)
-        top -= titleH + gTitleMsg
-
-        msgField.setFrameOrigin(NSPoint(x: side, y: top - msgH))
+        msgField.setFrameOrigin(NSPoint(x: textX, y: top - titleH - gTitleMsg - msgH))
         content.addSubview(msgField)
-        top -= msgH + gMsgButtons
 
-        let font = Theme.font(13, .semibold)
-        let widths = titles.map { max(92, ceil(($0 as NSString).size(withAttributes: [.font: font]).width) + 36) }
-        let gap: CGFloat = 10
-        let rowWidth = widths.reduce(0, +) + gap * CGFloat(max(0, titles.count - 1))
-        var x = (size.width - rowWidth) / 2
-        let rowY = top - buttonH
-        for (i, t) in titles.enumerated() {
+        // Buttons bottom-right in macOS order regardless of the order call sites
+        // pass them: the primary (Return) action rightmost, cancel immediately to
+        // its left, anything else further left. Enforced here so every dialog in
+        // the app reads consistently; tags keep the caller's original indices.
+        func rank(_ i: Int) -> Int { i == primary ? 2 : (i == cancel ? 1 : 0) }
+        let layoutOrder = titles.indices.sorted { (rank($0), $0) < (rank($1), $1) }
+        var x = size.width - side - btnRowWidth
+        for i in layoutOrder {
             let kind: BrandButton.Kind = destructive.contains(i) ? .destructive : (i == primary ? .primary : .secondary)
-            let b = BrandButton(title: t, kind: kind)
-            b.frame = NSRect(x: x, y: rowY, width: widths[i], height: buttonH)
+            let b = BrandButton(title: titles[i], kind: kind)
+            b.frame = NSRect(x: x, y: bottom, width: btnWidths[i], height: buttonH)
             b.tag = i
             b.target = self
             b.action = #selector(buttonClicked(_:))
             if i == primary { b.keyEquivalent = "\r" }
             content.addSubview(b)
-            x += widths[i] + gap
+            x += btnWidths[i] + btnGap
         }
 
         panel.contentView = content
@@ -130,6 +142,10 @@ final class BrandAlert: NSObject {
     }
 
     /// Show the panel modally and return the index of the button the user chose.
+    /// Reserve this for user-initiated flows that genuinely can't continue without
+    /// an answer; anything fired from a background context (updater, async save
+    /// failures) must use `present` — a nested `NSApp.runModal` from a callback
+    /// freezes whatever run loop it lands on.
     @discardableResult
     func runModal() -> Int {
         panel.center()
@@ -140,11 +156,32 @@ final class BrandAlert: NSObject {
         return result
     }
 
+    /// Non-modal presentation: shows the panel and returns immediately; `completion`
+    /// gets the clicked button index (the cancel index on Esc/close). The alert
+    /// retains itself while on screen.
+    private var presentCompletion: ((Int) -> Void)?
+    private static var presented: [BrandAlert] = []
+    func present(completion: ((Int) -> Void)? = nil) {
+        presentCompletion = completion
+        Self.presented.append(self)
+        panel.center()
+        panel.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
     @objc private func buttonClicked(_ sender: NSButton) { dismiss(with: sender.tag) }
 
     private func dismiss(with index: Int) {
         result = index
-        NSApp.stopModal(withCode: NSApplication.ModalResponse(rawValue: index))
+        if NSApp.modalWindow == panel {
+            NSApp.stopModal(withCode: NSApplication.ModalResponse(rawValue: index))
+        } else {
+            panel.orderOut(nil)
+            Self.presented.removeAll { $0 === self }
+            let done = presentCompletion
+            presentCompletion = nil
+            done?(index)
+        }
     }
 
     /// The width `text` needs to render on a single line in `font`.
@@ -157,7 +194,7 @@ final class BrandAlert: NSObject {
         let f = NSTextField(wrappingLabelWithString: text)
         f.font = font
         f.textColor = color
-        f.alignment = .center
+        f.alignment = .natural   // native-alert layout: text reads left-aligned
         f.preferredMaxLayoutWidth = width
         // Take the height from the field's own layout, not an independent `boundingRect`:
         // the two measurement paths disagree at the margin, so a `boundingRect` one-line
@@ -180,7 +217,8 @@ private final class AlertPanel: NSWindow {
 /// A brand-styled pill button: `primary` is a solid `accentPurple` fill (white
 /// text); `secondary` is a quiet hairline-bordered button that fills on hover;
 /// `destructive` is a solid accent-red fill for actions like Discard/Delete.
-private final class BrandButton: NSButton {
+/// Internal (not private) so other brand panels — e.g. the trim window — reuse it.
+final class BrandButton: NSButton {
     enum Kind { case primary, secondary, destructive }
     private let kind: Kind
     private var hovering = false { didSet { if hovering != oldValue { needsDisplay = true } } }

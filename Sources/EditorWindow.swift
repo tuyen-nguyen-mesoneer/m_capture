@@ -338,80 +338,80 @@ final class EditorWindowController: NSObject {
         }
 
         let overlayBtn = ToolButton(style: .tool("photo"), target: self, action: #selector(overlayPressed))
-        overlayBtn.tip = "Overlay image — paste (⌘V), drop a file, or click to choose"
+        overlayBtn.tip = L("Overlay image — paste (⌘V), drop a file, or click to choose")
         wireHover(overlayBtn); toolButtons[.overlay] = overlayBtn
 
         let counterBtn = ToolButton(style: .counterGlyph, target: self, action: #selector(counterPressed))
-        counterBtn.tip = "Counter — place numbered badges (click again to change format)  (C)"
+        counterBtn.tip = L("Counter — place numbered badges (click again to change format)  (C)")
         wireHover(counterBtn); toolButtons[.counter] = counterBtn; counterFormatButton = counterBtn
         let emojiBtn = ToolButton(style: .text(canvas.currentEmoji), target: self, action: #selector(emojiPressed))
-        emojiBtn.tip = "Emoji — stamp an emoji (click to choose)"; wireHover(emojiBtn)
+        emojiBtn.tip = L("Emoji — stamp an emoji (click to choose)"); wireHover(emojiBtn)
         emojiButton = emojiBtn; toolButtons[.emoji] = emojiBtn
 
-        let draw = makeCluster("Markup", [
-            toolButton(.pencil, "pencil", "Pencil — freehand draw  (P)"),
-            toolButton(.marker, "highlighter", "Highlighter — translucent highlight  (H)"),
-            toolButton(.eraser, "eraser", "Eraser — click a mark to remove it  (E)"),
-            toolButton(.text, .text("T"), "Text — click and type a label  (T)"),
-            toolButton(.blur, .mosaic, "Blur — soften an area to hide sensitive info  (B)"),
-            toolButton(.spotlight, .spotlightGlyph, "Spotlight — dim everything around an area  (S)"),
+        let draw = makeCluster(L("Markup"), [
+            toolButton(.pencil, "pencil", L("Pencil — freehand draw  (P)")),
+            toolButton(.marker, "highlighter", L("Highlighter — translucent highlight  (H)")),
+            toolButton(.eraser, "eraser", L("Eraser — click a mark to remove it  (E)")),
+            toolButton(.text, .text("T"), L("Text — click and type a label  (T)")),
+            toolButton(.blur, .mosaic, L("Blur — obscure sensitive content  (B)")),
+            toolButton(.spotlight, .spotlightGlyph, L("Spotlight — dim everything around an area  (S)")),
             counterBtn,
             emojiBtn,
-            toolButton(.zoom, "plus.magnifyingglass", "Zoom — magnify a region into a callout  (Z)"),
-            toolButton(.ruler, "ruler", "Ruler — drag to measure  (hold ⇧ to snap horizontal/vertical)"),
+            toolButton(.zoom, "plus.magnifyingglass", L("Zoom — magnify a region into a callout  (Z)")),
+            toolButton(.ruler, "ruler", L("Ruler — drag to measure  (hold ⇧ to snap horizontal/vertical)")),
             overlayBtn,
-            actionButton("text.viewfinder", "Copy text / QR (OCR) — drag over text or a QR code  (⌘T)", key: "t", mods: [.command], #selector(copyTextPressed))], perRow: 4)
-        let shapes = makeCluster("Shape", [
-            toolButton(.arrow, "arrow.up.right", "Arrow — point at something  (A)"),
-            toolButton(.line, "line.diagonal", "Line — straight line  (L)"),
-            toolButton(.rect, "rectangle", "Rectangle — box outline  (R)"),
-            toolButton(.ellipse, "circle", "Ellipse — oval outline  (O)"),
-            toolButton(.roundedRect, .roundedSquare, "Rounded rectangle — rounded box  (U)"),
-            toolButton(.triangle, "triangle", "Triangle — triangle outline  (G)"),
-            toolButton(.diamond, "diamond", "Diamond — diamond outline  (D)"),
-            toolButton(.star, "star", "Star — 5-point star outline  (Y)"),
-            toolButton(.checkmark, "checkmark", "Checkmark — check mark  (K)"),
-            toolButton(.pentagon, "pentagon", "Pentagon — 5-sided outline  (5)"),
-            toolButton(.hexagon, "hexagon", "Hexagon — 6-sided outline  (6)"),
-            toolButton(.octagon, "octagon", "Octagon — 8-sided outline  (8)")], perRow: 4)
+            actionButton("text.viewfinder", L("Copy text / QR (OCR) — drag over text or a QR code  (⌘T)"), key: "t", mods: [.command], #selector(copyTextPressed))], perRow: 4)
+        let shapes = makeCluster(L("Shape"), [
+            toolButton(.arrow, "arrow.up.right", L("Arrow — point to an area  (A)")),
+            toolButton(.line, "line.diagonal", L("Line — straight line  (L)")),
+            toolButton(.rect, "rectangle", L("Rectangle — box outline  (R)")),
+            toolButton(.ellipse, "circle", L("Ellipse — oval outline  (O)")),
+            toolButton(.roundedRect, .roundedSquare, L("Rounded rectangle — rounded box  (U)")),
+            toolButton(.triangle, "triangle", L("Triangle — triangle outline  (G)")),
+            toolButton(.diamond, "diamond", L("Diamond — diamond outline  (D)")),
+            toolButton(.star, "star", L("Star — 5-point star outline  (Y)")),
+            toolButton(.checkmark, "checkmark", L("Checkmark — check mark  (K)")),
+            toolButton(.pentagon, "pentagon", L("Pentagon — 5-sided outline  (5)")),
+            toolButton(.hexagon, "hexagon", L("Hexagon — 6-sided outline  (6)")),
+            toolButton(.octagon, "octagon", L("Octagon — 8-sided outline  (8)"))], perRow: 4)
 
         let colorR: CGFloat = 14
         let eyedropper = ToolButton(style: .tool("eyedropper"), radius: colorR,
                                    target: self, action: #selector(toolPressed(_:)))
-        eyedropper.tip = "Eyedropper — pick a color from the image  (I)"; wireHover(eyedropper)
+        eyedropper.tip = L("Eyedropper — pick a color from the image  (I)"); wireHover(eyedropper)
         toolButtons[.eyedropper] = eyedropper
         var colorTiles: [ToolButton] = [eyedropper]
         for (i, entry) in palette.enumerated() {
             let b = ToolButton(style: .swatch(entry.0), radius: colorR, target: self, action: #selector(swatchPressed(_:)))
-            b.tag = i; b.tip = "\(entry.1) color"; wireHover(b)
+            b.tag = i; b.tip = String(format: L("%@ color"), L(entry.1)); wireHover(b)
             swatchButtons.append(b); colorTiles.append(b)
         }
         let plus = ToolButton(style: .plusGlyph, radius: colorR, target: self, action: #selector(customColorPressed))
-        plus.tip = "Custom color — pick any hue"; wireHover(plus)
+        plus.tip = L("Custom color — pick any hue"); wireHover(plus)
         plusButton = plus
         colorTiles.append(plus)
         // One cycling stroke-width tile completes a tidy 3×4 grid (9 swatches +
         // eyedropper + custom + width), matching every other cluster's footprint.
         let widthTile = ToolButton(style: .lineWeight(widthDisplay[currentWidth]), radius: colorR,
                                    target: self, action: #selector(widthPressed))
-        widthTile.tip = "Stroke width: \(widthLabels[currentWidth]) — click to cycle"
+        widthTile.tip = String(format: L("Stroke width: %@ — click to cycle"), widthLabels[currentWidth])
         widthTile.activeLineWeightIndex = currentWidth
         wireHover(widthTile); widthButton = widthTile; colorTiles.append(widthTile)
-        let color = makeCluster("Style", colorTiles, perRow: 4, radius: colorR)
+        let color = makeCluster(L("Style"), colorTiles, perRow: 4, radius: colorR)
 
-        let actions = makeCluster("Action", [
-            toolButton(.select, "cursorarrow", "Move — drag an object to reposition, drag its corner to resize, ⌫ to delete  (V)"),
-            toolButton(.crop, "crop", "Crop — drag a region, then ↵ or ✓"),
-            actionButton("rotate.right", "Rotate right 90°", key: "", mods: [], #selector(rotateRightPressed)),
-            actionButton("arrow.left.and.right.righttriangle.left.righttriangle.right", "Flip horizontal", key: "", mods: [], #selector(flipHorizontalPressed)),
-            actionButton("arrow.uturn.backward", "Undo  (⌘Z)", key: "z", mods: [.command], #selector(undoPressed)),
-            actionButton("arrow.uturn.forward", "Redo  (⇧⌘Z)", key: "z", mods: [.command, .shift], #selector(redoPressed)),
-            actionButton("pin", "Pin to screen — keep on top  (⌘P)", key: "p", mods: [.command], #selector(pinPressed)),
-            actionButton("photo.stack", "Before/After GIF — animate overlays on/off", key: "", mods: [], #selector(beforeAfterPressed)),
-            actionButton("doc.on.doc", "Copy & close  (⌘C)", key: "c", mods: [.command], #selector(copyPressed)),
-            actionButton("square.and.arrow.down", "Save & close  (⌘S)", key: "s", mods: [.command], #selector(savePressed)),
-            actionButton("square.and.arrow.down.on.square", "Save As… — choose location  (⇧⌘S)", key: "s", mods: [.command, .shift], #selector(saveAsPressed)),
-            actionButton("xmark", "Cancel  (Esc)", key: "\u{1b}", mods: [], #selector(closePressed))], perRow: 4)
+        let actions = makeCluster(L("Action"), [
+            toolButton(.select, "cursorarrow", L("Move — drag an object to reposition, drag its corner to resize, ⌫ to delete  (V)")),
+            toolButton(.crop, "crop", L("Crop — drag a region, then ↵ or ✓")),
+            actionButton("rotate.right", L("Rotate right 90°"), key: "", mods: [], #selector(rotateRightPressed)),
+            actionButton("arrow.left.and.right.righttriangle.left.righttriangle.right", L("Flip horizontal"), key: "", mods: [], #selector(flipHorizontalPressed)),
+            actionButton("arrow.uturn.backward", L("Undo  (⌘Z)"), key: "z", mods: [.command], #selector(undoPressed)),
+            actionButton("arrow.uturn.forward", L("Redo  (⇧⌘Z)"), key: "z", mods: [.command, .shift], #selector(redoPressed)),
+            actionButton("pin", L("Pin to screen — keep on top  (⌘P)"), key: "p", mods: [.command], #selector(pinPressed)),
+            actionButton("photo.stack", L("Before/After GIF — animate overlays on/off"), key: "", mods: [], #selector(beforeAfterPressed)),
+            actionButton("doc.on.doc", L("Copy & close  (⌘C)"), key: "c", mods: [.command], #selector(copyPressed)),
+            actionButton("square.and.arrow.down", L("Save & close  (⌘S)"), key: "s", mods: [.command], #selector(savePressed)),
+            actionButton("square.and.arrow.down.on.square", L("Save As… — choose location  (⇧⌘S)"), key: "s", mods: [.command, .shift], #selector(saveAsPressed)),
+            actionButton("xmark", L("Cancel  (Esc)"), key: "\u{1b}", mods: [], #selector(closePressed))], perRow: 4)
 
         let bgR: CGFloat = 14
         var bgTiles: [ToolButton] = []
@@ -419,15 +419,15 @@ final class EditorWindowController: NSObject {
             let tileStyle: ToolButton.Style = style.isNone ? .noneGlyph : .swatch(style.swatch)
             let b = ToolButton(style: tileStyle, radius: bgR, target: self, action: #selector(backgroundPressed(_:)))
             b.tag = i
-            b.tip = style.isNone ? "None" : style.name
+            b.tip = style.isNone ? L("None") : L(style.name)
             b.selectedState = (style.name == currentBackground.name)
             wireHover(b); bgButtons.append(b); bgTiles.append(b)
         }
         let bgPlus = ToolButton(style: .plusGlyph, radius: bgR, target: self, action: #selector(backgroundCustomPressed))
-        bgPlus.tip = "Custom color"
+        bgPlus.tip = L("Custom color")
         bgPlus.selectedState = currentBackground.isSolid
         wireHover(bgPlus); bgPlusButton = bgPlus; bgTiles.append(bgPlus)
-        let background = makeCluster("Background", bgTiles, perRow: 4, radius: bgR)
+        let background = makeCluster(L("Background"), bgTiles, perRow: 4, radius: bgR)
 
         let cs = content.bounds.size
         let g: CGFloat = 16
@@ -757,7 +757,7 @@ final class EditorWindowController: NSObject {
     @objc private func widthPressed() {
         currentWidth = (currentWidth + 1) % widths.count
         canvas.restrokeSelection(widths[currentWidth])
-        widthButton?.tip = "Stroke width: \(widthLabels[currentWidth]) — click to cycle"
+        widthButton?.tip = String(format: L("Stroke width: %@ — click to cycle"), widthLabels[currentWidth])
         widthButton?.activeLineWeightIndex = currentWidth
     }
 
@@ -851,7 +851,12 @@ final class EditorWindowController: NSObject {
             NSPasteboard.general.writeObjects([img])
         }
         let fellBack = !Settings.shared.saveDirectoryAvailable
-        writeCapture(rep, to: Settings.shared.fileURL(), fellBack: fellBack) { [weak self] in self?.close() }
+        writeCapture(rep, to: Settings.shared.fileURL(), fellBack: fellBack) { [weak self] in
+            self?.close()
+            // Land in History with the fresh capture on top, matching the
+            // recording flow — not silently back on the desktop.
+            HistoryWindowController.shared.show()
+        }
     }
 
     /// Encode and write `rep` off the main thread, then act on the result:
@@ -866,17 +871,17 @@ final class EditorWindowController: NSObject {
             DispatchQueue.main.async {
                 if ok {
                     if fellBack {
-                        _ = BrandAlert(title: "Saved to the Desktop",
-                                       message: "Your save folder wasn't available, so this went to the Desktop. Update it in Settings → Output.",
-                                       titles: ["OK"], primary: 0, cancel: 0,
-                                       icon: "folder.badge.questionmark").runModal()
+                        BrandAlert(title: L("Saved to the Desktop"),
+                                   message: L("The save folder was unavailable; the file was saved to the Desktop. Update it in Settings → Output."),
+                                   titles: ["OK"], primary: 0, cancel: 0,
+                                   icon: "folder.badge.questionmark").present()
                     }
                     onSuccess()
                 } else {
-                    _ = BrandAlert(title: "Couldn't save the capture",
-                                   message: "Saving failed. Your capture is still open — try Save As.",
-                                   titles: ["OK"], primary: 0, cancel: 0,
-                                   icon: "exclamationmark.triangle").runModal()
+                    BrandAlert(title: L("Unable to save the capture"),
+                               message: L("Saving failed. The capture remains open — try Save As."),
+                               titles: ["OK"], primary: 0, cancel: 0,
+                               icon: "exclamationmark.triangle").present()
                 }
             }
         }
@@ -901,7 +906,10 @@ final class EditorWindowController: NSObject {
                 img.addRepresentation(rep)
                 NSPasteboard.general.clearContents(); NSPasteboard.general.writeObjects([img])
             }
-            self.writeCapture(rep, to: url) { self.close() }
+            self.writeCapture(rep, to: url) {
+                self.close()
+                HistoryWindowController.shared.show()
+            }
         }
     }
     @objc private func copyTextPressed() {
@@ -1137,9 +1145,9 @@ final class EditorWindowController: NSObject {
 
     private func attemptClose() {
         guard Settings.shared.confirmDiscard else { close(); return }
-        let choice = BrandAlert(title: "Discard capture?",
-                                message: "Your screenshot and edits will be deleted permanently.",
-                                titles: ["Keep Editing", "Discard"],
+        let choice = BrandAlert(title: L("Discard capture?"),
+                                message: L("The screenshot and all edits will be permanently deleted."),
+                                titles: [L("Keep Editing"), L("Discard")],
                                 primary: 0, cancel: 0,
                                 icon: "trash.fill", destructive: [1]).runModal()
         if choice == 1 { close() }

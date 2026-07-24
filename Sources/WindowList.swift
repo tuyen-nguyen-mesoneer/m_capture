@@ -51,8 +51,23 @@ enum WindowList {
 
     /// The frontmost pickable window whose frame contains `point` (CG global,
     /// top-left origin). Front-to-back z-order means the first hit is the topmost.
+    ///
+    /// Hit-testing runs on every `mouseMoved`, and `CGWindowListCopyWindowInfo` is a
+    /// synchronous window-server round trip that scales with the number of open
+    /// windows — at pointer-event rate on a busy multi-display setup it saturates the
+    /// main thread. Windows don't move meaningfully within 100 ms, so reuse the last
+    /// enumeration inside that window instead of re-fetching per event.
+    private static var cached: (at: TimeInterval, pid: pid_t, windows: [PickableWindow])?
     static func topmost(atCGPoint point: CGPoint, excludingPID pid: pid_t) -> PickableWindow? {
-        onScreen(excludingPID: pid).first { $0.frame.contains(point) }
+        let now = ProcessInfo.processInfo.systemUptime
+        let windows: [PickableWindow]
+        if let c = cached, c.pid == pid, now - c.at < 0.1 {
+            windows = c.windows
+        } else {
+            windows = onScreen(excludingPID: pid)
+            cached = (now, pid, windows)
+        }
+        return windows.first { $0.frame.contains(point) }
     }
 
     // MARK: - Coordinate conversion (CoreGraphics ↔ AppKit)

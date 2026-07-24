@@ -203,9 +203,7 @@ let menu = BrandMenu(entries: [
     .item(title: "Library", symbol: "folder", shortcut: nil) {},
     .item(title: "Settings", symbol: "gearshape", shortcut: nil) {},
     .separator,
-    .item(title: "About", symbol: "info.circle", shortcut: nil) {},
     .item(title: "Check for Updates", symbol: "arrow.down.circle", shortcut: nil) {},
-    .item(title: "Report a Bug", symbol: "ladybug", shortcut: nil) {},
     .item(title: "Quit", symbol: "power", shortcut: nil) {},
 ])
 if let button = statusItem.button {
@@ -217,18 +215,8 @@ if let button = statusItem.button {
     }
 }
 
-// ---- 3. About panel -------------------------------------------------------
-print("about…")
-AboutWindowController.shared.show()
-pump(0.3)
-// About and Settings are both borderless `PanelWindow`s with no title; capture
-// About first (the only panel so far), then exclude it when finding Settings.
-let aboutWin = app.windows.first(where: { $0 is PanelWindow })
-if let awin = aboutWin, let aview = awin.contentView {
-    writePNG(render(aview, aview.bounds), to: "\(outDir)/about.png")
-}
-
-// ---- 4. Settings panel ----------------------------------------------------
+// ---- 3. Settings panel ----------------------------------------------------
+// (The standalone About panel was removed — About is a Settings section now.)
 print("settings…")
 // Seed deterministic values so the doc shot is independent of the dev's own
 // config. Features are shown *enabled* (checkboxes ticked, cursor/sound/copy on)
@@ -248,7 +236,7 @@ cfg.captureCursor = true
 cfg.playSound = true
 SettingsWindowController.shared.show()
 pump(0.3)
-if let swin = app.windows.first(where: { $0 is PanelWindow && $0 !== aboutWin }),
+if let swin = app.windows.first(where: { $0 is PanelWindow }),
    let sview = swin.contentView {
     swin.makeFirstResponder(nil)   // drop the prefix field's focus ring / text selection
     // "Launch at login" is system-backed (SMAppService), not a UserDefaults flag —

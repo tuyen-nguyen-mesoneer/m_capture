@@ -29,12 +29,22 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
 - **Screenshot** (⌃⇧S): a dim selection overlay → drag a region (or **Space** →
   whole-screen mode → click) → an in-place annotation editor opens over the dimmed screen.
 - **Record** (⌃⇧R): drag a region → record it in-process via ScreenCaptureKit
-  (`SCStream`), encoding HEVC video + AAC audio into an `.mp4`, with a floating control
-  bar (live timer, size estimate, quality badge, pause/stop, minimize). **Esc** discards
-  (with confirm), **Return** saves. While recording, the menu-bar icon shows a red dot +
-  live timer, and the status menu offers Stop / Pause-Resume / Show-bar so it's driveable
-  from the menu bar. Quitting mid-record still finalizes a playable file. Quality and
-  audio source (system / mic / both) live in Settings → Video.
+  (`SCStream`), encoding HEVC video + AAC audio into an `.mp4` at 30 or 60 fps, with an
+  optional start countdown and mouse-click ripples captured into the video. The hotkey
+  toggles (press again to stop & save); ⌥+hotkey discards (with confirm). The floating
+  control bar (live timer, size estimate, quality badge, pause/stop, minimize) starts
+  minimized to the menu bar by default; **Esc**/**Return** work only while it's visible.
+  While recording, the menu-bar icon shows a red dot + live timer, and the status menu
+  offers Stop / Stop-as-GIF / Stop-&-Trim / Discard / Pause-Resume / Show-bar. Finishing
+  opens the History panel. Quitting mid-record still finalizes a playable file; a
+  disconnected display auto-stops and saves the partial take. Quality, frame rate,
+  countdown, click ripples, bar default and audio source (default none) live in
+  Settings → Video.
+- **History**: a brand panel over the save folder's newest captures (thumbnail cards;
+  copy / pin / trim / reveal / trash); opens from the menu and after every save. Only
+  one app panel (Settings / History / Trim) is open at a time (`AppPanels.closeAll`).
+- **Localization**: the whole UI ships in English / German / Vietnamese (`L10n.swift`),
+  following the system language or the Settings → General override.
 - **Quick Screen** (⌃⇧Q): captures the screen under the mouse instantly — no overlay,
   no delay — for a hover state or tooltip that a drag-to-select would lose.
 - Hotkeys are rebindable defaults (**Settings → Shortcuts**). Captures save to the
@@ -44,19 +54,27 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
 ## Source map (`Sources/`)
 
 - `main.swift` — entry point; sets `.regular` activation (Dock icon + menu-bar item).
-- `AppDelegate.swift` — status item, menu, global hotkeys, capture actions, and the
-  Quick-Screen / Usage-Guide / Check-for-Updates / Report-a-Bug menu items. Shows the
-  one-time first-run welcome (`showWelcome`), the in-menu recording controls, and the
-  menu-bar recording indicator (`updateRecordingIndicator`); Quit/Force-Quit finalize an
-  active recording first.
+- `AppDelegate.swift` — status item, menu, global hotkeys, capture actions. The menu is
+  a short action list (Screenshot / Record Video / Quick Screen / History / Library /
+  Settings / Check for Updates / Quit); the meta items (Usage Guide, Report a Bug,
+  version + license) live in Settings → About instead. Shows the one-time first-run
+  welcome (`showWelcome`), the in-menu recording controls (Stop / Stop-as-GIF /
+  Stop-&-Trim / Discard / Pause), and the menu-bar recording indicator
+  (`updateRecordingIndicator`); opening the menu closes any app panel; Quit/Force-Quit
+  finalize an active recording first. The record hotkey toggles (stop & save); a
+  derived ⌥ variant discards.
 - `Updater.swift` — checks GitHub Releases (`releases`, newest-first) for a newer build;
   drives the manual "Check for Updates" item and a silent once-a-day launch check.
   Requires the repo's releases to be readable by the user.
 - `BrandMenu.swift` — custom mesoneer-styled menu (NSMenu isn't themeable); used for
   the status-item menu and the pin window's right-click.
-- `BrandAlert.swift` — mesoneer-styled modal alert (the brand counterpart to
-  `NSAlert`): About-style panel chrome + brand buttons, run modally and returning the
-  clicked button index; used by `Updater` for the update / up-to-date / error dialogs.
+- `BrandAlert.swift` — mesoneer-styled alert (the brand counterpart to `NSAlert`) in
+  the native layout: icon badge left, left-aligned text, buttons bottom-right with the
+  primary always rightmost (enforced regardless of call-site order). `runModal()` for
+  user-initiated confirms; `present(completion:)` (non-modal, self-retaining) for
+  anything fired from a background context — nested `runModal` from callbacks can
+  wedge the run loop. Panel level sits above the capture overlays.
+- `BrandToast.swift` — brief auto-fading toast pill (copied / trashed confirmations).
 - `BrandCursor.swift` — mesoneer-styled pointer cursors built from SF Symbols (brand-
   purple glyph + soft white halo, no background chip); shared by the capture overlay's
   camera/video cursors and the editor's per-tool cursors.
@@ -86,20 +104,37 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
   (`CGWindowListCopyWindowInfo`) that drives the overlay's window-pick mode, plus the
   CoreGraphics↔AppKit global-coordinate flip helpers shared by the capture controllers.
 - `VideoRecordController.swift` — the screen-recording flow (macOS 14+): reuses the
-  selection overlay (region / window / screen), then drives `VideoRecordSession`, the
-  floating `VideoRecordBar`, and a 1 Hz update tick; requests mic permission first when
-  the audio source needs it. Exposes menu-bar controls (stop/pause/minimize) and
-  `onRecordingUIUpdate` (drives the menu-bar red-dot/timer indicator);
+  selection overlay (region / window / screen), prefetches `SCShareableContent` while
+  the user drags (so the session — and its timer — starts promptly), runs the optional
+  `RecordCountdownWindow`, then drives `VideoRecordSession`, the `VideoRecordBar`
+  (created positioned but minimized by default), `ClickVisualizer`, and a 4 Hz update
+  tick; requests mic permission first when the audio source needs it. Stop routes by
+  `StopDestination` (movie / gif via `VideoToGIF` / trim via `TrimWindowController`)
+  and opens History when done. Exposes menu-bar controls (stop variants / discard /
+  pause / show-bar), `onRecordingUIUpdate` and `onGIFExportUpdate`;
   `finalizeForTermination()` pump-runs the main run loop so quit/force-quit finish the
-  file. `discardRecording()` handles the Esc discard; `handleUnexpectedStop` surfaces a
-  mid-record failure.
+  file. `handleUnexpectedStop` also fires when the recorded display disconnects.
 - `VideoRecordSession.swift` — records a `Target` (display region or a single window)
-  via ScreenCaptureKit (`SCStream`),
-  encoding HEVC video + AAC audio into an `.mp4` with `AVAssetWriter` (PTS-normalized on
-  a serial `writeQueue`). `onUnexpectedStop` fires if the stream dies on its own.
+  via ScreenCaptureKit (`SCStream`), encoding HEVC video + AAC audio into an `.mp4`
+  with `AVAssetWriter` (PTS-normalized on a serial `writeQueue`) at the configured
+  frame rate. Consumes the controller's `SCShareableContent` prefetch; `recordedDisplayID`
+  lets the controller detect the display vanishing. `onUnexpectedStop` fires if the
+  stream dies on its own.
 - `VideoRecordBar.swift` — the floating recording HUD (live timer, size estimate, quality
   badge, pause/stop, and a minimize-to-menu-bar button); its `windowNumber` is excluded
-  from the `SCStream` capture.
+  from the `SCStream` capture. All controls accept first-mouse so a single click works
+  while another app is frontmost.
+- `VideoToGIF.swift` — streams a finished `.mp4` into a looping animated GIF
+  (AVAssetImageGenerator → ImageIO, 10 fps, 960 px cap, one frame in memory at a time);
+  drives "Stop & Save as GIF".
+- `TrimWindow.swift` — lossless post-recording trim panel: `AVPlayerLayer` preview,
+  custom in/out `TrimSlider`, passthrough `AVAssetExportSession` over the original file;
+  opened by "Stop & Trim…" and History's Trim action.
+- `ClickVisualizer.swift` — expanding ripple windows at mouse clicks while recording
+  (global `NSEvent` monitor; deliberately *not* excluded from the stream).
+- `HistoryWindow.swift` — the History panel: newest captures from the save folder as
+  thumbnail cards (adaptive grid, video play badges) with Copy / Pin / Trim / Reveal /
+  Trash actions; rebuilt from the folder on every open.
 - `EditorWindow.swift` — the in-place annotation editor: tool tiles in five groups
   (Markup, Shapes, Style, Actions, Background) as scattered cards or one draggable
   panel. Style holds the color palette, custom-color picker, and a cycling stroke-width
@@ -145,16 +180,23 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
   single source for where/how captures are saved; `fileURL()` uniquifies the name and
   `resolvedSaveDirectory()` falls back to the Desktop when the configured folder is
   gone/unwritable.
-- `SettingsWindow.swift` — the dark Settings panel (`SettingsWindowController.shared`);
-  General / Shortcuts / Capture / Output / Video groups, with per-row info-dot tips.
-  `--settings-demo` opens it at launch.
+- `SettingsWindow.swift` — the dark Settings panel (`SettingsWindowController.shared`):
+  an icon sidebar (macOS System Settings shape) with General / Shortcuts / Capture /
+  Output / Video / About sections, per-row info-dot tips, and a fixed window size
+  measured once against the tallest section. About is a centered identity card (logo,
+  version, MIT/© mesoneer line, Usage Guide + Report a Bug buttons) — the app's only
+  about surface; there is no separate About panel. `--settings-demo` opens it at launch.
 - `ShortcutRecorder.swift` — click-to-record shortcut field + `Shortcut` glyph helpers.
 - `BrandPopUpButton.swift` — brand `NSPopUpButton` + `BrandControl` shared inset
   geometry aligning the Settings form controls.
 - `HotKey.swift` — global hotkey registration via Carbon.
-- `PanelChrome.swift` — borderless square-cornered panel for About / Settings (macOS
+- `L10n.swift` — code-level localization (no `.strings` files): `L(_:)` looks the
+  English string up in the German or Vietnamese dictionary per the Settings language
+  (or the system language); English keys pass through. Resolved once per launch —
+  language changes prompt a relaunch.
+- `PanelChrome.swift` — borderless square-cornered panel for Settings / History / Trim
+  + `AppPanels.closeAll(except:)`, the one-panel-at-a-time policy (macOS
   rounds `.titled` corners) with its own close button, Esc / ⌘W, and a draggable background.
-- `AboutWindow.swift` — the About panel.
 - `tools/makeicon.swift` — generates the app `.icns` at build time.
 - `tools/shots.swift` — dev-only; regenerates the menu/about/settings screenshots in
   `docs/assets/` (see CONTRIBUTING.md). Its editor preview (from `tools/sample.png`) renders
@@ -209,6 +251,12 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
   are fine.) Never ship a raw system `NSAlert`, a default `NSWindow`, or an unstyled
   control: use `BrandAlert` for alerts and the `PanelWindow` / `Theme` helpers for panels.
 - **Icons are drawn in code** (SF Symbols or CoreGraphics) — no image assets.
+- **Every user-facing string goes through `L(...)`** (`L10n.swift`); the English string
+  is the key. Adding or rewording a string means updating the call site AND both the
+  German and Vietnamese dictionaries in lockstep (their key sets must stay identical).
+  Keep the tone formal and concise; preserve `%@` templates and trailing shortcut
+  suffixes like "  (P)" verbatim. Names used as persistence keys (e.g. `Background.name`)
+  stay English — localize only at display sites.
 - Editor coordinates stay in full-resolution image space (see `CanvasView`).
 - **Comments explain *why*, not *what*** — put a single `///` doc comment on the
   method or type; don't annotate the body line by line with inline `//` notes.
@@ -218,3 +266,8 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
   second clause ("X, and Y."), not a longer list. Every new release adds a `rel.N.date`
   / `rel.N.note` pair to *both* language dicts plus the matching `<div class="release">`
   block (newest first) — don't add the HTML without the i18n keys (or vice versa).
+- **Feature cards (`docs/index.html`) are exactly 3 lines** — each `feat.N.p` string,
+  in both the `en` and `de` i18n dicts *and* the inline HTML default (which mirrors
+  `en`), must wrap to 3 lines at the `.card p` column width (345 px at 15 px):
+  **100-134 characters** (browser-measured; ≥139 wraps to 4 lines). A new card needs
+  the `<div class="card">` block plus `feat.N.h`/`feat.N.p` in both language dicts.
