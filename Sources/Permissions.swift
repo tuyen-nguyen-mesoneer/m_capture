@@ -40,9 +40,9 @@ enum ScreenRecordingPermission {
     private static func presentGuidanceAlert() {
         NSApp.activate(ignoringOtherApps: true)
         let r = BrandAlert(
-            title: "Screen Recording permission needed",
-            message: "Turn it on in System Settings → Privacy & Security → Screen Recording, then try again.",
-            titles: ["Open System Settings", "Cancel"],
+            title: L("Screen Recording permission required"),
+            message: L("Enable it in System Settings → Privacy & Security → Screen Recording, then try again."),
+            titles: [L("Open System Settings"), L("Cancel")],
             primary: 0, cancel: 1, icon: "lock.shield").runModal()
         if r == 0 { openSettings() }
     }

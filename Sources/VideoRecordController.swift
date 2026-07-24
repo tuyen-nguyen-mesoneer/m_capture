@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 import AppKit
 import AVFoundation
+import ScreenCaptureKit
 
 /// Singleton orchestrator for the video-recording flow.
 /// Coordinates the region-selection overlay, `VideoRecordBar`, `VideoRecordSession`,
@@ -11,7 +12,36 @@ import AVFoundation
 @available(macOS 14, *)
 final class VideoRecordController {
     static let shared = VideoRecordController()
-    private init() {}
+
+    /// True while the record flow's drag-to-select overlay is on screen (before the
+    /// recording itself starts). `Updater` checks this so a background-update alert
+    /// never opens underneath the full-screen overlays.
+    var isSelecting: Bool { !overlays.isEmpty }
+
+    /// A display appearing or vanishing mid-selection leaves overlays sized for a
+    /// screen layout that no longer exists — tear the selection down. An already
+    /// running recording is left alone (the stream errors out on its own if its
+    /// display goes away, via `onUnexpectedStop`).
+    private init() {
+        NotificationCenter.default.addObserver(
+            forName: NSApplication.didChangeScreenParametersNotification,
+            object: nil, queue: .main) { [weak self] _ in
+            guard let self else { return }
+            if !self.overlays.isEmpty { self.dismissOverlays() }
+            // The recorded display vanished (unplugged / sleep): the SCStream can
+            // stall silently rather than erroring, leaving a timer counting over a
+            // dead capture. Route it through the unexpected-stop path, which
+            // finalizes and saves the partial file.
+            if let id = self.session?.recordedDisplayID,
+               !NSScreen.screens.compactMap(\.displayID).contains(id) {
+                self.handleUnexpectedStop("display disconnected")
+            }
+        }
+    }
+
+    /// SCShareableContent warm-up kicked off when the selection overlay opens —
+    /// consumed by the session so recording starts (and the timer moves) promptly.
+    private var contentPrefetch: Task<SCShareableContent?, Never>?
 
     private var session: VideoRecordSession?
     private var bar: VideoRecordBar?
@@ -24,7 +54,11 @@ final class VideoRecordController {
     /// Reports recording state to the menu-bar icon so it's obvious the app is recording
     /// even when the floating bar is minimized: `(active, elapsed, paused)`.
     var onRecordingUIUpdate: ((_ active: Bool, _ elapsed: TimeInterval, _ paused: Bool) -> Void)?
-    private func clearRecordingUI() { onRecordingUIUpdate?(false, 0, false) }
+    private func clearRecordingUI() {
+        clickVisualizer.stop()
+        onRecordingUIUpdate?(false, 0, false)
+    }
+    private let clickVisualizer = ClickVisualizer()
 
     // MARK: - Public
 
@@ -39,6 +73,17 @@ final class VideoRecordController {
     // Menu-bar controls, so the recording can be driven from the status item when the
     // floating bar is minimized.
     func stopFromMenu() { stopRecording() }
+    /// Stop and deliver the recording as a looping animated GIF instead of an .mp4.
+    func stopAsGIFFromMenu() { stopRecording(destination: .gif) }
+    /// Stop, then open the trim panel on the finished file before it's final.
+    func stopAndTrimFromMenu() { stopRecording(destination: .trim) }
+    /// Discard (with the usual confirm) — reachable from the menu and the ⌥-record
+    /// hotkey, since Esc only works while the floating bar is visible and key.
+    func discardFromMenu() { discardRecording() }
+    /// Fires with `true` while a stopped recording converts to GIF, `false` when the
+    /// conversion ends — drives the menu-bar "GIF…" status so a long conversion
+    /// doesn't look like the app went silent.
+    var onGIFExportUpdate: ((Bool) -> Void)?
     func togglePauseFromMenu() { togglePause() }
     /// Hide/show the floating record bar without ending the recording.
     func setBarHidden(_ hidden: Bool) { bar?.setVisible(!hidden) }
@@ -56,6 +101,12 @@ final class VideoRecordController {
             ScreenRecordingPermission.handleDenied()
             return
         }
+        AppPanels.closeAll()   // no app panel should sit under (or in) the recording
+        // Warm up ScreenCaptureKit's content enumeration while the user drags their
+        // region: `SCShareableContent.current` costs 0.5–2 s (worse with more
+        // displays/windows), and paying it at session start is why the recording
+        // timer used to sit at 0:00 after Stop was armed.
+        contentPrefetch = Task { try? await SCShareableContent.current }
         let mouse = NSEvent.mouseLocation
         let keyScreen = NSScreen.screens.first { $0.frame.contains(mouse) }
             ?? NSScreen.main ?? NSScreen.screens[0]
@@ -63,10 +114,13 @@ final class VideoRecordController {
         // can hold keyboard focus (Esc/Space, Esc/Return to stop).
         NSApp.activate(ignoringOtherApps: true)
         let coordinator = OverlayCoordinator()
+        let last = Settings.shared.lastRegion
         for screen in NSScreen.screens {
             let win = OverlayWindow(screen: screen, coordinator: coordinator,
-                                    allowsWindowMode: true, allowsFullScreenMode: true, recording: true)
+                                    allowsWindowMode: true, allowsFullScreenMode: true, recording: true,
+                                    previousRect: screen.displayID == last?.displayID ? last?.rect : nil)
             win.onComplete = { [weak self] rect in
+                if let id = screen.displayID { Settings.shared.lastRegion = (rect, id) }
                 let global = CGRect(x: screen.frame.minX + rect.minX,
                                     y: screen.frame.minY + rect.minY,
                                     width: rect.width, height: rect.height)
@@ -167,10 +221,15 @@ final class VideoRecordController {
                         // Downgrade: if both were requested, fall back to system only;
                         // if mic-only was requested, fall back to none.
                         effective = audioSource == .both ? .system : .none
-                        _ = BrandAlert(title: "Microphone access denied",
-                                       message: "Recording will continue without mic audio.",
-                                       titles: ["OK"], primary: 0, cancel: 0,
-                                       icon: "mic.slash").runModal()
+                        // Non-modal: this runs from the permission callback, and a
+                        // nested runModal from there can wedge the main run loop.
+                        BrandAlert(title: L("Microphone access denied"),
+                                   message: L("Recording will continue without mic audio."),
+                                   titles: ["OK"], primary: 0, cancel: 0,
+                                   icon: "mic.slash").present { _ in
+                            self?.startRecording(target: target, barScreen: barScreen, audioSource: effective)
+                        }
+                        return
                     }
                     self?.startRecording(target: target, barScreen: barScreen, audioSource: effective)
                 }
@@ -185,6 +244,24 @@ final class VideoRecordController {
         // window captures have no such floor.
         if case let .region(rect, _) = target, rect.width < 20 || rect.height < 20 { return }
 
+        // Optional 3/5/10 s countdown over the picked region — time to set the scene
+        // up before frames start landing in the file.
+        let countdown = Settings.shared.videoCountdown.rawValue
+        if countdown > 0 {
+            let rect: CGRect
+            if case let .region(r, _) = target { rect = r }
+            else if case let .window(id) = target, let r = Self.windowGlobalFrame(id) { rect = r }
+            else { rect = barScreen.frame }
+            RecordCountdownWindow.run(seconds: countdown, over: rect) { [weak self] in
+                self?.reallyStartRecording(target: target, barScreen: barScreen, audioSource: audioSource)
+            }
+            return
+        }
+        reallyStartRecording(target: target, barScreen: barScreen, audioSource: audioSource)
+    }
+
+    private func reallyStartRecording(target: VideoRecordSession.Target, barScreen: NSScreen, audioSource: VideoAudioSource) {
+
         let qualityLetter: String
         switch Settings.shared.videoQuality {
         case .high:   qualityLetter = "H"
@@ -192,9 +269,15 @@ final class VideoRecordController {
         case .low:    qualityLetter = "L"
         }
 
-        // Phase 2a — show bar FIRST so its windowNumber is available before SCStream begins.
+        // Phase 2a — create/position the bar FIRST so its windowNumber is available
+        // before SCStream begins. By default it starts minimized to the menu bar (the
+        // timer + stop/pause live in the status item); Settings → Video toggles that.
         let recordBar = VideoRecordBar(quality: qualityLetter)
-        recordBar.show(near: barScreen)
+        if Settings.shared.videoStartBarMinimized {
+            recordBar.prepare(near: barScreen)
+        } else {
+            recordBar.show(near: barScreen)
+        }
         bar = recordBar
 
         // Phase 2b — compute output URL with a forced .mp4 extension.
@@ -220,8 +303,10 @@ final class VideoRecordController {
             quality: Settings.shared.videoQuality,
             audioSource: audioSource,
             outputURL: url,
-            excludedWindowIDs: excluded
+            excludedWindowIDs: excluded,
+            contentPrefetch: contentPrefetch
         )
+        contentPrefetch = nil
         session = recordSession
         recordSession.onUnexpectedStop = { [weak self] reason in self?.handleUnexpectedStop(reason) }
 
@@ -230,6 +315,8 @@ final class VideoRecordController {
         recordBar.onPauseResume = { [weak self] in self?.togglePause() }
         recordBar.onDiscard = { [weak self] in self?.discardRecording() }
         recordBar.onMinimize = { [weak self] in self?.setBarHidden(true) }
+
+        if Settings.shared.videoShowClicks { clickVisualizer.start() }
 
         // Phase 2e — start capture, then start the UI ticker.
         // Handle start() errors explicitly: a silent failure leaves the bar running
@@ -246,7 +333,11 @@ final class VideoRecordController {
 
     private func startTimer() {
         let t = DispatchSource.makeTimerSource(queue: .main)
-        t.schedule(deadline: .now() + 1, repeating: 1)
+        // 4 Hz, not 1 Hz: the display truncates to whole seconds, so a 1 s tick that
+        // isn't phase-aligned with the capture start leaves the counter stuck at
+        // 0:00 for up to two full seconds — reading as "recording hasn't started".
+        // Ticking at 250 ms flips each second within a quarter second of real time.
+        t.schedule(deadline: .now() + 0.25, repeating: 0.25)
         t.setEventHandler { [weak self] in
             guard let self, let session = self.session else { return }
             self.bar?.update(elapsed: session.elapsedSeconds,
@@ -259,7 +350,11 @@ final class VideoRecordController {
         onRecordingUIUpdate?(true, 0, isPaused)   // show the indicator immediately, not after 1 s
     }
 
-    private func stopRecording() {
+    /// Where a stopped recording goes: saved as-is, converted to GIF, or into the
+    /// trim panel first.
+    private enum StopDestination { case movie, gif, trim }
+
+    private func stopRecording(destination: StopDestination = .movie) {
         updateTimer?.cancel()
         updateTimer = nil
         bar?.close()
@@ -272,18 +367,44 @@ final class VideoRecordController {
         self.currentURL = nil
         Task {
             await session.stop()
-            await MainActor.run {
-                // Only celebrate/reveal a file that actually made it to disk — a
-                // failed writer leaves nothing to show.
-                guard FileManager.default.fileExists(atPath: url.path) else {
-                    _ = BrandAlert(title: "Recording wasn't saved",
-                                   message: "Check that your save folder has free space.",
-                                   titles: ["OK"], primary: 0, cancel: 0,
-                                   icon: "exclamationmark.triangle").runModal()
-                    return
+            // Only celebrate/reveal a file that actually made it to disk — a
+            // failed writer leaves nothing to show.
+            guard FileManager.default.fileExists(atPath: url.path) else {
+                await MainActor.run {
+                    BrandAlert(title: L("Recording not saved"),
+                               message: L("Check that the save folder has free space."),
+                               titles: ["OK"], primary: 0, cancel: 0,
+                               icon: "exclamationmark.triangle").present()
                 }
+                return
+            }
+            if destination == .trim {
+                await MainActor.run { TrimWindowController.show(url: url) }
+                return   // the trim panel owns the reveal (or keeps the file as-is)
+            }
+            if destination == .gif {
+                await MainActor.run { self.onGIFExportUpdate?(true) }
+                let gifURL = url.deletingPathExtension().appendingPathExtension("gif")
+                let ok = await VideoToGIF.convert(mp4: url, to: gifURL)
+                await MainActor.run { self.onGIFExportUpdate?(false) }
+                if ok {
+                    // The GIF is the deliverable the user asked for; the intermediate
+                    // .mp4 would just be clutter next to it.
+                    try? FileManager.default.removeItem(at: url)
+                } else {
+                    await MainActor.run {
+                        BrandAlert(title: L("Unable to convert to GIF"),
+                                   message: L("The recording was kept as an .mp4."),
+                                   titles: ["OK"], primary: 0, cancel: 0,
+                                   icon: "exclamationmark.triangle").present()
+                    }
+                }
+            }
+            await MainActor.run {
                 if Settings.shared.playSound { NSSound(named: "Grab")?.play() }
-                NSWorkspace.shared.activateFileViewerSelecting([url])
+                // The in-app History panel (newest first, with copy/trim actions)
+                // beats dumping the user into a Finder window.
+                HistoryWindowController.shared.show()
             }
         }
     }
@@ -319,9 +440,9 @@ final class VideoRecordController {
     private func discardRecording() {
         guard let session = session, let url = currentURL else { return }
         NSApp.activate(ignoringOtherApps: true)
-        let confirm = BrandAlert(title: "Discard recording?",
-                                 message: "This recording will be deleted.",
-                                 titles: ["Discard", "Keep Recording"],
+        let confirm = BrandAlert(title: L("Discard recording?"),
+                                 message: L("This recording will be deleted."),
+                                 titles: [L("Discard"), L("Keep Recording")],
                                  primary: 1, cancel: 1, icon: "trash", destructive: [0]).runModal()
         guard confirm == 0 else { return }
         updateTimer?.cancel(); updateTimer = nil
@@ -363,11 +484,11 @@ final class VideoRecordController {
             await session.stop()   // flush whatever frames made it, so the file is playable
             await MainActor.run {
                 let saved = url.map { FileManager.default.fileExists(atPath: $0.path) } ?? false
-                let tail = saved ? " The partial recording was saved." : ""
-                _ = BrandAlert(title: "Recording stopped",
-                               message: "The recording ended unexpectedly.\(tail)",
-                               titles: ["OK"], primary: 0, cancel: 0,
-                               icon: "exclamationmark.triangle").runModal()
+                let tail = saved ? L(" The partial recording was saved.") : ""
+                BrandAlert(title: L("Recording stopped"),
+                           message: L("The recording ended unexpectedly.") + tail,
+                           titles: ["OK"], primary: 0, cancel: 0,
+                           icon: "exclamationmark.triangle").present()
                 if saved, let url { NSWorkspace.shared.activateFileViewerSelecting([url]) }
             }
         }
@@ -386,12 +507,12 @@ final class VideoRecordController {
         if isPermission {
             ScreenRecordingPermission.handleDenied()
         } else {
-            _ = BrandAlert(
-                title: "Recording failed to start",
-                message: "If Screen Recording was just reset, re-approve it in System Settings and try again.",
+            BrandAlert(
+                title: L("Recording failed to start"),
+                message: L("If the Screen Recording permission was reset, re-approve it in System Settings and try again."),
                 titles: ["OK"], primary: 0, cancel: 0,
                 icon: "exclamationmark.triangle"
-            ).runModal()
+            ).present()
         }
     }
 
@@ -444,5 +565,58 @@ private final class RecordingDimView: NSView {
         ctx.setStrokeColor(Theme.lavender.cgColor)
         ctx.setLineWidth(lw)
         ctx.stroke(h.insetBy(dx: lw / 2, dy: lw / 2))
+    }
+}
+
+/// A 3-2-1 countdown floated over the region about to be recorded (Settings →
+/// Video → Countdown), giving the user a beat to set the scene up after picking
+/// the region. Self-retained for its short life; always calls `completion`.
+@available(macOS 14, *)
+final class RecordCountdownWindow {
+    private static var active: RecordCountdownWindow?
+    private let window: NSWindow
+    private let label = NSTextField(labelWithString: "")
+
+    static func run(seconds: Int, over rect: CGRect, completion: @escaping () -> Void) {
+        active = RecordCountdownWindow(rect: rect)
+        active?.tick(seconds, completion: completion)
+    }
+
+    private init(rect: CGRect) {
+        let side: CGFloat = 120
+        let frame = NSRect(x: rect.midX - side / 2, y: rect.midY - side / 2, width: side, height: side)
+        window = NSWindow(contentRect: frame, styleMask: .borderless, backing: .buffered, defer: false)
+        window.isOpaque = false
+        window.backgroundColor = .clear
+        window.hasShadow = false
+        window.ignoresMouseEvents = true
+        window.level = .floating
+        window.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle, .fullScreenAuxiliary]
+        window.isReleasedWhenClosed = false
+
+        let content = NSView(frame: NSRect(origin: .zero, size: frame.size))
+        content.wantsLayer = true
+        content.layer?.backgroundColor = Theme.surfaceBase.withAlphaComponent(0.85).cgColor
+        content.layer?.cornerRadius = side / 2
+        label.font = Theme.font(64, .bold)
+        label.textColor = Theme.textPrimary
+        label.alignment = .center
+        label.frame = NSRect(x: 0, y: (side - 80) / 2, width: side, height: 80)
+        content.addSubview(label)
+        window.contentView = content
+        window.orderFrontRegardless()
+    }
+
+    private func tick(_ remaining: Int, completion: @escaping () -> Void) {
+        guard remaining > 0 else {
+            window.orderOut(nil)
+            Self.active = nil
+            completion()
+            return
+        }
+        label.stringValue = "\(remaining)"
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
+            self?.tick(remaining - 1, completion: completion)
+        }
     }
 }

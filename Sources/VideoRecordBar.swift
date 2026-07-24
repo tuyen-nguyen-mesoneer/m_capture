@@ -30,8 +30,8 @@ final class VideoRecordBar: NSObject {
     private var dotLayer: CALayer { dotView.layer! }
 
     init(quality: String) {
-        pauseBtn = RecordBarButton(title: "Pause", primary: false)
-        stopBtn = RecordBarButton(title: "Stop", primary: true)
+        pauseBtn = RecordBarButton(title: L("Pause"), primary: false)
+        stopBtn = RecordBarButton(title: L("Stop"), primary: true)
         super.init()
 
         // ── Window ─────────────────────────────────────────────────────────
@@ -139,17 +139,28 @@ final class VideoRecordBar: NSObject {
     /// card's open-hand drag cursor beneath it.
     private final class MinimizeButton: NSButton {
         override func resetCursorRects() { addCursorRect(bounds, cursor: .pointingHand) }
+        /// Clickable from the first click while the app is inactive, like the
+        /// bar's other controls (see `RecordBarButton.acceptsFirstMouse`).
+        override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
     }
 
     // MARK: - Public API
 
-    /// Position the bar 24 pt above the bottom of the screen's visible frame, centred horizontally.
-    func show(near screen: NSScreen) {
+    /// Position the bar 24 pt above the bottom of the screen's visible frame, centred
+    /// horizontally — without showing it. Recordings start with the bar minimized to
+    /// the menu bar; positioning up front means "Show Recording Bar" reveals it in
+    /// place (and its `windowNumber` is valid for the SCStream exclusion regardless).
+    func prepare(near screen: NSScreen) {
         let vis = screen.visibleFrame
         let barWidth: CGFloat = 340
         let x = vis.midX - barWidth / 2
         let y = vis.minY + 24
         window.setFrameOrigin(NSPoint(x: x, y: y))
+    }
+
+    /// Position and show the bar.
+    func show(near screen: NSScreen) {
+        prepare(near: screen)
         window.makeKeyAndOrderFront(nil)
     }
 
@@ -183,7 +194,7 @@ final class VideoRecordBar: NSObject {
             }
 
             // Pause/resume state
-            self.pauseBtn.setTitle(isPaused ? "Resume" : "Pause")
+            self.pauseBtn.setTitle(isPaused ? L("Resume") : L("Pause"))
 
             // Dot animation
             if isPaused {
@@ -252,6 +263,10 @@ private final class RecordCardView: NSView {
     /// it can be moved.
     override func resetCursorRects() { addCursorRect(bounds, cursor: .openHand) }
 
+    /// Draggable from the first click even when the app is inactive (see
+    /// `RecordBarButton.acceptsFirstMouse`).
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
     override func mouseDown(with event: NSEvent) {
         dragStartMouse = NSEvent.mouseLocation
         dragStartFrame = window?.frame ?? .zero
@@ -301,6 +316,10 @@ private final class QualityBadge: NSView {
 /// solid white fill (dark text); the secondary is a quiet hairline ghost that brightens
 /// on hover. White/ghost/square is the mesoneer button system (see styleguide).
 private final class RecordBarButton: NSView {
+    override func isAccessibilityElement() -> Bool { true }
+    override func accessibilityRole() -> NSAccessibility.Role? { .button }
+    override func accessibilityLabel() -> String? { currentTitle }
+
     var onClick: (() -> Void)?
     private var currentTitle: String
     private let primary: Bool
@@ -329,6 +348,10 @@ private final class RecordBarButton: NSView {
     }
     override func mouseEntered(with event: NSEvent) { hovering = true; needsDisplay = true }
     override func mouseExited(with event: NSEvent) { hovering = false; needsDisplay = true }
+    /// The user is usually working in another app while recording, so the bar's
+    /// window is inactive — without first-mouse the initial click only activates
+    /// it and Stop needs a second click.
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
     override func mouseUp(with event: NSEvent) {
         if bounds.contains(convert(event.locationInWindow, from: nil)) { onClick?() }
     }

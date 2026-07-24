@@ -1,6 +1,7 @@
 // m_capture — independent implementation.
 // SPDX-License-Identifier: MIT
 import AppKit
+import Carbon.HIToolbox
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem!
@@ -16,6 +17,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem.button?.image = Logo.menuBarImage()
         statusItem.button?.target = self
         statusItem.button?.action = #selector(statusClicked)
+        statusItem.button?.setAccessibilityLabel("m_capture")
 
         buildMenu()
         reloadHotKeys()
@@ -24,6 +26,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // recording even when the floating bar is minimized.
         VideoRecordController.shared.onRecordingUIUpdate = { [weak self] active, elapsed, paused in
             self?.updateRecordingIndicator(active: active, elapsed: elapsed, paused: paused)
+        }
+        // A long recording can take a while to re-encode as GIF; show it in the
+        // menu-bar icon so the quiet gap between "Stop" and the Finder reveal
+        // doesn't read as the app having dropped the recording.
+        VideoRecordController.shared.onGIFExportUpdate = { [weak self] exporting in
+            guard let button = self?.statusItem.button else { return }
+            if exporting {
+                button.image = nil
+                button.font = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .semibold)
+                button.title = " GIF… "
+            } else {
+                button.image = Logo.menuBarImage(); button.title = ""; button.imagePosition = .imageOnly
+            }
         }
 
         Updater.reconcileAfterRelaunch()
@@ -46,6 +61,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func statusClicked() {
+        // Opening the menu is a context switch — drop any open app panel so the
+        // menu never floats over a stale Settings/History window.
+        AppPanels.closeAll()
         // Rebuilt on every open (not just at launch/hotkey-rebind) so the
         // Screenshot/Record rows reflect whether the editor is open right now.
         buildMenu()
@@ -61,6 +79,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // exists. Force-unwrapping it then traps, so no-op until the status item is live.
         guard let statusItem else { return true }
         if !flag {
+            AppPanels.closeAll()
             buildMenu()
             if let button = statusItem.button { menu.toggle(from: button) }
         }
@@ -83,35 +102,41 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // While recording, surface Stop / Pause-Resume (and Show bar if minimized) so the
         // whole flow can be driven from the menu bar, not just the floating HUD.
         if rec.isRecording {
-            entries.append(.item(title: "Stop Recording", symbol: "stop.circle",
+            entries.append(.item(title: L("Stop Recording"), symbol: "stop.circle",
                                  shortcut: nil) { rec.stopFromMenu() })
-            entries.append(.item(title: rec.isRecordingPaused ? "Resume Recording" : "Pause Recording",
+            entries.append(.item(title: L("Stop & Save as GIF"), symbol: "photo.stack",
+                                 shortcut: nil) { rec.stopAsGIFFromMenu() })
+            entries.append(.item(title: L("Stop & Trim…"), symbol: "scissors",
+                                 shortcut: nil) { rec.stopAndTrimFromMenu() })
+            entries.append(.item(title: L("Discard Recording"), symbol: "trash",
+                                 shortcut: nil) { rec.discardFromMenu() })
+            entries.append(.item(title: rec.isRecordingPaused ? L("Resume Recording") : L("Pause Recording"),
                                  symbol: rec.isRecordingPaused ? "play.circle" : "pause.circle",
                                  shortcut: nil) { rec.togglePauseFromMenu() })
             if rec.isBarHidden {
-                entries.append(.item(title: "Show Recording Bar", symbol: "menubar.dock.rectangle",
+                entries.append(.item(title: L("Show Recording Bar"), symbol: "menubar.dock.rectangle",
                                      shortcut: nil) { rec.setBarHidden(false) })
             }
             entries.append(.separator)
         }
-        entries.append(.item(title: "Screenshot", symbol: "camera.viewfinder",
+        entries.append(.item(title: L("Screenshot"), symbol: "camera.viewfinder",
                              shortcut: s.shortcut(.screenshot).displayString,
                              enabled: !editorOpen) { [weak self] in self?.takeScreenshot() })
         entries.append(contentsOf: [
-            .item(title: "Record Video", symbol: "record.circle",
+            .item(title: L("Record Video"), symbol: "record.circle",
                   shortcut: s.shortcut(.record).displayString,
                   enabled: !editorOpen) { [weak self] in self?.record() },
-            .item(title: "Quick Screen", symbol: "cursorarrow.rays",
+            .item(title: L("Quick Screen"), symbol: "cursorarrow.rays",
                   shortcut: s.shortcut(.quickScreen).displayString,
                   enabled: !editorOpen) { ScreenshotController.shared.captureQuickScreen() },
-            .item(title: "Library", symbol: "folder", shortcut: nil) { [weak self] in self?.openLibrary() },
-            .item(title: "Settings", symbol: "gearshape", shortcut: nil) { [weak self] in self?.settings() },
+            .item(title: L("History"), symbol: "clock", shortcut: nil) { HistoryWindowController.shared.show() },
+            .item(title: L("Library"), symbol: "folder", shortcut: nil) { [weak self] in self?.openLibrary() },
+            // Meta items (Usage Guide / About / Updates / Report a Bug) live in
+            // Settings → About now — the menu stays a short list of actions.
+            .item(title: L("Settings"), symbol: "gearshape", shortcut: nil) { [weak self] in self?.settings() },
             .separator,
-            .item(title: "Usage Guide", symbol: "questionmark.circle", shortcut: nil) { [weak self] in self?.openUsageGuide() },
-            .item(title: "About", symbol: "info.circle", shortcut: nil) { [weak self] in self?.about() },
-            .item(title: "Check for Updates", symbol: "arrow.down.circle", shortcut: nil) { Updater.checkManually() },
-            .item(title: "Report a Bug", symbol: "ladybug", shortcut: nil) { [weak self] in self?.reportBug() },
-            .item(title: "Quit", symbol: "power", shortcut: nil) { [weak self] in self?.quit() },
+            .item(title: L("Check for Updates"), symbol: "arrow.down.circle", shortcut: nil) { Updater.checkManually() },
+            .item(title: L("Quit"), symbol: "power", shortcut: nil) { [weak self] in self?.quit() },
         ])
         menu = BrandMenu(entries: entries)
     }
@@ -126,6 +151,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hotKeys.append(HotKey(s.shortcut(.record)) { [weak self] in self?.record() })
         hotKeys.append(HotKey(s.shortcut(.quickScreen)) { ScreenshotController.shared.captureQuickScreen() })
         hotKeys.append(HotKey(s.shortcut(.forceQuit)) { [weak self] in self?.forceQuit() })
+        // ⌥ + the record shortcut discards an in-flight recording (with confirm) —
+        // the keyboard path when the floating bar (and its Esc handling) is hidden.
+        // Skipped if the user's record shortcut already includes ⌥, which would
+        // collide with the plain record binding.
+        let record = s.shortcut(.record)
+        if record.modifiers & UInt32(optionKey) == 0 {
+            let discard = Shortcut(keyCode: record.keyCode,
+                                   modifiers: record.modifiers | UInt32(optionKey))
+            hotKeys.append(HotKey(discard) {
+                if VideoRecordController.shared.isRecording {
+                    VideoRecordController.shared.discardFromMenu()
+                }
+            })
+        }
         buildMenu()
     }
 
@@ -162,8 +201,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         tick(seconds)
     }
 
+    /// The record hotkey toggles: pressing it while a recording runs stops and saves
+    /// it — stopping otherwise needs a trip to the bar or the menu-bar icon, which is
+    /// exactly what a keyboard-driven recording flow is trying to avoid.
     @objc func record() {
-        VideoRecordController.shared.begin()
+        let rec = VideoRecordController.shared
+        if rec.isRecording { rec.stopFromMenu() } else { rec.begin() }
     }
 
     @objc func openLibrary() {
@@ -172,10 +215,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc func settings() {
         SettingsWindowController.shared.show()
-    }
-
-    @objc func about() {
-        AboutWindowController.shared.show()
     }
 
     /// Open a pre-filled GitHub issue, with the app + macOS version already in the
@@ -230,7 +269,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         button.imagePosition = .imageLeading
         button.imageHugsTitle = true
         button.font = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .semibold)
-        button.title = paused ? " Paused" : " " + Self.clockString(elapsed)
+        button.title = paused ? " " + L("Paused") : " " + Self.clockString(elapsed)
     }
 
     private static func clockString(_ t: TimeInterval) -> String {

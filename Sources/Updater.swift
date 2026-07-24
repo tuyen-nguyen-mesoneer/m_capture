@@ -122,8 +122,10 @@ enum Updater {
                     // picked up next time the app naturally restarts (or the next
                     // background check).
                     var busy = EditorWindowController.hasOpenWindows
+                        || ScreenshotController.shared.isSelecting
                     if #available(macOS 14, *) {
                         busy = busy || VideoRecordController.shared.isRecording
+                            || VideoRecordController.shared.isSelecting
                     }
                     if !busy { presentUpdatedAlert(version) }
                 }
@@ -133,18 +135,19 @@ enum Updater {
 
     private static func promptAndInstall(_ release: Release) {
         let version = normalize(release.tagName)
-        let choice = BrandAlert(title: "Update available",
-                                message: "m_capture \(version) is available.",
-                                titles: ["Install", "Later"], primary: 0, cancel: 1).runModal()
-        guard choice == 0 else { return }
-        guard let dmg = dmgURL(for: release) else { presentErrorAlert(); return }
-        UpdateInstaller.install(dmgURL: dmg, expectedVersion: version) { outcome in
-            switch outcome {
-            case .success:
-                markInstalled(version)
-                presentInstalledAlert(version)
-            case .failure:
-                presentErrorAlert()
+        BrandAlert(title: L("Update available"),
+                   message: String(format: L("m_capture %@ is available."), version),
+                   titles: [L("Install"), L("Later")], primary: 0, cancel: 1).present { choice in
+            guard choice == 0 else { return }
+            guard let dmg = dmgURL(for: release) else { presentErrorAlert(); return }
+            UpdateInstaller.install(dmgURL: dmg, expectedVersion: version) { outcome in
+                switch outcome {
+                case .success:
+                    markInstalled(version)
+                    presentInstalledAlert(version)
+                case .failure:
+                    presentErrorAlert()
+                }
             }
         }
     }
@@ -154,9 +157,10 @@ enum Updater {
         return URL(string: asset.browserDownloadURL)
     }
 
-    /// Quit and reopen the freshly swapped bundle. A detached shell waits for this
-    /// process to exit, then relaunches — it outlives our own termination.
-    private static func relaunch() {
+    /// Quit and reopen the bundle. A detached shell waits for this process to
+    /// exit, then relaunches — it outlives our own termination. Internal because
+    /// Settings' language switch also restarts through it.
+    static func relaunch() {
         let pid = ProcessInfo.processInfo.processIdentifier
         let path = Bundle.main.bundlePath
         let script = "while /bin/kill -0 \(pid) 2>/dev/null; do /bin/sleep 0.2; done; /usr/bin/open \"\(path)\""
@@ -208,10 +212,9 @@ enum Updater {
     /// check, so the two paths read identically. The relaunch is forced: a single confirm,
     /// then straight into the new build (no "Later" — the swap already happened).
     private static func presentRelaunchAlert(_ version: String) {
-        BrandAlert(title: "Update installed",
-                   message: "m_capture \(version) is ready. Click OK to relaunch.",
-                   titles: ["OK"], primary: 0, cancel: 0).runModal()
-        relaunch()
+        BrandAlert(title: L("Update installed"),
+                   message: String(format: L("m_capture %@ is ready. Click OK to relaunch."), version),
+                   titles: ["OK"], primary: 0, cancel: 0).present { _ in relaunch() }
     }
 
     private static func presentInstalledAlert(_ version: String) { presentRelaunchAlert(version) }
@@ -221,16 +224,17 @@ enum Updater {
     private static func presentUpdatedAlert(_ version: String) { presentRelaunchAlert(version) }
 
     private static func presentUpToDateAlert() {
-        BrandAlert(title: "You’re up to date",
-                   message: "m_capture \(effectiveCurrentVersion) is the latest version.",
-                   titles: ["OK"], primary: 0, cancel: 0).runModal()
+        BrandAlert(title: L("Up to date"),
+                   message: String(format: L("m_capture %@ is the latest version."), effectiveCurrentVersion),
+                   titles: ["OK"], primary: 0, cancel: 0).present()
     }
 
     private static func presentErrorAlert() {
-        let choice = BrandAlert(title: "Couldn't update",
-                                message: "Check your connection and try again.",
-                                titles: ["Open Releases", "OK"], primary: 0, cancel: 1).runModal()
-        if choice == 0, let url = URL(string: releasesPage) { NSWorkspace.shared.open(url) }
+        BrandAlert(title: L("Unable to update"),
+                   message: L("Check the network connection and try again."),
+                   titles: [L("Open Releases"), "OK"], primary: 0, cancel: 1).present { choice in
+            if choice == 0, let url = URL(string: releasesPage) { NSWorkspace.shared.open(url) }
+        }
     }
 }
 

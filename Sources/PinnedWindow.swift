@@ -61,15 +61,15 @@ final class PinnedWindowController: NSObject, NSWindowDelegate {
             let ok = Settings.shared.encode(rep).map { (try? $0.write(to: url)) != nil } ?? false
             DispatchQueue.main.async {
                 if !ok {
-                    _ = BrandAlert(title: "Couldn't save the image",
-                                   message: "Saving failed. Check your save folder in Settings → Output.",
-                                   titles: ["OK"], primary: 0, cancel: 0,
-                                   icon: "exclamationmark.triangle").runModal()
+                    BrandAlert(title: L("Unable to save the image"),
+                               message: L("Saving failed. Check your save folder in Settings → Output."),
+                               titles: ["OK"], primary: 0, cancel: 0,
+                               icon: "exclamationmark.triangle").present()
                 } else if fellBack {
-                    _ = BrandAlert(title: "Saved to the Desktop",
-                                   message: "Your save folder wasn't available, so this went to the Desktop. Update it in Settings → Output.",
-                                   titles: ["OK"], primary: 0, cancel: 0,
-                                   icon: "folder.badge.questionmark").runModal()
+                    BrandAlert(title: L("Saved to the Desktop"),
+                               message: L("The save folder was unavailable; the file was saved to the Desktop. Update it in Settings → Output."),
+                               titles: ["OK"], primary: 0, cancel: 0,
+                               icon: "folder.badge.questionmark").present()
                 }
             }
         }
@@ -168,11 +168,11 @@ private final class PinView: NSView {
 
     override func rightMouseDown(with event: NSEvent) {
         let menu = BrandMenu(entries: [
-            .item(title: "Copy", symbol: "doc.on.doc", shortcut: nil) { [weak self] in self?.onCopy?() },
-            .item(title: "Save", symbol: "square.and.arrow.down", shortcut: nil) { [weak self] in self?.onSave?() },
-            .item(title: "Reset size", symbol: "arrow.up.left.and.arrow.down.right", shortcut: nil) { [weak self] in self?.resetSize() },
+            .item(title: L("Copy"), symbol: "doc.on.doc", shortcut: nil) { [weak self] in self?.onCopy?() },
+            .item(title: L("Save"), symbol: "square.and.arrow.down", shortcut: nil) { [weak self] in self?.onSave?() },
+            .item(title: L("Reset size"), symbol: "arrow.up.left.and.arrow.down.right", shortcut: nil) { [weak self] in self?.resetSize() },
             .separator,
-            .item(title: "Close", symbol: "xmark", shortcut: "⌘W") { [weak self] in self?.onClose?() },
+            .item(title: L("Close"), symbol: "xmark", shortcut: "⌘W") { [weak self] in self?.onClose?() },
         ])
         contextMenu = menu
         menu.show(at: NSEvent.mouseLocation)

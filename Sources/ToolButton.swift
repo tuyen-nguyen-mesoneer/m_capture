@@ -19,7 +19,17 @@ final class ToolButton: NSButton {
 
     /// The hover tooltip text — also mirrored to the accessibility label so VoiceOver
     /// can announce these custom-drawn tiles (they have no title text of their own).
-    var tip: String? { didSet { setAccessibilityLabel(tip) } }
+    /// The trailing "(P)"-style shortcut suffix is stripped for the spoken label.
+    var tip: String? {
+        didSet {
+            var label = tip
+            if let t = tip, let r = t.range(of: "  (", options: .backwards),
+               t.hasSuffix(")") {
+                label = String(t[..<r.lowerBound])
+            }
+            setAccessibilityLabel(label)
+        }
+    }
     var onEnter: ((ToolButton) -> Void)?
     var onExit: (() -> Void)?
     var selectedState = false { didSet { needsDisplay = true } }

@@ -31,8 +31,10 @@ on-device, with no subscriptions, cloud services, or accounts.
 - **Region, window, or full screen** — drag to select a region, or press **Space** to grab a whole window (hover to wash it in a tint, release the mouse over it to capture) or the entire screen in a single click. Fully multi-monitor aware — every mode works on any connected display.
 - **Quick Screen** (`⌃⇧Q`) — grabs the screen under your cursor the instant you press the hotkey, with no selection overlay in between — for a hover state, tooltip, or menu that would vanish once you start dragging a selection.
 - **Self-timer** — a 3, 5, or 10-second delay with a menu-bar countdown, plus an optional mouse cursor and shutter sound.
-- **Recording** — record a region, a single window, or the whole screen in-app to an MP4 (HEVC), with a floating, draggable bar (live timer, size, quality, pause/stop); optionally mixes in system and/or microphone audio. **Esc discards** the take; **Return** saves it.
-- **Menu-bar recording controls** — the menu-bar icon turns into a **red dot with a live timer** while recording (grey when paused), so it's clear even at a glance. **Minimize** the floating bar and drive Pause / Resume / Stop straight from the **m.** menu.
+- **Recording** — record a region, a single window, or the whole screen in-app to an MP4 (HEVC) at **30 or 60 fps**, optionally mixing in system and/or microphone audio, with an optional **start countdown** and **mouse-click ripples** baked into the video. The record hotkey **toggles** — press `⌃⇧R` again to stop and save; `⌥⌃⇧R` discards (with confirmation).
+- **Trim & GIF export** — finish a recording with **Stop & Trim…** (a lossless in/out trim panel with live preview) or **Stop & Save as GIF** (a looping, share-ready GIF); recordings can also be trimmed later from **History**.
+- **Menu-bar recording controls** — the menu-bar icon turns into a **red dot with a live timer** while recording (grey when paused). The floating bar starts **minimized** by default (toggle in Settings); Stop / GIF / Trim / Discard / Pause and **Show Recording Bar** all live in the **m.** menu.
+- **Remember last region** — the previous region shows as a dashed ghost in the selection overlay; press **Return** to re-capture it instantly.
 - **Configurable after-capture action** — open the editor, save directly to disk, or copy to the clipboard.
 - **Never lose a capture** — quitting mid-recording still finalizes a playable file; if a save folder is missing the capture falls back to the Desktop (and tells you); same-second captures never overwrite.
 - **First-run welcome** — a one-time welcome points out the menu-bar icon and hotkeys and, with your consent, grants Screen Recording. **Launch at login** is a toggle in Settings.
@@ -48,11 +50,13 @@ on-device, with no subscriptions, cloud services, or accounts.
 - **Transform** — crop, rotate, flip, and adjust the capture region from eight handles (trim inward, or grow outward to re-grab more of the screen), all baked into the export.
 
 **🚀 Share**
+- **History** — a panel with your newest captures and recordings as thumbnail cards: copy, pin, trim (videos), reveal in Finder, or trash them without leaving the app. Opens automatically after every save.
 - **Copy text / QR (OCR)** — extract text or decode a QR code from any capture, on-device via Apple Vision.
 - **Pin to screen** — keep a capture floating above other windows, across Spaces.
 - **Share-ready backgrounds** — padding, rounded corners, and a soft shadow over 10 solid or gradient presets, or a custom color.
 - **Before/After GIF** — export a looping GIF that toggles the annotations on and off.
 - **Flexible output** — copy to the clipboard, save as PNG, JPEG, HEIC, or TIFF to a configurable folder, or use **Save As…** to choose a location.
+- **Three languages** — the entire UI ships in **English, German, and Vietnamese**; it follows the system language or a per-app choice in Settings.
 
 📖 Full reference: **[`USAGE.md`](USAGE.md)**.
 
@@ -80,7 +84,7 @@ itself in place; it runs the next time you launch (**Check for Updates** offers 
 relaunch right away). Living in `~/Applications` means updates apply without admin
 prompts and your Screen Recording permission carries over.
 
-To report an issue, use **Report a Bug** in the menu — it opens a
+To report an issue, use **Report a Bug** in **Settings → About** — it opens a
 [pre-filled GitHub issue](https://github.com/tuyen-nguyen-mesoneer/m_capture/issues/new)
 with your app and macOS versions already attached, so reports arrive with the
 essential details in place.
@@ -106,7 +110,4 @@ loop, and the source map.
 ## License
 
 **MIT License** — © 2026 [mesoneer AG](https://www.mesoneer.io/?r=0). See **[`LICENSE`](LICENSE)** for the full text.
-
-<p align="center">
-  <img src="docs/assets/about.png" alt="The m_capture About panel — the m. logo, app name, version, and an MIT License · © 2026 mesoneer AG footer" height="220">
-</p>
+The license and version are also shown in-app under **Settings → About**.

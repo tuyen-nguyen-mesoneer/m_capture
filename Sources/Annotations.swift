@@ -327,21 +327,17 @@ final class BlurAnnotation: TwoPointAnnotation {
 final class SpotlightAnnotation: TwoPointAnnotation {
     var fullSize: CGSize = .zero
     override func draw(in ctx: CGContext) {
-        let r = rect
-        // The four bands butt exactly against the hole with zero gap or overlap by
-        // construction — but `r` sits at fractional (sub-pixel) drag coordinates, so
-        // antialiasing softens that shared edge into a thin translucent seam (reads as
-        // a stray light line against the dim). These are plain axis-aligned rects with
-        // no diagonal/curved edge to smooth, so disabling AA for just this fill removes
-        // the seam without affecting anything else drawn after it.
+        // One even-odd fill of the full image with the hole subtracted. Four abutting
+        // band rects looked equivalent, but at fractional (sub-pixel) drag coordinates
+        // their shared edges — the seams running from the hole's corners out to the
+        // image border — rasterize a hair apart and read as stray light lines against
+        // the dim. A single path with a hole has no internal edges, so no seams,
+        // regardless of antialiasing or coordinates.
         ctx.saveGState()
-        ctx.setShouldAntialias(false)
         ctx.setFillColor(NSColor(white: 0, alpha: 0.55).cgColor)
-        let W = fullSize.width, H = fullSize.height
-        ctx.fill(CGRect(x: 0, y: r.maxY, width: W, height: H - r.maxY))
-        ctx.fill(CGRect(x: 0, y: 0, width: W, height: r.minY))
-        ctx.fill(CGRect(x: 0, y: r.minY, width: r.minX, height: r.height))
-        ctx.fill(CGRect(x: r.maxX, y: r.minY, width: W - r.maxX, height: r.height))
+        ctx.addRect(CGRect(origin: .zero, size: fullSize))
+        ctx.addRect(rect)
+        ctx.fillPath(using: .evenOdd)
         ctx.restoreGState()
     }
     override func hit(_ p: CGPoint) -> Bool { !rect.contains(p) }

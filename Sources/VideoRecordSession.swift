@@ -39,19 +39,34 @@ final class VideoRecordSession: NSObject, @unchecked Sendable {
          quality: VideoQuality,
          audioSource: VideoAudioSource,
          outputURL: URL,
-         excludedWindowIDs: [CGWindowID] = []) {
+         excludedWindowIDs: [CGWindowID] = [],
+         contentPrefetch: Task<SCShareableContent?, Never>? = nil) {
         self.target = target
         self.quality = quality
         self.audioSource = audioSource
         self.outputURL = outputURL
         self.excludedWindowIDs = excludedWindowIDs
+        self.contentPrefetch = contentPrefetch
     }
+
+    /// Optional `SCShareableContent` warm-up started when the selection overlay
+    /// opened. Enumerating shareable content costs 0.5–2 s; consuming a prefetch
+    /// here is what lets the recording (and its timer) start promptly.
+    private let contentPrefetch: Task<SCShareableContent?, Never>?
 
     /// Invoked on the main thread if the capture stream stops on its own — permission
     /// revoked mid-recording, the captured display unplugged, etc. Lets the controller
     /// tear down the HUD and tell the user, instead of the bar ticking on forever
     /// against a dead stream. Fired at most once.
     var onUnexpectedStop: ((String) -> Void)?
+
+    /// The CoreGraphics display a region target records, or nil for a window target —
+    /// lets the controller detect that display vanishing (unplugged/sleep) even when
+    /// the SCStream stalls silently instead of erroring.
+    var recordedDisplayID: CGDirectDisplayID? {
+        guard case let .region(_, screen) = target else { return nil }
+        return screen.displayID
+    }
     private var didReportUnexpectedStop = false
     private var isStopping = false
 
@@ -60,7 +75,14 @@ final class VideoRecordSession: NSObject, @unchecked Sendable {
     /// Configures SCStream and AVAssetWriter, then begins capture.
     /// Throws if Screen Recording permission is denied or writer setup fails.
     func start() async throws {
-        let content = try await SCShareableContent.current
+        // Use the warm-up from overlay time when available (it's seconds old at
+        // most); fall back to a fresh enumeration otherwise.
+        var content: SCShareableContent
+        if let prefetched = await contentPrefetch?.value {
+            content = prefetched
+        } else {
+            content = try await SCShareableContent.current
+        }
 
         // Build the content filter and capture dimensions from the target. Both paths
         // size the output by `SCContentFilter.pointPixelScale` — ScreenCaptureKit's own
@@ -81,7 +103,13 @@ final class VideoRecordSession: NSObject, @unchecked Sendable {
             filter = SCContentFilter(display: scDisplay, excludingWindows: excluded)
             capturePoints = region.size
         case let .window(windowID):
-            guard let scWindow = content.windows.first(where: { $0.windowID == windowID }) else {
+            var found = content.windows.first(where: { $0.windowID == windowID })
+            if found == nil, contentPrefetch != nil {
+                // The prefetch predates the pick — refresh once before giving up.
+                content = try await SCShareableContent.current
+                found = content.windows.first(where: { $0.windowID == windowID })
+            }
+            guard let scWindow = found else {
                 throw RecordError.noMatchingWindow
             }
             filter = SCContentFilter(desktopIndependentWindow: scWindow)
@@ -106,7 +134,8 @@ final class VideoRecordSession: NSObject, @unchecked Sendable {
         let pixelHeight = Int(capturePoints.height * scale)
         cfg.width  = pixelWidth
         cfg.height = pixelHeight
-        cfg.minimumFrameInterval = CMTime(value: 1, timescale: 30)
+        let fps = Settings.shared.videoFrameRate
+        cfg.minimumFrameInterval = CMTime(value: 1, timescale: CMTimeScale(fps))
         // HEVC encoder requires YUV input — BGRA is not directly encodable.
         cfg.pixelFormat = kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange
         cfg.capturesAudio = audioSource.capturesSystemAudio
@@ -128,8 +157,8 @@ final class VideoRecordSession: NSObject, @unchecked Sendable {
             ],
             AVVideoCompressionPropertiesKey: [
                 AVVideoAverageBitRateKey:          quality.bitrate(for: regionSize),
-                AVVideoExpectedSourceFrameRateKey: 30,
-                AVVideoMaxKeyFrameIntervalKey:     60,  // keyframe every 2 s at 30 fps
+                AVVideoExpectedSourceFrameRateKey: fps,
+                AVVideoMaxKeyFrameIntervalKey:     fps * 2,  // keyframe every 2 s
             ],
         ]
         let videoInput = AVAssetWriterInput(mediaType: .video, outputSettings: videoSettings)

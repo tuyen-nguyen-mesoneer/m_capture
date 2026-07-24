@@ -664,27 +664,52 @@ final class CanvasView: NSView, NSTextViewDelegate {
         onTextStyleChange?()   // refresh the contextual text popover after any selection change
     }
 
+    /// Repaint only the area a drag step touches: the mark's bounds before and after
+    /// the mutation, padded for handles/strokes/labels, mapped from image to view
+    /// space. Marking the whole full-res canvas dirty per pointer event software-
+    /// redraws the entire capture — on a 5K shot that alone blows the frame budget
+    /// and the editor reads as frozen mid-drag. Marks whose rendering isn't local to
+    /// their bounds (spotlight's full-canvas dim, the zoom callout's connector) fall
+    /// back to a full redraw.
+    private func invalidate(_ mark: Annotation?, from old: CGRect?) {
+        if mark == nil || mark is SpotlightAnnotation || mark is ZoomAnnotation {
+            needsDisplay = true; return
+        }
+        var dirty = CGRect.null
+        if let o = old { dirty = dirty.union(o) }
+        if let n = mark?.bounds { dirty = dirty.union(n) }
+        guard !dirty.isNull else { needsDisplay = true; return }
+        let pad = 80 / displayScale
+        let img = dirty.insetBy(dx: -pad, dy: -pad)
+        setNeedsDisplay(CGRect(x: img.minX * displayScale, y: img.minY * displayScale,
+                               width: img.width * displayScale, height: img.height * displayScale))
+    }
+
     override func mouseDragged(with event: NSEvent) {
         let p = imagePoint(event)
         if let cd = curveDrag {
+            let old = cd.curve.bounds
             switch cd.handle {
             case .start: cd.curve.start = p
             case .end:   cd.curve.end = p
             case .apex:  cd.curve.bend(through: p)
             }
-            needsDisplay = true; return
+            invalidate(cd.curve, from: old); return
         }
         if let md = measureDrag {
             let anchor = md.handle == .start ? md.mark.end : md.mark.start
             let np = snappedIfShift(p, from: anchor, event)
+            let old = md.mark.bounds
             switch md.handle {
             case .start: md.mark.start = np
             case .end:   md.mark.end = np
             }
-            needsDisplay = true; return
+            invalidate(md.mark, from: old); return
         }
         if let bd = boxDrag {
-            resizeBox(bd.shape, handle: bd.handle, to: p); needsDisplay = true; return
+            let old = bd.shape.bounds
+            resizeBox(bd.shape, handle: bd.handle, to: p)
+            invalidate(bd.shape, from: old); return
         }
         if zoomDrag == .move, let ez = editingZoom {
             let W = image.size.width, H = image.size.height
@@ -709,29 +734,36 @@ final class CanvasView: NSView, NSTextViewDelegate {
             needsDisplay = true; return
         }
         if overlayDrag == .move, let eo = editingOverlay {
+            let old = eo.bounds
             eo.rect.origin = CGPoint(x: p.x - overlayDragOffset.x, y: p.y - overlayDragOffset.y)
-            needsDisplay = true; return
+            invalidate(eo, from: old); return
         }
         if overlayDrag == .resize, let eo = editingOverlay {
+            let old = eo.bounds
             eo.rect = resizeRect(eo.rect, handle: overlayHandle, to: p, min: 24 / displayScale)
-            needsDisplay = true; return
+            invalidate(eo, from: old); return
         }
         if let td = textBoxDrag {
+            let old = td.mark.bounds
             resizeTextBox(td.mark, handle: td.handle, to: p)
-            needsDisplay = true; return
+            invalidate(td.mark, from: old); return
         }
         if textDrag == .move, let t = editingText {
+            let old = t.bounds
             t.origin = CGPoint(x: p.x - textDragOffset.x, y: p.y - textDragOffset.y)
-            needsDisplay = true; return
+            invalidate(t, from: old); return
         }
         if selectDrag == .move, let s = selected {
             let dx = p.x - lastDragPoint.x, dy = p.y - lastDragPoint.y
+            let old = s.bounds
             s.remap { CGPoint(x: $0.x + dx, y: $0.y + dy) }
-            lastDragPoint = p; needsDisplay = true; return
+            lastDragPoint = p
+            invalidate(s, from: old); return
         }
         if selectDrag == .resize, let s = selected {
             let prev = hypot(lastDragPoint.x - dragAnchor.x, lastDragPoint.y - dragAnchor.y)
             let cur = hypot(p.x - dragAnchor.x, p.y - dragAnchor.y)
+            let old = s.bounds
             if prev > 0.5 {
                 let f = cur / prev
                 let b = s.bounds
@@ -741,7 +773,7 @@ final class CanvasView: NSView, NSTextViewDelegate {
                     lastDragPoint = p
                 }
             }
-            needsDisplay = true; return
+            invalidate(s, from: old); return
         }
         if tool == .zoom, let s = zoomStart {
             zoomRect = CGRect(x: min(s.x, p.x), y: min(s.y, p.y),
@@ -761,6 +793,7 @@ final class CanvasView: NSView, NSTextViewDelegate {
             needsDisplay = true
             return
         }
+        let oldLive = live?.bounds
         if let a = live as? FreehandAnnotation { a.add(p) }
         else if let a = live as? CurvedAnnotation { a.end = p; a.straighten() }
         else if let a = live as? MeasureAnnotation { a.end = snappedIfShift(p, from: a.start, event) }
@@ -769,7 +802,7 @@ final class CanvasView: NSView, NSTextViewDelegate {
         else if let a = live as? EmojiAnnotation {
             a.size = max(24, hypot(p.x - a.center.x, p.y - a.center.y) * 1.8)
         }
-        needsDisplay = true
+        invalidate(live, from: oldLive)
     }
 
     override func mouseUp(with event: NSEvent) {
@@ -779,7 +812,7 @@ final class CanvasView: NSView, NSTextViewDelegate {
             onChange?(); needsDisplay = true; return
         }
         if let bd = boxDrag {
-            if let b = bd.shape as? BlurAnnotation { b.patch = gaussianBlur(b.rect) }
+            refreshObscurePatch(bd.shape)
             boxDrag = nil
             NSCursor.pop()   // matches the resize-cursor push on knob grab
             onChange?(); needsDisplay = true; return
@@ -804,7 +837,7 @@ final class CanvasView: NSView, NSTextViewDelegate {
             onChange?(); needsDisplay = true; return
         }
         if selectDrag != .none {
-            if let b = selected as? BlurAnnotation { b.patch = gaussianBlur(b.rect) }
+            refreshObscurePatch(selected)
             if let z = selected as? ZoomAnnotation { z.patch = croppedCGImage(rect: z.source) }
             selectDrag = .none; NSCursor.pop()
             onChange?(); needsDisplay = true; return
@@ -837,21 +870,21 @@ final class CanvasView: NSView, NSTextViewDelegate {
             needsDisplay = true
             return
         }
+        // Shapes are drag-only: a plain click used to drop a default-size shape, but
+        // that made stray clicks litter the canvas — below the drag threshold, place
+        // nothing (matching spotlight/ruler).
         if Self.isShapeTool(tool), let a = live as? TwoPointAnnotation {
             let minSide = 6 / displayScale
             if a.rect.width < minSide, a.rect.height < minSide {
-                let side = 90 / displayScale, half = side / 2
-                let center = a.start
-                a.start = CGPoint(x: center.x - half, y: center.y - half)
-                a.end = CGPoint(x: center.x + half, y: center.y + half)
+                live = nil; needsDisplay = true; return
             }
         }
+        // Drag-only, like shapes: a plain click used to drop a default diagonal,
+        // littering the canvas on stray clicks — below the threshold, place nothing.
         if tool == .line || tool == .arrow, let a = live as? CurvedAnnotation {
             let minSide = 6 / displayScale
             if abs(a.end.x - a.start.x) < minSide, abs(a.end.y - a.start.y) < minSide {
-                let side = 70 / displayScale
-                a.end = CGPoint(x: a.start.x + side, y: a.start.y + side)
-                a.straighten()
+                live = nil; needsDisplay = true; return
             }
         }
         // Spotlight is drag-only: a click (no real dragged area) shouldn't dim the
@@ -869,7 +902,7 @@ final class CanvasView: NSView, NSTextViewDelegate {
                 live = nil; needsDisplay = true; return
             }
         }
-        if let b = live as? BlurAnnotation { b.patch = gaussianBlur(b.rect) }
+        refreshObscurePatch(live)
         if let a = live {
             annotations.append(a)
             if a is CounterAnnotation { counter += 1 }
@@ -1202,6 +1235,12 @@ final class CanvasView: NSView, NSTextViewDelegate {
         f.setValue(radius, forKey: kCIInputRadiusKey)
         guard let out = f.outputImage else { return nil }
         return CIContext().createCGImage(out, from: CGRect(origin: .zero, size: size))
+    }
+
+    /// Re-render a blur mark's patch after its rect changed.
+    private func refreshObscurePatch(_ a: Annotation?) {
+        guard let b = a as? BlurAnnotation else { return }
+        b.patch = gaussianBlur(b.rect)
     }
 
     func undo() { clearSelections(); if let a = annotations.popLast() { redoStack.append(a); renumberCounters(); onChange?(); needsDisplay = true } }
@@ -1553,7 +1592,7 @@ final class CanvasView: NSView, NSTextViewDelegate {
         renumberCounters()
         for a in annotations + redoStack {
             if let s = a as? SpotlightAnnotation { s.fullSize = image.size }
-            if let b = a as? BlurAnnotation { b.patch = gaussianBlur(b.rect) }
+            refreshObscurePatch(a)
             if let z = a as? ZoomAnnotation { z.patch = croppedCGImage(rect: z.source) }
         }
         live = nil
