@@ -27,6 +27,10 @@ enum Updater {
     /// Keeps the repeating timer alive; retained for the process lifetime.
     private static var backgroundTimer: Timer?
 
+    /// Polls until the user is idle so a relaunch alert deferred by `isUserBusy()` still
+    /// fires once they finish, instead of being dropped until the next daily check.
+    private static var relaunchWaitTimer: Timer?
+
     /// A build we've already swapped onto disk but haven't relaunched into yet. Kept so
     /// the launch check doesn't see the just-installed release as "newer" and reinstall it.
     private static let pendingVersionKey = "updater.pendingVersion"
@@ -79,6 +83,15 @@ enum Updater {
     /// Manual check — always tells the user the outcome (up to date / available /
     /// couldn't check), and installs on demand.
     static func checkManually() {
+        // A background check may already have staged a newer build that's still waiting
+        // out `isUserBusy()` (see `waitForIdleThenAlert`) — `effectiveCurrentVersion`
+        // already counts it as current, so without this check the user would be told
+        // "up to date" instead of "restart to finish updating".
+        if let pending = UserDefaults.standard.string(forKey: pendingVersionKey),
+           isNewer(pending, than: runningVersion) {
+            presentUpdatedAlert(pending)
+            return
+        }
         fetch { result in
             switch result {
             case .success(let release) where isNewer(release.tagName, than: effectiveCurrentVersion):
@@ -118,18 +131,41 @@ enum Updater {
                     let version = normalize(release.tagName)
                     markInstalled(version)
                     // The swap is already safely on disk; only interrupt with the
-                    // relaunch prompt if there's nothing to interrupt. Otherwise it's
-                    // picked up next time the app naturally restarts (or the next
-                    // background check).
-                    var busy = EditorWindowController.hasOpenWindows
-                        || ScreenshotController.shared.isSelecting
-                    if #available(macOS 14, *) {
-                        busy = busy || VideoRecordController.shared.isRecording
-                            || VideoRecordController.shared.isSelecting
+                    // relaunch prompt if there's nothing to interrupt. Once the swap has
+                    // happened, `effectiveCurrentVersion` reports this release as current,
+                    // so no later check will ever notice it's "newer" again — if we drop
+                    // the alert here it's gone for good. Wait the user out instead.
+                    if isUserBusy() {
+                        waitForIdleThenAlert(version)
+                    } else {
+                        presentUpdatedAlert(version)
                     }
-                    if !busy { presentUpdatedAlert(version) }
                 }
             }
+        }
+    }
+
+    /// Whether interrupting with the relaunch prompt right now would step on active work.
+    private static func isUserBusy() -> Bool {
+        var busy = EditorWindowController.hasOpenWindows
+            || ScreenshotController.shared.isSelecting
+        if #available(macOS 14, *) {
+            busy = busy || VideoRecordController.shared.isRecording
+                || VideoRecordController.shared.isSelecting
+        }
+        return busy
+    }
+
+    /// Polls every few seconds until `isUserBusy()` clears, then shows the relaunch alert.
+    /// A later call (e.g. the next daily check finding yet another release) restarts the
+    /// wait with the newer version rather than stacking timers.
+    private static func waitForIdleThenAlert(_ version: String) {
+        relaunchWaitTimer?.invalidate()
+        relaunchWaitTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { timer in
+            guard !isUserBusy() else { return }
+            timer.invalidate()
+            relaunchWaitTimer = nil
+            presentUpdatedAlert(version)
         }
     }
 
