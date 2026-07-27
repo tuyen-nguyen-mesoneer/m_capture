@@ -36,6 +36,11 @@ final class VideoRecordController {
     /// Whether an in-progress recording is currently paused (for the menu-bar controls).
     var isRecordingPaused: Bool { session != nil && isPaused }
 
+    /// True while the recording flow owns the screen — either its selection overlay is
+    /// up or a capture is running. The screenshot flow checks this to avoid stacking a
+    /// second overlay set on the same displays.
+    var isActive: Bool { session != nil || !overlays.isEmpty }
+
     // Menu-bar controls, so the recording can be driven from the status item when the
     // floating bar is minimized.
     func stopFromMenu() { stopRecording() }
@@ -51,6 +56,11 @@ final class VideoRecordController {
     /// otherwise fight for the same screen).
     func begin() {
         guard session == nil else { return }
+        // Don't stack a second overlay set: a repeat ⌃⇧R (or menu click) during
+        // selection would otherwise put another set of overlays on every display,
+        // and only one set's teardown would run — stranding the rest.
+        guard overlays.isEmpty else { return }
+        guard !ScreenshotController.shared.isBusy else { return }
         guard !EditorWindowController.hasOpenWindows else { return }
         guard ScreenRecordingPermission.isGranted else {
             ScreenRecordingPermission.handleDenied()
@@ -236,7 +246,13 @@ final class VideoRecordController {
         // with a 0 KB file and no feedback to the user.
         Task {
             do {
-                try await recordSession.start()
+                // Let the just-dismissed selection overlay (dim + "Region · Space to
+                // cycle" banner) actually clear the compositor before the first frame
+                // is captured — an orderOut lags a couple of frames, so without this
+                // the banner bleeds into the opening frames of the recording. Mirrors
+                // the screenshot path's pre-capture delay in ScreenshotController.finish.
+                try await Task.sleep(nanoseconds: 120_000_000)
+                // try await recordSession.start()
             } catch {
                 await MainActor.run { self.handleStartError(error) }
             }

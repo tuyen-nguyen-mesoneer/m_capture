@@ -13,11 +13,26 @@ final class OverlayCoordinator {
     fileprivate var mode: CaptureMode = .region
     private let views = NSHashTable<SelectionView>.weakObjects()
 
+    /// Latched the instant any overlay completes or cancels. After that the whole
+    /// capture is over, so no overlay may cycle modes *or* re-key / re-order itself
+    /// back on screen. This guards two bugs:
+    ///  - a stray **Space** in the sliver between confirm and teardown cycling the
+    ///    mode (and, for recording, bleeding the mode banner into the first frames);
+    ///  - the multi-monitor "stuck overlay": on completion the mouse is often over a
+    ///    *different* display's overlay, whose queued `mouseEntered` fires after
+    ///    `dismiss()` and `makeKeyAndOrderFront`s that window back on screen —
+    ///    orphaned (already dropped from the controller's array) and un-dismissable.
+    fileprivate private(set) var isFinished = false
+
     fileprivate func register(_ view: SelectionView) { views.add(view) }
+
+    /// Mark the capture over: called the instant a completion or cancel fires so no
+    /// later event can change the pick or resurrect a torn-down overlay.
+    fileprivate func finish() { isFinished = true }
 
     /// Advance to the next available mode and notify every registered overlay.
     fileprivate func cycle(using modes: [CaptureMode]) {
-        guard modes.count > 1 else { return }
+        guard !isFinished, modes.count > 1 else { return }
         let idx = modes.firstIndex(of: mode) ?? 0
         mode = modes[(idx + 1) % modes.count]
         for view in views.allObjects { view.modeDidChange() }
@@ -120,6 +135,11 @@ final class SelectionView: NSView {
     /// Focus follows the pointer across displays: the overlay under the cursor becomes
     /// key so keyboard events (Esc) target the right screen and its cursor updates.
     override func mouseEntered(with event: NSEvent) {
+        // Once the capture is finished, never re-key: a queued `mouseEntered` on another
+        // display's overlay would otherwise `makeKeyAndOrderFront` it back on screen
+        // *after* `dismiss()` removed it from the controller — a stranded, un-dismissable
+        // overlay (the multi-monitor "stuck" bug).
+        guard coordinator.isFinished == false else { return }
         // Never re-key mid-drag: a region drag that crosses displays fires this on the
         // overlay it enters (button still held), and `makeKeyAndOrderFront` there would
         // hijack the in-progress event tracking — dropping the `mouseUp` and leaving the
@@ -196,6 +216,7 @@ final class SelectionView: NSView {
     override func mouseDown(with event: NSEvent) {
         switch captureMode {
         case .screen:
+            coordinator.finish()
             onCompleteScreen?()
         case .window:
             // Capture commits on release; a press just refreshes the highlight so the
@@ -220,10 +241,12 @@ final class SelectionView: NSView {
         switch captureMode {
         case .region:
             currentPoint = convert(event.locationInWindow, from: nil)
-            if let r = selectionRect, r.width >= 3, r.height >= 3 { onComplete?(r) } else { onCancel?() }
+            if let r = selectionRect, r.width >= 3, r.height >= 3 {
+                coordinator.finish(); onComplete?(r)
+            } else { coordinator.finish(); onCancel?() }
         case .window:
             refreshHoveredWindow()
-            if let win = hoveredWindow { onCompleteWindow?(win.id) }
+            if let win = hoveredWindow { coordinator.finish(); onCompleteWindow?(win.id) }
         case .screen:
             break
         }
@@ -261,7 +284,7 @@ final class SelectionView: NSView {
     }
 
     override func keyDown(with event: NSEvent) {
-        if event.keyCode == 53 { onCancel?(); return }
+        if event.keyCode == 53 { coordinator.finish(); onCancel?(); return }
         if event.keyCode == 49, availableModes.count > 1 {
             // Cycle the shared mode — the coordinator notifies every overlay (this one
             // included) via `modeDidChange`, so all displays switch together.

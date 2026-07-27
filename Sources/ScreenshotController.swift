@@ -18,10 +18,17 @@ final class ScreenshotController {
     /// second hotkey press/menu click could start an independent overlay set
     /// (or a second `EditorWindowController`) while the first was still in flight.
     private var capturePending = false
-    private var isBusy: Bool { !overlays.isEmpty || capturePending || EditorWindowController.hasOpenWindows }
+    var isBusy: Bool { !overlays.isEmpty || capturePending || EditorWindowController.hasOpenWindows }
+
+    /// True while a video recording's selection overlay or capture is live, so the
+    /// screenshot flow won't stack a second overlay set on the same displays.
+    private var videoCaptureActive: Bool {
+        if #available(macOS 14, *) { return VideoRecordController.shared.isActive }
+        return false
+    }
 
     func begin() {
-        if isBusy { return }
+        if isBusy || videoCaptureActive { return }
         guard ScreenRecordingPermission.isGranted else {
             ScreenRecordingPermission.handleDenied()
             return
@@ -62,7 +69,7 @@ final class ScreenshotController {
     /// capture delay — for a transient UI state (a tooltip, a hover menu) that
     /// would vanish the moment the user has to drag a selection.
     func captureQuickScreen() {
-        if isBusy { return }
+        if isBusy || videoCaptureActive { return }
         guard ScreenRecordingPermission.isGranted else {
             ScreenRecordingPermission.handleDenied()
             return
