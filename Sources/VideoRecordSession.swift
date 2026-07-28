@@ -95,11 +95,20 @@ final class VideoRecordSession: NSObject, @unchecked Sendable {
 
         switch target {
         case let .region(region, screen):
+            // The dim/border overlay windows (and the record bar, if shown) are created
+            // *after* the overlay-time prefetch, so a stale snapshot never contains them —
+            // filtering it finds nothing to exclude, and they'd bake right into the
+            // recording. Refresh once if the snapshot is missing any of them, same as the
+            // window-target path below already does for a picked window.
+            var excluded = content.windows.filter { excludedWindowIDs.contains(CGWindowID($0.windowID)) }
+            if excluded.count < excludedWindowIDs.count {
+                content = try await SCShareableContent.current
+                excluded = content.windows.filter { excludedWindowIDs.contains(CGWindowID($0.windowID)) }
+            }
             let displayID = (screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value ?? 0
             guard let scDisplay = content.displays.first(where: { $0.displayID == displayID }) else {
                 throw RecordError.noMatchingDisplay
             }
-            let excluded = content.windows.filter { excludedWindowIDs.contains(CGWindowID($0.windowID)) }
             filter = SCContentFilter(display: scDisplay, excludingWindows: excluded)
             capturePoints = region.size
         case let .window(windowID):

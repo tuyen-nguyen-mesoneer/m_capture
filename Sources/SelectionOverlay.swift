@@ -13,6 +13,31 @@ final class OverlayCoordinator {
     fileprivate var mode: CaptureMode = .region
     private let views = NSHashTable<SelectionView>.weakObjects()
 
+    /// Safety net for multi-monitor setups: `mouseEntered` is normally what hands key
+    /// status to the overlay under the pointer, but that only fires on a boundary
+    /// crossing. If key status is ever lost some other way (observed with two screens
+    /// connected — window server quirks around `.screenSaver`-level windows spanning
+    /// displays) with the pointer never leaving its current overlay, no crossing event
+    /// ever comes to re-key it, and the whole overlay silently stops accepting input —
+    /// indefinitely, since even Esc no longer reaches it. A local monitor sees every
+    /// mouseDown/keyDown *before* AppKit dispatches it, regardless of key status, so it
+    /// can promote the event's own window to key right then — self-healing on the very
+    /// interaction the user is already making, no crossing required.
+    private var eventMonitor: Any?
+
+    init() {
+        eventMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .leftMouseDown]) { event in
+            if let window = event.window as? OverlayWindow, !window.isKeyWindow {
+                window.makeKeyAndOrderFront(nil)
+            }
+            return event
+        }
+    }
+
+    deinit {
+        if let m = eventMonitor { NSEvent.removeMonitor(m) }
+    }
+
     fileprivate func register(_ view: SelectionView) { views.add(view) }
 
     /// Advance to the next available mode and notify every registered overlay.
@@ -358,9 +383,7 @@ final class SelectionView: NSView {
             ctx.restoreGState()
         }
         guard let r = selectionRect else { return }
-        ctx.setBlendMode(.clear)
-        ctx.fill(r)
-        ctx.setBlendMode(.normal)
+        punchHole(ctx, r)
         let lw: CGFloat = 2
         ctx.setStrokeColor(Theme.lavender.cgColor)
         ctx.setLineWidth(lw)
