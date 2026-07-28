@@ -208,7 +208,11 @@ private final class HistoryCell: NSView {
         addSubview(thumbBox)
         thumb.frame = thumbBox.bounds
         thumb.autoresizingMask = [.width, .height]
-        thumb.imageScaling = .scaleProportionallyDown
+        // Center-cropped to the box's aspect ratio (not proportional fit): a fit would
+        // letterbox a portrait screenshot down to a sliver next to a landscape one that
+        // fills its box, reading as "different sizes" even though every card is the same
+        // fixed size. Cropping first makes every thumbnail actually fill the same area.
+        thumb.imageScaling = .scaleAxesIndependently
         thumbBox.addSubview(thumb)
 
         // A small play badge marks recordings apart from stills at a glance.
@@ -292,23 +296,44 @@ private final class HistoryCell: NSView {
         ])
     }
 
-    /// Thumbnail load off the main thread; videos take their first frame.
+    /// Thumbnail load off the main thread; videos take their first frame. The result is
+    /// center-cropped to `fit`'s aspect ratio so every thumbnail — whatever its source
+    /// aspect ratio — visually fills the same box (see `imageScaling` above).
     private func loadThumbnail(fitting fit: NSSize) {
         let url = self.url, isVideo = self.isVideo
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            var image: NSImage?
+            var cg: CGImage?
             if isVideo {
                 let gen = AVAssetImageGenerator(asset: AVURLAsset(url: url))
                 gen.appliesPreferredTrackTransform = true
                 gen.maximumSize = CGSize(width: fit.width * 2, height: fit.height * 2)
-                if let cg = try? gen.copyCGImage(at: .zero, actualTime: nil) {
-                    image = NSImage(cgImage: cg, size: .zero)
-                }
-            } else {
-                image = NSImage(contentsOf: url)
+                cg = try? gen.copyCGImage(at: .zero, actualTime: nil)
+            } else if let src = NSImage(contentsOf: url) {
+                var rect = NSRect(origin: .zero, size: src.size)
+                cg = src.cgImage(forProposedRect: &rect, context: nil, hints: nil)
             }
+            let image = cg.map { NSImage(cgImage: Self.centerCropped($0, toAspect: fit.width / fit.height), size: .zero) }
             DispatchQueue.main.async { self?.thumb.image = image }
         }
+    }
+
+    /// Crops `cg` to `aspect` (width/height), keeping its center — the larger of the
+    /// two axes is trimmed down until the ratio matches, so nothing is stretched.
+    private static func centerCropped(_ cg: CGImage, toAspect aspect: CGFloat) -> CGImage {
+        let w = CGFloat(cg.width), h = CGFloat(cg.height)
+        guard w > 0, h > 0, aspect > 0 else { return cg }
+        let currentAspect = w / h
+        var cropRect = CGRect(x: 0, y: 0, width: w, height: h)
+        if currentAspect > aspect {
+            // Too wide — trim the sides.
+            let targetW = h * aspect
+            cropRect = CGRect(x: (w - targetW) / 2, y: 0, width: targetW, height: h)
+        } else if currentAspect < aspect {
+            // Too tall — trim top/bottom.
+            let targetH = w / aspect
+            cropRect = CGRect(x: 0, y: (h - targetH) / 2, width: w, height: targetH)
+        }
+        return cg.cropping(to: cropRect) ?? cg
     }
 
     // MARK: - Actions
