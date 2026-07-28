@@ -99,8 +99,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     version: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String),
             .separator,
         ]
-        // While recording, surface Stop / Pause-Resume (and Show bar if minimized) so the
-        // whole flow can be driven from the menu bar, not just the floating HUD.
+        // While recording, the menu is recording controls only (Stop / Pause-Resume /
+        // Show bar if minimized) plus Quit — every other action (Screenshot, a second
+        // Record, History, Settings, ...) either doesn't make sense mid-recording or
+        // would fight it for the screen, so they're dropped entirely rather than merely
+        // disabled: a short, single-purpose menu beats a long one where most items are
+        // greyed out. Quit stays reachable since it's an explicit, supported way to end
+        // and finalize a recording (see `quit()`).
         if rec.isRecording {
             entries.append(.item(title: L("Stop Recording"), symbol: "stop.circle",
                                  shortcut: nil) { rec.stopFromMenu() })
@@ -118,6 +123,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                      shortcut: nil) { rec.setBarHidden(false) })
             }
             entries.append(.separator)
+            entries.append(.item(title: L("Quit"), symbol: "power", shortcut: nil) { [weak self] in self?.quit() })
+            menu = BrandMenu(entries: entries)
+            return
         }
         entries.append(.item(title: L("Screenshot"), symbol: "camera.viewfinder",
                              shortcut: s.shortcut(.screenshot).displayString,

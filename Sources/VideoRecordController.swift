@@ -48,6 +48,15 @@ final class VideoRecordController {
     private var updateTimer: DispatchSourceTimer?
     private var overlays: [OverlayWindow] = []
     private var dimWindows: [RecordingDimWindow] = []
+    /// Bundle ID of whichever app was frontmost before `begin()` force-activated us for
+    /// the drag-to-select overlay — yielded back once actual recording starts, so the
+    /// rest of the recording doesn't leave m_capture squatting on "active app" and
+    /// forcing an extra activation click on whatever the user switches to (the floating
+    /// bar's own controls stay usable regardless, via `acceptsFirstMouse`). Uses
+    /// `NSApplication.yieldActivation`, not `NSRunningApplication.activate()` — modern
+    /// macOS's focus-stealing protections silently ignore one app force-activating an
+    /// unrelated one; yielding is the sanctioned way to hand back activation we grabbed.
+    private var appToRestore: String?
     private var isPaused = false
     private var currentURL: URL?
 
@@ -110,8 +119,11 @@ final class VideoRecordController {
         let mouse = NSEvent.mouseLocation
         let keyScreen = NSScreen.screens.first { $0.frame.contains(mouse) }
             ?? NSScreen.main ?? NSScreen.screens[0]
-        // Bring the app forward so the overlay — and, later, the recording bar —
-        // can hold keyboard focus (Esc/Space, Esc/Return to stop).
+        // Bring the app forward so the overlay can hold keyboard focus (Esc/Space,
+        // Esc/Return to stop) — handed back to whatever was frontmost once recording
+        // actually starts, see `appToRestore`.
+        let frontmostID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+        appToRestore = frontmostID == Bundle.main.bundleIdentifier ? nil : frontmostID
         NSApp.activate(ignoringOtherApps: true)
         let coordinator = OverlayCoordinator()
         let last = Settings.shared.lastRegion
@@ -261,6 +273,11 @@ final class VideoRecordController {
     }
 
     private func reallyStartRecording(target: VideoRecordSession.Target, barScreen: NSScreen, audioSource: VideoAudioSource) {
+        // Selection is done — yield activation back to whatever the user was in before
+        // the hotkey. Keeping m_capture "active" for the whole recording (bar minimized,
+        // nothing else visible) forced an extra activation click on every app switch.
+        if let bundleID = appToRestore { NSApp.yieldActivation(toApplicationWithBundleIdentifier: bundleID) }
+        appToRestore = nil
 
         let qualityLetter: String
         switch Settings.shared.videoQuality {
@@ -318,14 +335,21 @@ final class VideoRecordController {
 
         if Settings.shared.videoShowClicks { clickVisualizer.start() }
 
-        // Phase 2e — start capture, then start the UI ticker.
+        // Phase 2e — start capture, then start the UI ticker. A short delay first lets
+        // the compositor actually clear the just-dismissed selection overlay (its mode
+        // banner included): `orderOut`/`close` return before the screen repaints, so
+        // starting the stream immediately after can catch that banner fading out in the
+        // first captured frame(s) — the same latency `ScreenshotController` already
+        // works around with its own pre-grab delay.
         // Handle start() errors explicitly: a silent failure leaves the bar running
         // with a 0 KB file and no feedback to the user.
-        Task {
-            do {
-                try await recordSession.start()
-            } catch {
-                await MainActor.run { self.handleStartError(error) }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            Task {
+                do {
+                    try await recordSession.start()
+                } catch {
+                    await MainActor.run { self.handleStartError(error) }
+                }
             }
         }
         startTimer()
