@@ -34,7 +34,15 @@ final class ScreenshotController {
     /// second hotkey press/menu click could start an independent overlay set
     /// (or a second `EditorWindowController`) while the first was still in flight.
     private var capturePending = false
-    private var isBusy: Bool { !overlays.isEmpty || capturePending || EditorWindowController.hasOpenWindows }
+    var isBusy: Bool {
+        if !overlays.isEmpty || capturePending || EditorWindowController.hasOpenWindows { return true }
+        // The record flow owns an independent overlay set. Two sets stacked at the same
+        // `.screenSaver` level leave the lower one on screen after the upper one
+        // completes — a dim, pristine overlay sitting over the editor that reads as a
+        // freeze. Only one selection surface may exist at a time, either flow.
+        if #available(macOS 14, *), VideoRecordController.shared.isSelecting { return true }
+        return false
+    }
 
     func begin() {
         if isBusy { return }
