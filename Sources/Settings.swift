@@ -204,6 +204,7 @@ final class Settings {
         static let videoQuality = "videoQuality", videoAudioSource = "videoAudioSource"
         static let videoFrameRate = "videoFrameRate", videoShowClicks = "videoShowClicks"
         static let videoCountdown = "videoCountdown", videoBarMinimized = "videoBarMinimized"
+        static let videoSpotlight = "videoSpotlight"
         static let lastRegion = "lastRegion"
         static let appLanguage = "appLanguage"
     }
@@ -321,6 +322,13 @@ final class Settings {
     var videoShowClicks: Bool {
         get { d.bool(forKey: Key.videoShowClicks) }
         set { d.set(newValue, forKey: Key.videoShowClicks) }
+    }
+
+    /// Dim everything but a soft circle around the cursor while recording, for a
+    /// polished "tutorial video" look (default off).
+    var videoSpotlight: Bool {
+        get { d.bool(forKey: Key.videoSpotlight) }
+        set { d.set(newValue, forKey: Key.videoSpotlight) }
     }
 
     /// Start recordings with the floating bar minimized to the menu bar (default on).
