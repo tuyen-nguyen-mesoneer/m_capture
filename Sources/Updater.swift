@@ -31,13 +31,43 @@ enum Updater {
     /// fires once they finish, instead of being dropped until the next daily check.
     private static var relaunchWaitTimer: Timer?
 
+    /// One-shot retry after a failed silent check. The launch check fires the moment a
+    /// login item starts — routinely *before* Wi-Fi/VPN is up — and long-running sessions
+    /// hit transient failures too (network flaps, GitHub's 60-requests/hour per-IP API
+    /// limit, which a whole office behind one NAT egress exhausts constantly). Waiting
+    /// for the next daily tick turned every such hiccup into a full day without updates —
+    /// for users whose check *always* races the network at login, into "auto-update
+    /// never works at all".
+    private static var retryTimer: Timer?
+    private static let retryInterval: TimeInterval = 15 * 60
+
     /// A build we've already swapped onto disk but haven't relaunched into yet. Kept so
     /// the launch check doesn't see the just-installed release as "newer" and reinstall it.
     private static let pendingVersionKey = "updater.pendingVersion"
 
+    /// Consecutive silent-check fetch failures, persisted so Settings → About can
+    /// surface a chronically blocked updater (proxy, rate limit, private repo).
+    private static let failedChecksKey = "updater.failedChecks"
+
+    /// True while the relaunch alert is on screen, so a daily re-prompt doesn't stack
+    /// a second copy behind the first. Cleared in the alert's completion just before
+    /// the relaunch: if termination is ever refused or interrupted (an in-flight
+    /// recording's finalize, a hung terminate), a stuck `true` here would otherwise
+    /// suppress every future re-offer for the rest of the process lifetime — the
+    /// swapped build would sit on disk forever with the user never prompted again.
+    private static var relaunchAlertShowing = false
+
+    /// Whether the silent check has failed enough times in a row that the user should
+    /// be told (in Settings → About) that auto-update isn't working for them.
+    static var isCheckFailing: Bool {
+        UserDefaults.standard.integer(forKey: failedChecksKey) >= 3
+    }
+
     private struct Release: Decodable {
         let tagName: String
         let htmlURL: String
+        let prerelease: Bool
+        let draft: Bool
         let assets: [Asset]
         struct Asset: Decodable {
             let name: String
@@ -50,6 +80,8 @@ enum Updater {
         enum CodingKeys: String, CodingKey {
             case tagName = "tag_name"
             case htmlURL = "html_url"
+            case prerelease
+            case draft
             case assets
         }
     }
@@ -121,13 +153,32 @@ enum Updater {
     /// UI, then tells the user it's ready and relaunches once they confirm. Any failure
     /// stays silent — the running version is untouched.
     static func checkInBackground() {
+        // A prior check already swapped a newer build onto disk; the user just hasn't
+        // relaunched into it. Nothing to download — re-offer the relaunch (once a day,
+        // via the daily timer) so a missed or ignored prompt isn't gone for good.
+        if let pending = UserDefaults.standard.string(forKey: pendingVersionKey),
+           isNewer(pending, than: runningVersion) {
+            if !relaunchAlertShowing, relaunchWaitTimer == nil {
+                if isUserBusy() { waitForIdleThenAlert(pending) } else { presentUpdatedAlert(pending) }
+            }
+            return
+        }
         fetch { result in
-            guard case .success(let release) = result,
-                  isNewer(release.tagName, than: effectiveCurrentVersion),
-                  let dmg = dmgURL(for: release)
-            else { return }
+            guard case .success(let release) = result else {
+                recordCheckFailure()
+                scheduleRetry()
+                return
+            }
+            guard isNewer(release.tagName, than: effectiveCurrentVersion),
+                  let dmg = dmgURL(for: release) else {
+                // A healthy check with nothing to install — the updater works here.
+                UserDefaults.standard.removeObject(forKey: failedChecksKey)
+                return
+            }
             UpdateInstaller.install(dmgURL: dmg, expectedVersion: normalize(release.tagName)) { outcome in
-                if case .success = outcome {
+                switch outcome {
+                case .success:
+                    UserDefaults.standard.removeObject(forKey: failedChecksKey)
                     let version = normalize(release.tagName)
                     markInstalled(version)
                     // The swap is already safely on disk; only interrupt with the
@@ -140,8 +191,34 @@ enum Updater {
                     } else {
                         presentUpdatedAlert(version)
                     }
+                case .failure:
+                    // A machine where the swap itself can't succeed (the bundle on a
+                    // read-only volume — e.g. running straight from the mounted DMG —
+                    // or an /Applications copy this user can't write) fails silently
+                    // *every* day; count it toward the About warning exactly like a
+                    // failing fetch, so those users learn why they're stuck. No 15-min
+                    // retry here: re-downloading the DMG on a loop is heavy, and a
+                    // permission failure won't heal on its own — the daily tick covers
+                    // the transient cases (hdiutil busy, disk full since freed).
+                    recordCheckFailure()
                 }
             }
+        }
+    }
+
+    private static func recordCheckFailure() {
+        let defaults = UserDefaults.standard
+        defaults.set(defaults.integer(forKey: failedChecksKey) + 1, forKey: failedChecksKey)
+    }
+
+    /// Try again in 15 minutes after a failed fetch, instead of silently sitting out
+    /// the remainder of the 24 h interval. One timer, no stacking; a success clears
+    /// the failure count on its own.
+    private static func scheduleRetry() {
+        guard retryTimer == nil else { return }
+        retryTimer = Timer.scheduledTimer(withTimeInterval: retryInterval, repeats: false) { _ in
+            retryTimer = nil
+            checkInBackground()
         }
     }
 
@@ -214,7 +291,11 @@ enum Updater {
         request.timeoutInterval = 15
         URLSession.shared.dataTask(with: request) { data, _, error in
             let result: Result<Release, Error>
-            if let data, let release = try? JSONDecoder().decode([Release].self, from: data).first {
+            // Newest first; skip pre-releases, drafts, and entries whose .dmg upload
+            // failed — one malformed release must not block updates for everyone.
+            if let data,
+               let release = (try? JSONDecoder().decode([Release].self, from: data))?
+                   .first(where: { !$0.prerelease && !$0.draft && dmgURL(for: $0) != nil }) {
                 result = .success(release)
             } else {
                 result = .failure(error ?? URLError(.badServerResponse))
@@ -248,9 +329,21 @@ enum Updater {
     /// check, so the two paths read identically. The relaunch is forced: a single confirm,
     /// then straight into the new build (no "Later" — the swap already happened).
     private static func presentRelaunchAlert(_ version: String) {
+        guard !relaunchAlertShowing else { return }
+        relaunchAlertShowing = true
+        // The alert is non-modal and the app is usually in the background when the
+        // silent check fires — the panel can sit unnoticed behind other windows or on
+        // another Space. Badge the Dock tile (and bounce it once) so the user knows
+        // something is waiting; cleared on confirm, and a relaunch starts clean anyway.
+        NSApp.dockTile.badgeLabel = "1"
+        NSApp.requestUserAttention(.informationalRequest)
         BrandAlert(title: L("Update installed"),
                    message: String(format: L("m_capture %@ is ready. Click OK to relaunch."), version),
-                   titles: ["OK"], primary: 0, cancel: 0).present { _ in relaunch() }
+                   titles: ["OK"], primary: 0, cancel: 0).present { _ in
+            relaunchAlertShowing = false
+            NSApp.dockTile.badgeLabel = nil
+            relaunch()
+        }
     }
 
     private static func presentInstalledAlert(_ version: String) { presentRelaunchAlert(version) }

@@ -22,6 +22,7 @@ final class ScreenshotController {
             forName: NSApplication.didChangeScreenParametersNotification,
             object: nil, queue: .main) { [weak self] _ in
             guard let self, !self.overlays.isEmpty else { return }
+            self.contentPrefetch = nil   // enumerated for a layout that no longer exists
             self.dismiss()
         }
     }
@@ -34,6 +35,32 @@ final class ScreenshotController {
     /// second hotkey press/menu click could start an independent overlay set
     /// (or a second `EditorWindowController`) while the first was still in flight.
     private var capturePending = false
+    /// Monotonic token for the failsafe below — a stale failsafe from an earlier
+    /// capture must never clear a newer capture's pending flag.
+    private var pendingGeneration = 0
+
+    /// Arm `capturePending` with a hard failsafe: whatever happens to the capture
+    /// task, the flag clears after 15 s (the SCK grab itself is bounded to 10 s), so
+    /// `isBusy` can never permanently swallow the hotkeys — a wedged capture must
+    /// degrade to one lost shot, never to a dead app.
+    private func beginPendingCapture() {
+        capturePending = true
+        pendingGeneration += 1
+        let generation = pendingGeneration
+        DispatchQueue.main.asyncAfter(deadline: .now() + 15) { [weak self] in
+            guard let self, self.pendingGeneration == generation, self.capturePending else { return }
+            self.capturePending = false
+        }
+    }
+
+    /// `SCShareableContent` warm-up kicked off when the selection overlay opens —
+    /// enumerating shareable content costs 0.5–2 s (worse with more displays/windows,
+    /// and it can stall outright after a display-configuration change). Paying that
+    /// *after* mouse-up left a multi-second dead window between the overlay vanishing
+    /// and the editor appearing that read as a freeze; consuming a prefetch makes the
+    /// post-drag grab near-instant, same as the record flow.
+    private var contentPrefetch: Task<SCShareableContent?, Never>?
+
     var isBusy: Bool {
         if !overlays.isEmpty || capturePending || EditorWindowController.hasOpenWindows { return true }
         // The record flow owns an independent overlay set. Two sets stacked at the same
@@ -74,7 +101,10 @@ final class ScreenshotController {
                              screen: screen, showsCursor: false)
             }
             win.onCompleteWindow = { [weak self] windowID in self?.finishWindow(windowID: windowID) }
-            win.onCancel = { [weak self] in self?.dismiss() }
+            win.onCancel = { [weak self] in
+                self?.contentPrefetch = nil
+                self?.dismiss()
+            }
             overlays.append(win)
             if screen == keyScreen {
                 win.makeKeyAndOrderFront(nil)
@@ -83,6 +113,10 @@ final class ScreenshotController {
                 win.orderFront(nil)
             }
         }
+        // Warm up *after* the overlay windows exist so the snapshot contains them —
+        // the capture filter excludes them by ID, which is what keeps the dim/banner
+        // out of the shot regardless of how fast the grab fires after mouse-up.
+        contentPrefetch = Task { try? await SCShareableContent.current }
     }
 
     /// Grabs the screen under the mouse immediately, with no overlay and no
@@ -100,7 +134,7 @@ final class ScreenshotController {
             ?? NSScreen.main ?? NSScreen.screens[0]
         guard let displayID = screen.displayID else { return }
 
-        capturePending = true
+        beginPendingCapture()
         let sourceRect = CGRect(origin: .zero, size: screen.frame.size)
         ScreenshotController.playCaptureSoundIfEnabled()
         nonisolated(unsafe) let deliverScreen = screen
@@ -126,8 +160,20 @@ final class ScreenshotController {
     }
 
     private func dismiss() {
+        // `orderOut` alone occasionally leaves a `.screenSaver`-level,
+        // `.canJoinAllSpaces` overlay window fully on screen (confirmed via
+        // `CGWindowListCopyWindowInfo` — window server transaction races with the
+        // `NSApp.activate` a moment earlier in `begin()`, especially on a secondary
+        // display) even after this method returns and Swift's own reference is
+        // dropped: a stranded, invisible, click-eating window over everything below
+        // it that reads as the whole app freezing. `orderOut` first for the
+        // instant visual hide, then `close()` one runloop tick later (never inline —
+        // this can run from that very window's own mouseUp) to unconditionally tear
+        // down its window-server surface rather than trust the soft hide.
+        let stale = overlays
         overlays.forEach { $0.orderOut(nil) }
         overlays.removeAll()
+        DispatchQueue.main.async { stale.forEach { $0.close() } }
         ScreenshotController.forcePointerReset()
     }
 
@@ -151,6 +197,9 @@ final class ScreenshotController {
         win.isOpaque = false
         win.backgroundColor = .clear
         win.hasShadow = false
+        // The deferred block below `close()`s while still holding `win`; AppKit's
+        // default of `true` would over-release and crash.
+        win.isReleasedWhenClosed = false
         // Hit-testable (not click-through) and briefly key — cursor-rect ownership is
         // tied to actually being the front, hit-testable window under the pointer, same
         // as the real capture overlay it's replacing. It's up for only ~50ms.
@@ -160,7 +209,12 @@ final class ScreenshotController {
         win.contentView = v
         win.makeKeyAndOrderFront(nil)
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-            win.orderOut(nil)
+            // `close()`, not just `orderOut` — see `dismiss()`'s note on the same
+            // window-server race; this window briefly holds key status too, which
+            // makes an incomplete hide here the worst case (a full-screen, currently
+            // key, click-eating ghost). It has no event handlers of its own, so
+            // closing it directly from this later tick is safe.
+            win.close()
         }
     }
 
@@ -217,11 +271,17 @@ final class ScreenshotController {
         }
     }
 
-    /// A nil capture almost always means Screen Recording was revoked after
-    /// launch (the pre-check in `begin()` catches the common case up front).
-    /// Guide the user rather than failing silently.
+    /// A nil capture means Screen Recording was revoked after launch (the pre-check
+    /// in `begin()` catches the common case up front) or ScreenCaptureKit stalled
+    /// past the 10 s bound — either way, tell the user rather than failing silently:
+    /// a dropped shot with zero feedback reads as the app freezing.
     private static func handleEmptyCapture() {
-        if !ScreenRecordingPermission.isGranted { ScreenRecordingPermission.handleDenied() }
+        guard ScreenRecordingPermission.isGranted else {
+            ScreenRecordingPermission.handleDenied()
+            return
+        }
+        let screen = NSScreen.screens.first { $0.frame.contains(NSEvent.mouseLocation) } ?? NSScreen.main
+        BrandToast.show(L("Capture failed. Please try again."), on: screen)
     }
 
     /// Grab an on-screen region in-process with ScreenCaptureKit, rather than
@@ -260,19 +320,45 @@ final class ScreenshotController {
     }
 
     private static func captureRegion(displayID: CGDirectDisplayID, sourceRect: CGRect,
-                                      showsCursor: Bool) async -> (cg: CGImage, scale: CGFloat)? {
+                                      showsCursor: Bool,
+                                      excluding windowIDs: [CGWindowID] = [],
+                                      prefetched: Task<SCShareableContent?, Never>? = nil)
+        async -> (cg: CGImage, scale: CGFloat)? {
         await withTimeout(seconds: 10) {
             await captureRegionUnbounded(displayID: displayID, sourceRect: sourceRect,
-                                         showsCursor: showsCursor)
+                                         showsCursor: showsCursor, excluding: windowIDs,
+                                         prefetched: prefetched)
         }
     }
 
     private static func captureRegionUnbounded(displayID: CGDirectDisplayID, sourceRect: CGRect,
-                                               showsCursor: Bool) async -> (cg: CGImage, scale: CGFloat)? {
+                                               showsCursor: Bool,
+                                               excluding windowIDs: [CGWindowID],
+                                               prefetched: Task<SCShareableContent?, Never>?)
+        async -> (cg: CGImage, scale: CGFloat)? {
         do {
-            let content = try await SCShareableContent.current
+            // Consume the overlay-time prefetch when it knows this display; a stale
+            // snapshot (display changed since the overlay opened) falls back to a
+            // fresh fetch — still inside the caller's timeout.
+            var content: SCShareableContent
+            if let pre = await prefetched?.value,
+               pre.displays.contains(where: { $0.displayID == displayID }) {
+                content = pre
+            } else {
+                content = try await SCShareableContent.current
+            }
+            // Exclude our own overlay windows from the shot by ID. This — not the
+            // short pre-grab delay — is what guarantees the dim/banner never bakes
+            // into the capture: the prefetch made the grab fast enough to otherwise
+            // catch the overlay's fade-out. Refresh once if the snapshot is missing
+            // any of them (it predates windows created after it was kicked off).
+            var excluded = content.windows.filter { windowIDs.contains(CGWindowID($0.windowID)) }
+            if excluded.count < windowIDs.count {
+                content = try await SCShareableContent.current
+                excluded = content.windows.filter { windowIDs.contains(CGWindowID($0.windowID)) }
+            }
             guard let display = content.displays.first(where: { $0.displayID == displayID }) else { return nil }
-            let filter = SCContentFilter(display: display, excludingWindows: [])
+            let filter = SCContentFilter(display: display, excludingWindows: excluded)
             let scale = CGFloat(filter.pointPixelScale)
             let config = SCStreamConfiguration()
             config.sourceRect = sourceRect
@@ -298,22 +384,33 @@ final class ScreenshotController {
     /// (`desktopIndependentWindow`) so occluding windows are excluded and only the
     /// target window's pixels are captured. Returns the image plus the window's AppKit
     /// global frame and hosting screen, which the editor uses to place its live canvas.
-    private static func captureWindow(windowID: CGWindowID, showsCursor: Bool)
+    private static func captureWindow(windowID: CGWindowID, showsCursor: Bool,
+                                      prefetched: Task<SCShareableContent?, Never>? = nil)
         async -> (cg: CGImage, scale: CGFloat, globalRect: CGRect, screen: NSScreen)? {
         // Resolve the hosting NSScreen outside the timeout race: NSScreen is
         // explicitly non-Sendable, so it can't cross the task-group boundary.
         guard let r = await withTimeout(seconds: 10, {
-            await captureWindowUnbounded(windowID: windowID, showsCursor: showsCursor)
+            await captureWindowUnbounded(windowID: windowID, showsCursor: showsCursor,
+                                         prefetched: prefetched)
         }) else { return nil }
         let screen = NSScreen.screens.first { $0.frame.intersects(r.globalRect) }
             ?? NSScreen.main ?? NSScreen.screens[0]
         return (r.cg, r.scale, r.globalRect, screen)
     }
 
-    private static func captureWindowUnbounded(windowID: CGWindowID, showsCursor: Bool)
+    private static func captureWindowUnbounded(windowID: CGWindowID, showsCursor: Bool,
+                                               prefetched: Task<SCShareableContent?, Never>?)
         async -> (cg: CGImage, scale: CGFloat, globalRect: CGRect)? {
         do {
-            let content = try await SCShareableContent.current
+            // The prefetch predates the pick — when it doesn't know this window
+            // (opened after the overlay came up), refresh once before giving up.
+            let content: SCShareableContent
+            if let pre = await prefetched?.value,
+               pre.windows.contains(where: { $0.windowID == windowID }) {
+                content = pre
+            } else {
+                content = try await SCShareableContent.current
+            }
             guard let scWindow = content.windows.first(where: { $0.windowID == windowID }) else { return nil }
             let filter = SCContentFilter(desktopIndependentWindow: scWindow)
             let scale = CGFloat(filter.pointPixelScale)
@@ -333,14 +430,17 @@ final class ScreenshotController {
     }
 
     private func finishWindow(windowID: CGWindowID) {
+        let prefetch = contentPrefetch
+        contentPrefetch = nil
         dismiss()
-        capturePending = true
+        beginPendingCapture()
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.06) {
             ScreenshotController.playCaptureSoundIfEnabled()
             Task {
                 // Never draw the cursor for a window grab — it's only ever the tool's
                 // capture badge, which would otherwise bake into the shot.
-                let result = await ScreenshotController.captureWindow(windowID: windowID, showsCursor: false)
+                let result = await ScreenshotController.captureWindow(windowID: windowID, showsCursor: false,
+                                                                      prefetched: prefetch)
                 await MainActor.run {
                     defer { self.capturePending = false }
                     guard let result else { ScreenshotController.handleEmptyCapture(); return }
@@ -360,11 +460,16 @@ final class ScreenshotController {
         let global = CGRect(x: screen.frame.minX + viewRect.minX,
                             y: screen.frame.minY + viewRect.minY,
                             width: viewRect.width, height: viewRect.height)
+        let prefetch = contentPrefetch
+        contentPrefetch = nil
+        // Snapshot the overlay window IDs before dismiss() drops them — the capture
+        // filter excludes them so no remnant of the selection UI lands in the shot.
+        let overlayIDs = overlays.map { CGWindowID($0.windowNumber) }
         dismiss()
         guard global.width >= 3, global.height >= 3 else { return }
         guard let displayID = screen.displayID else { return }
 
-        capturePending = true
+        beginPendingCapture()
         let sourceRect = CGRect(x: viewRect.minX,
                                 y: screen.frame.height - viewRect.maxY,
                                 width: viewRect.width, height: viewRect.height)
@@ -374,7 +479,8 @@ final class ScreenshotController {
             nonisolated(unsafe) let deliverScreen = screen
             Task {
                 let result = await ScreenshotController.captureRegion(
-                    displayID: displayID, sourceRect: sourceRect, showsCursor: showsCursor)
+                    displayID: displayID, sourceRect: sourceRect, showsCursor: showsCursor,
+                    excluding: overlayIDs, prefetched: prefetch)
                 await MainActor.run {
                     defer { self.capturePending = false }
                     guard let result else { ScreenshotController.handleEmptyCapture(); return }

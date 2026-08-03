@@ -700,7 +700,22 @@ final class SettingsWindowController: NSObject {
         buttons.spacing = 10
         buttons.translatesAutoresizingMaskIntoConstraints = false
 
-        [logo, name, versionLabel, license, buttons].forEach { card.addSubview($0) }
+        // Surfaces a chronically failing silent update check (blocked network,
+        // rate limit, unreadable repo) — otherwise those users never learn why
+        // they're stuck on an old version.
+        var updateWarning: NSTextField?
+        if Updater.isCheckFailing {
+            let warning = NSTextField(wrappingLabelWithString:
+                L("Automatic update checks are failing — check network access to GitHub."))
+            warning.font = Theme.font(11)
+            warning.textColor = Theme.accentPurple
+            warning.alignment = .center
+            warning.translatesAutoresizingMaskIntoConstraints = false
+            updateWarning = warning
+        }
+
+        ([logo, name, versionLabel, license, buttons] + (updateWarning.map { [$0] } ?? []))
+            .forEach { card.addSubview($0) }
         NSLayoutConstraint.activate([
             card.widthAnchor.constraint(equalToConstant: Layout.rowWidth),
             logo.topAnchor.constraint(equalTo: card.topAnchor, constant: 40),
@@ -713,10 +728,19 @@ final class SettingsWindowController: NSObject {
             versionLabel.centerXAnchor.constraint(equalTo: card.centerXAnchor),
             license.topAnchor.constraint(equalTo: versionLabel.bottomAnchor, constant: 2),
             license.centerXAnchor.constraint(equalTo: card.centerXAnchor),
-            buttons.topAnchor.constraint(equalTo: license.bottomAnchor, constant: 18),
             buttons.centerXAnchor.constraint(equalTo: card.centerXAnchor),
             buttons.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -8),
         ])
+        if let warning = updateWarning {
+            NSLayoutConstraint.activate([
+                warning.topAnchor.constraint(equalTo: license.bottomAnchor, constant: 10),
+                warning.centerXAnchor.constraint(equalTo: card.centerXAnchor),
+                warning.widthAnchor.constraint(lessThanOrEqualToConstant: Layout.rowWidth - 60),
+                buttons.topAnchor.constraint(equalTo: warning.bottomAnchor, constant: 14),
+            ])
+        } else {
+            buttons.topAnchor.constraint(equalTo: license.bottomAnchor, constant: 18).isActive = true
+        }
         return card
     }
 
