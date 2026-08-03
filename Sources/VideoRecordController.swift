@@ -192,13 +192,28 @@ final class VideoRecordController {
     }
 
     private func dismissDim() {
+        // See `dismissOverlays` — `orderOut` alone can leave a `.screenSaver`-level
+        // window fully on screen after this returns (window-server transaction race,
+        // confirmed on a secondary display); `close()` a tick later unconditionally
+        // tears down its surface instead of trusting the soft hide.
+        let stale = dimWindows
         dimWindows.forEach { $0.orderOut(nil) }
         dimWindows.removeAll()
+        DispatchQueue.main.async { stale.forEach { $0.close() } }
     }
 
     private func dismissOverlays() {
+        // `orderOut` occasionally leaves a `.screenSaver`-level, `.canJoinAllSpaces`
+        // overlay window fully on screen even after this method returns and Swift's
+        // own reference is dropped — confirmed via `CGWindowListCopyWindowInfo` on a
+        // secondary display: a stranded, invisible, click-eating window over
+        // everything below it that reads as the whole app freezing. `close()` one
+        // runloop tick later (never inline — this can run from that very window's
+        // own mouseUp) unconditionally tears down its window-server surface.
+        let stale = overlays
         overlays.forEach { $0.orderOut(nil) }
         overlays.removeAll()
+        DispatchQueue.main.async { stale.forEach { $0.close() } }
         // Reset the pointer to the pointing hand — matching the Window/Screen pick
         // modes' cursor — so the overlay's crosshair isn't left showing (and isn't
         // baked into the first recorded frames). See `ScreenshotController.forcePointerReset`
@@ -572,6 +587,9 @@ final class RecordingDimWindow: NSWindow {
         isOpaque = false
         backgroundColor = .clear
         hasShadow = false
+        // `dismissDim()` calls `close()` while the controller still holds a
+        // reference; AppKit's default of `true` would over-release and crash.
+        isReleasedWhenClosed = false
         ignoresMouseEvents = true
         // Above regular app windows (so they dim) but below the floating record bar.
         level = NSWindow.Level(rawValue: NSWindow.Level.floating.rawValue - 1)

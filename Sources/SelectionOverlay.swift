@@ -81,6 +81,10 @@ final class OverlayWindow: NSWindow {
         isOpaque = false
         backgroundColor = .clear
         hasShadow = false
+        // The controllers `close()` overlays they still hold references to (the hard
+        // teardown that fixes the stranded-window bug); the AppKit default of `true`
+        // would over-release and crash on the next autorelease-pool pop.
+        isReleasedWhenClosed = false
         level = .screenSaver
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
         acceptsMouseMovedEvents = true

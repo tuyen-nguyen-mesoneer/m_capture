@@ -51,6 +51,7 @@ enum L10n {
         "Move to Trash?": "In den Papierkorb legen?",
         "Moved to Trash": "In den Papierkorb gelegt",
         "Copied to clipboard": "In die Zwischenablage kopiert",
+        "Capture failed. Please try again.": "Aufnahme fehlgeschlagen. Bitte versuchen Sie es erneut.",
         "Recording": "Aufnahme",
         "Discard Recording": "Aufnahme verwerfen",
         "Start with the recording bar minimized": "Aufnahmeleiste minimiert starten",
@@ -88,6 +89,7 @@ enum L10n {
         "Unable to update": "Update fehlgeschlagen",
         "Check the network connection and try again.": "Netzwerkverbindung prüfen und erneut versuchen.",
         "Open Releases": "Releases öffnen",
+        "Automatic update checks are failing — check network access to GitHub.": "Automatische Update-Prüfungen schlagen fehl — Netzwerkzugriff auf GitHub prüfen.",
 
         // ── Permissions ──────────────────────────────────────────────────
         "Screen Recording permission required": "Bildschirmaufnahme-Berechtigung erforderlich",
@@ -322,6 +324,7 @@ enum L10n {
         "Move to Trash?": "Chuyển vào Thùng rác?",
         "Moved to Trash": "Đã chuyển vào Thùng rác",
         "Copied to clipboard": "Đã sao chép vào bảng nhớ tạm",
+        "Capture failed. Please try again.": "Chụp màn hình không thành công. Vui lòng thử lại.",
         "Recording": "Bản ghi hình",
         "Discard Recording": "Huỷ bản ghi",
         "Start with the recording bar minimized": "Bắt đầu với thanh ghi hình thu nhỏ",
@@ -358,6 +361,7 @@ enum L10n {
         "m_capture %@ is the latest version.": "m_capture %@ là phiên bản mới nhất.",
         "Unable to update": "Không thể cập nhật",
         "Check the network connection and try again.": "Kiểm tra kết nối mạng rồi thử lại.",
+        "Automatic update checks are failing — check network access to GitHub.": "Kiểm tra cập nhật tự động đang thất bại — hãy kiểm tra kết nối mạng tới GitHub.",
         "Open Releases": "Mở trang Releases",
 
         // ── Permissions ──────────────────────────────────────────────────
