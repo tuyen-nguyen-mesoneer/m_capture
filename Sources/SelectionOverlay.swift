@@ -30,6 +30,14 @@ final class OverlayCoordinator {
             if let window = event.window as? OverlayWindow, !window.isKeyWindow {
                 window.makeKeyAndOrderFront(nil)
             }
+            // Space cycles the mode even when the keystroke never reaches the selection
+            // view's `keyDown` — an overlay that failed to take key status, or a window
+            // whose first responder drifted, would otherwise swallow it silently.
+            if event.type == .keyDown, event.keyCode == 49,
+               let view = self.views.allObjects.first(where: { $0.window?.isVisible == true }) {
+                view.cycleMode()
+                return nil
+            }
             return event
         }
     }
@@ -99,6 +107,27 @@ final class OverlayWindow: NSWindow {
 
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { true }
+
+    /// Take key status and point the first responder at the selection view — the only
+    /// responder that handles Space / Esc / Return.
+    ///
+    /// `NSApp.activate` resolves asynchronously, so the synchronous
+    /// `makeKeyAndOrderFront` right after it can land while the app is still inactive:
+    /// the overlay ends up ordered front and drag-able (mouse events don't need key
+    /// status) with the keyboard going to whatever app was frontmost — Space silently
+    /// does nothing. Re-asserting on the next few run-loop turns catches activation
+    /// whenever it actually lands.
+    func claimKeyboard() {
+        makeKeyAndOrderFront(nil)
+        makeFirstResponder(selectionView)
+        for delay in [0.0, 0.05, 0.2] {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                guard let self, self.isVisible, !self.isKeyWindow else { return }
+                self.makeKeyAndOrderFront(nil)
+                self.makeFirstResponder(self.selectionView)
+            }
+        }
+    }
 
     /// Show the capture cursor from the first frame: the view's initial cursor set (in
     /// `viewDidMoveToWindow`) runs before the window is key and can be overridden,
@@ -172,6 +201,12 @@ final class SelectionView: NSView {
         if captureMode == .window { refreshHoveredWindow() } else { hoveredWindow = nil }
         if window?.isKeyWindow == true { modeCursor.set() }
         needsDisplay = true
+    }
+
+    /// Advance the shared capture mode, from `keyDown` or the coordinator's monitor.
+    fileprivate func cycleMode() {
+        guard availableModes.count > 1 else { return }
+        coordinator.cycle(using: availableModes)
     }
 
     /// The ordered set of modes Space cycles through, honouring the two capability
@@ -327,10 +362,10 @@ final class SelectionView: NSView {
             onComplete?(prev.integral)
             return
         }
-        if event.keyCode == 49, availableModes.count > 1 {
+        if event.keyCode == 49 {
             // Cycle the shared mode — the coordinator notifies every overlay (this one
             // included) via `modeDidChange`, so all displays switch together.
-            coordinator.cycle(using: availableModes)
+            cycleMode()
             return
         }
         super.keyDown(with: event)
