@@ -122,7 +122,7 @@ final class HotKeyField: NSView {
 
     private func startRecording() {
         recording = true
-        HotKey.isSuppressed = true
+        HotKey.suspendAll()
         window?.makeFirstResponder(self)
         // The Settings panel is a reused singleton that closes by ordering out, so a
         // recording left armed would outlive it: stale "Type shortcut…" label on reopen,
@@ -143,7 +143,13 @@ final class HotKeyField: NSView {
             if ev.keyCode == UInt16(kVK_Escape) { self.cancelRecording(); return nil }
             let mods = Shortcut.carbonModifiers(ev.modifierFlags)
             guard mods != 0 else { return nil }
-            Settings.shared.setShortcut(Shortcut(keyCode: UInt32(ev.keyCode), modifiers: mods), for: self.action)
+            let candidate = Shortcut(keyCode: UInt32(ev.keyCode), modifiers: mods)
+            if let owner = Settings.shared.shortcutConflict(candidate, excluding: self.action) {
+                self.stopRecording()
+                self.reportConflict(candidate, owner: owner)
+                return nil
+            }
+            Settings.shared.setShortcut(candidate, for: self.action)
             self.stopRecording()
             self.onChange()
             return nil
@@ -152,12 +158,23 @@ final class HotKeyField: NSView {
 
     private func cancelRecording() { stopRecording() }
 
+    /// Explain a rejected binding instead of appearing to ignore the keypress. Presented
+    /// non-modally: this runs from inside a local event monitor, where a nested
+    /// `runModal` can wedge the run loop.
+    private func reportConflict(_ s: Shortcut, owner: String) {
+        let message = String(format: L("%@ is already used by \"%@\". Choose a different combination."),
+                             s.displayString, owner)
+        BrandAlert(title: L("Shortcut already in use"), message: message,
+                   titles: [L("OK")], primary: 0, cancel: 0,
+                   icon: "exclamationmark.triangle").present()
+    }
+
     private func stopRecording() {
         guard recording else { return }
         if let m = monitor { NSEvent.removeMonitor(m); monitor = nil }
         if let o = resignObserver { NotificationCenter.default.removeObserver(o); resignObserver = nil }
         recording = false
-        HotKey.isSuppressed = false
+        HotKey.resumeAll()
     }
 
     /// Switching Settings sections pulls the row out of the panel; a field that left the
@@ -170,7 +187,7 @@ final class HotKeyField: NSView {
     deinit {
         if let m = monitor { NSEvent.removeMonitor(m) }
         if let o = resignObserver { NotificationCenter.default.removeObserver(o) }
-        if recording { HotKey.isSuppressed = false }
+        if recording { HotKey.resumeAll() }
     }
 }
 

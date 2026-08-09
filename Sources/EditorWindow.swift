@@ -400,7 +400,9 @@ final class EditorWindowController: NSObject {
         let color = makeCluster(L("Style"), colorTiles, perRow: 4, radius: colorR)
 
         let actions = makeCluster(L("Action"), [
-            toolButton(.select, "cursorarrow", L("Move — drag an object to reposition, drag its corner to resize, ⌫ to delete  (V)")),
+            // A pointer glyph read as a second Arrow tool — the four-way move symbol
+            // says "reposition an existing mark" without competing with it.
+            toolButton(.select, "arrow.up.and.down.and.arrow.left.and.right", L("Move — drag an object to reposition, drag its corner to resize, ⌫ to delete  (V)")),
             toolButton(.crop, "crop", L("Crop — drag a region, then ↵ or ✓")),
             actionButton("rotate.right", L("Rotate right 90°"), key: "", mods: [], #selector(rotateRightPressed)),
             actionButton("arrow.left.and.right.righttriangle.left.righttriangle.right", L("Flip horizontal"), key: "", mods: [], #selector(flipHorizontalPressed)),

@@ -204,7 +204,6 @@ final class Settings {
         static let videoQuality = "videoQuality", videoAudioSource = "videoAudioSource"
         static let videoFrameRate = "videoFrameRate", videoShowClicks = "videoShowClicks"
         static let videoCountdown = "videoCountdown", videoBarMinimized = "videoBarMinimized"
-        static let videoSpotlight = "videoSpotlight"
         static let lastRegion = "lastRegion"
         static let appLanguage = "appLanguage"
     }
@@ -269,6 +268,30 @@ final class Settings {
         d.set(Int(s.modifiers) << 16 | Int(s.keyCode), forKey: action.defaultsKey)
     }
 
+    /// The label of whatever already claims `s`, or nil if it's free. Carbon refuses a
+    /// second registration of the same combination, so a duplicate would silently leave
+    /// one action dead — the recorder rejects the binding up front instead.
+    /// Covers the derived ⌥ + record "discard" binding, which is registered too.
+    func shortcutConflict(_ s: Shortcut, excluding action: ShortcutAction) -> String? {
+        for other in ShortcutAction.allCases where other != action {
+            if shortcut(other) == s { return other.label }
+        }
+        let record = shortcut(.record)
+        if record.modifiers & UInt32(optionKey) == 0,
+           action != .record,
+           s == Shortcut(keyCode: record.keyCode, modifiers: record.modifiers | UInt32(optionKey)) {
+            return L("Discard recording")
+        }
+        // Rebinding Record itself: its own ⌥ variant must not land on another action.
+        if action == .record, s.modifiers & UInt32(optionKey) == 0 {
+            let derived = Shortcut(keyCode: s.keyCode, modifiers: s.modifiers | UInt32(optionKey))
+            for other in ShortcutAction.allCases where other != .record {
+                if shortcut(other) == derived { return other.label }
+            }
+        }
+        return nil
+    }
+
     /// Include the mouse pointer in captures (`screencapture -C`).
     var captureCursor: Bool {
         get { d.bool(forKey: Key.cursor) }
@@ -322,13 +345,6 @@ final class Settings {
     var videoShowClicks: Bool {
         get { d.bool(forKey: Key.videoShowClicks) }
         set { d.set(newValue, forKey: Key.videoShowClicks) }
-    }
-
-    /// Dim everything but a soft circle around the cursor while recording, for a
-    /// polished "tutorial video" look (default off).
-    var videoSpotlight: Bool {
-        get { d.bool(forKey: Key.videoSpotlight) }
-        set { d.set(newValue, forKey: Key.videoSpotlight) }
     }
 
     /// Start recordings with the floating bar minimized to the menu bar (default on).

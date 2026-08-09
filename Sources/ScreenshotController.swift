@@ -107,8 +107,7 @@ final class ScreenshotController {
             }
             overlays.append(win)
             if screen == keyScreen {
-                win.makeKeyAndOrderFront(nil)
-                win.makeFirstResponder(win.contentView)
+                win.claimKeyboard()
             } else {
                 win.orderFront(nil)
             }

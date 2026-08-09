@@ -120,6 +120,13 @@ final class BrandMenu: NSObject {
                              styleMask: .borderless, backing: .buffered, defer: false)
         Theme.styleOverlayWindow(win)
         win.level = .popUpMenu
+        // Keep the menu out of screen captures. It's the surface people use to *stop* a
+        // recording, and it only exists once opened — too late for the stream's content
+        // filter, built when recording started — so excluding it by window ID would
+        // always trail by the frames that matter. `.none` is applied by the window
+        // server at assignment, so it must be set on the instance (overriding the
+        // property on the subclass changes nothing).
+        win.sharingType = .none
         win.contentView = container
         return win
     }
