@@ -65,11 +65,9 @@ final class VideoRecordController {
     var onRecordingUIUpdate: ((_ active: Bool, _ elapsed: TimeInterval, _ paused: Bool) -> Void)?
     private func clearRecordingUI() {
         clickVisualizer.stop()
-        cursorSpotlight.stop()
         onRecordingUIUpdate?(false, 0, false)
     }
     private let clickVisualizer = ClickVisualizer()
-    private let cursorSpotlight = CursorSpotlight()
 
     // MARK: - Public
 
@@ -355,14 +353,6 @@ final class VideoRecordController {
         recordBar.onMinimize = { [weak self] in self?.setBarHidden(true) }
 
         if Settings.shared.videoShowClicks { clickVisualizer.start() }
-        if Settings.shared.videoSpotlight {
-            let spotlightRect: CGRect
-            switch target {
-            case let .region(rect, _): spotlightRect = rect
-            case let .window(windowID): spotlightRect = Self.windowGlobalFrame(windowID) ?? barScreen.frame
-            }
-            cursorSpotlight.start(targetRect: spotlightRect)
-        }
 
         // Phase 2e — start capture, then start the UI ticker. A short delay first lets
         // the compositor actually clear the just-dismissed selection overlay (its mode

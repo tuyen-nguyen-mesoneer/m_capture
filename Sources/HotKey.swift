@@ -13,21 +13,45 @@ final class HotKey {
     private static var registry: [UInt32: HotKey] = [:]
     private static var handlerInstalled = false
 
-    /// While `true`, registered hotkeys still fire their Carbon event but skip
-    /// the handler — set during shortcut recording in Settings so pressing the
-    /// combo you're capturing doesn't also trigger a screenshot/recording.
-    static var isSuppressed = false
+    private let keyCode: UInt32
+    private let modifiers: UInt32
+    private static var suspended = false
 
     init(keyCode: UInt32, modifiers: UInt32, handler: @escaping () -> Void) {
         self.handler = handler
+        self.keyCode = keyCode
+        self.modifiers = modifiers
         HotKey.counter += 1
         self.id = HotKey.counter
         HotKey.installHandlerIfNeeded()
 
+        HotKey.registry[id] = self
+        if !HotKey.suspended { register() }
+    }
+
+    private func register() {
         let hotKeyID = EventHotKeyID(signature: OSType(0x4D435054), id: id)
         RegisterEventHotKey(keyCode, modifiers, hotKeyID,
                             GetApplicationEventTarget(), 0, &ref)
-        HotKey.registry[id] = self
+    }
+
+    /// Release every registered combination while a shortcut is being recorded in
+    /// Settings. Merely ignoring the handler isn't enough: a live Carbon hotkey
+    /// swallows the key event system-wide, so an already-bound combination would never
+    /// reach the recorder's monitor — it would look like the keypress did nothing.
+    static func suspendAll() {
+        guard !suspended else { return }
+        suspended = true
+        for hk in registry.values {
+            if let r = hk.ref { UnregisterEventHotKey(r); hk.ref = nil }
+        }
+    }
+
+    /// Re-register everything released by `suspendAll`.
+    static func resumeAll() {
+        guard suspended else { return }
+        suspended = false
+        for hk in registry.values where hk.ref == nil { hk.register() }
     }
 
     /// Register from a stored `Shortcut`.
@@ -52,7 +76,7 @@ final class HotKey {
             GetEventParameter(event, EventParamName(kEventParamDirectObject),
                               EventParamType(typeEventHotKeyID), nil,
                               MemoryLayout<EventHotKeyID>.size, nil, &hkID)
-            if let hk = HotKey.registry[hkID.id], !HotKey.isSuppressed {
+            if let hk = HotKey.registry[hkID.id], !HotKey.suspended {
                 DispatchQueue.main.async { hk.handler() }
             }
             return noErr

@@ -30,7 +30,6 @@ final class SettingsWindowController: NSObject {
     private var videoFrameRatePopup: NSPopUpButton!
     private var videoCountdownPopup: NSPopUpButton!
     private var videoClicksCheck: NSButton!
-    private var videoSpotlightCheck: NSButton!
     private var videoBarMinCheck: NSButton!
     private var shortcutFields: [HotKeyField] = []
     private var toast: NSWindow?
@@ -99,7 +98,6 @@ final class SettingsWindowController: NSObject {
         videoFrameRatePopup = popup(["30 fps", "60 fps"], #selector(videoFrameRateChanged))
         videoCountdownPopup = popup(CaptureDelay.allCases.map { $0.label }, #selector(videoCountdownChanged))
         videoClicksCheck = checkbox(L("Show mouse clicks in recordings"), #selector(videoClicksToggled))
-        videoSpotlightCheck = checkbox(L("Cursor spotlight"), #selector(videoSpotlightToggled))
         videoBarMinCheck = checkbox(L("Start with the recording bar minimized"), #selector(videoBarMinToggled))
 
         // One tab per former section — the flat list had grown too tall to scan.
@@ -138,7 +136,6 @@ final class SettingsWindowController: NSObject {
                 row(L("Countdown"), videoCountdownPopup,
                     tip: L("Countdown shown over the selected region before recording starts.")),
                 checkRow(videoClicksCheck),
-                checkRow(videoSpotlightCheck),
                 checkRow(videoBarMinCheck),
             ]),
             // Meta actions that used to crowd the menu-bar menu.
@@ -494,7 +491,6 @@ final class SettingsWindowController: NSObject {
         videoFrameRatePopup.selectItem(at: s.videoFrameRate == 60 ? 1 : 0)
         videoCountdownPopup.selectItem(at: CaptureDelay.allCases.firstIndex(of: s.videoCountdown) ?? 0)
         videoClicksCheck.state = s.videoShowClicks ? .on : .off
-        videoSpotlightCheck.state = s.videoSpotlight ? .on : .off
         videoBarMinCheck.state = s.videoStartBarMinimized ? .on : .off
     }
 
@@ -653,10 +649,6 @@ final class SettingsWindowController: NSObject {
 
     @objc private func videoClicksToggled() {
         Settings.shared.videoShowClicks = (videoClicksCheck.state == .on)
-    }
-
-    @objc private func videoSpotlightToggled() {
-        Settings.shared.videoSpotlight = (videoSpotlightCheck.state == .on)
     }
 
     @objc private func videoBarMinToggled() {
