@@ -71,6 +71,7 @@ final class HotKeyField: NSView {
     private let onChange: () -> Void
     private let glyphLabel = NSTextField(labelWithString: "")
     private var monitor: Any?
+    private var resignObserver: Any?
     private var recording = false { didSet { needsDisplay = true; refreshDisplay() } }
 
     init(action: ShortcutAction, onChange: @escaping () -> Void) {
@@ -123,6 +124,15 @@ final class HotKeyField: NSView {
         recording = true
         HotKey.isSuppressed = true
         window?.makeFirstResponder(self)
+        // The Settings panel is a reused singleton that closes by ordering out, so a
+        // recording left armed would outlive it: stale "Type shortcut…" label on reopen,
+        // global hotkeys still suppressed, and a monitor swallowing the next keystroke.
+        // Losing key status means the field can no longer be typed into — end there.
+        if let win = window {
+            resignObserver = NotificationCenter.default.addObserver(
+                forName: NSWindow.didResignKeyNotification, object: win, queue: .main
+            ) { [weak self] _ in self?.stopRecording() }
+        }
         monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .flagsChanged]) { [weak self] ev in
             guard let self, self.recording else { return ev }
             if ev.type == .flagsChanged {
@@ -143,13 +153,23 @@ final class HotKeyField: NSView {
     private func cancelRecording() { stopRecording() }
 
     private func stopRecording() {
+        guard recording else { return }
         if let m = monitor { NSEvent.removeMonitor(m); monitor = nil }
+        if let o = resignObserver { NotificationCenter.default.removeObserver(o); resignObserver = nil }
         recording = false
         HotKey.isSuppressed = false
     }
 
+    /// Switching Settings sections pulls the row out of the panel; a field that left the
+    /// window can no longer receive the shortcut, so it must not stay armed either.
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if window == nil { stopRecording() }
+    }
+
     deinit {
         if let m = monitor { NSEvent.removeMonitor(m) }
+        if let o = resignObserver { NotificationCenter.default.removeObserver(o) }
         if recording { HotKey.isSuppressed = false }
     }
 }
