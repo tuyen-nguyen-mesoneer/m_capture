@@ -106,7 +106,8 @@
       radial-gradient(780px 600px at 90% 32%, rgba(67,42,132,.5), transparent 60%),
       linear-gradient(180deg, var(--base) 62%, var(--base2));
   }
-  .hero h1{font-size:clamp(36px,5vw,56px);letter-spacing:-.03em;line-height:1.15;max-width:720px;margin:0 auto 22px}
+  .hero h1{font-size:clamp(28px,5.2vw,56px);letter-spacing:-.03em;line-height:1.15;max-width:900px;margin:0 auto 22px;white-space:nowrap}
+  @media(max-width:600px){.hero h1{white-space:normal;font-size:clamp(30px,8vw,40px)}}
   .hero h1 .accent{
     background:linear-gradient(110deg,var(--lavender),#fff 70%);
     -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;
@@ -271,7 +272,16 @@
   }
   .release .changelog:hover{color:#fff}
   .release .changelog svg{width:14px;height:14px;flex:none}
-  .releases-more{text-align:center;margin-top:48px}
+  /* only the newest few releases are shown until the reader asks for the rest —
+     the full list is 30+ entries and buries everything below it */
+  .releases.collapsed{
+    position:relative;
+    -webkit-mask-image:linear-gradient(#000 88%,rgba(0,0,0,.35));mask-image:linear-gradient(#000 88%,rgba(0,0,0,.35));
+  }
+  .releases.collapsed .release:nth-child(n+7){display:none}
+  .releases-more{display:flex;justify-content:center;gap:12px;flex-wrap:wrap;margin-top:48px}
+  .releases-toggle .less,.releases.collapsed ~ .releases-more .releases-toggle .more{display:inline}
+  .releases-toggle .more,.releases.collapsed ~ .releases-more .releases-toggle .less{display:none}
   @media(max-width:640px){
     .release{grid-template-columns:1fr;gap:4px;padding:22px 0}
     .release .ver{order:1}
@@ -356,7 +366,6 @@
       <a href="#feedback" data-i18n="nav.feedback">Feedback</a>
       <a href="#releases" data-i18n="nav.releases">Releases</a>
       <a href="#faq" data-i18n="nav.faq">FAQ</a>
-      <a href="https://github.com/tuyen-nguyen-mesoneer/m_capture">GitHub</a>
     </div>
     <div class="nav-right">
       <a class="nav-cta" href="https://github.com/tuyen-nguyen-mesoneer/m_capture/releases/latest/download/m_capture.dmg">
@@ -375,7 +384,7 @@
 <header class="hero" id="top">
   <div class="wrap">
     <span class="eyebrow" data-i18n="hero.eyebrow">A native macOS capture tool by <span class="lc">mesoneer</span></span>
-    <h1 data-i18n="hero.h1">Capture, annotate,<br><span class="accent">share.</span></h1>
+    <h1 data-i18n="hero.h1">Capture, annotate, <span class="accent">share.</span></h1>
     <p class="lede" data-i18n="hero.lede">A lightweight app for screenshots and screen recording. Press a hotkey, drag a region, annotate in place, then copy or save.</p>
     <div class="cta-row">
       <div class="accent-bar"></div>
@@ -417,6 +426,12 @@
       </div>
 
       <div class="card">
+        <div class="ic"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M12 8v8M8 12h8"/><path d="M3 21h18" opacity=".45"/></svg></div>
+        <h3 data-i18n="feat.16.h">Freeze-frame capture</h3>
+        <p data-i18n="feat.16.p">The screen freezes the moment you press the hotkey, so tooltips, hover menus and popovers stay exactly as they were.</p>
+      </div>
+
+      <div class="card">
         <div class="ic"><svg viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4"/><circle cx="12" cy="10.5" r="2.6"/></svg></div>
         <h3 data-i18n="feat.8.h">Screen recording</h3>
         <p data-i18n="feat.8.p">Record a region, a window, or the whole screen to MP4 at 30 or 60 fps — with a start countdown, visualized clicks, and optional audio.</p>
@@ -447,18 +462,6 @@
       </div>
 
       <div class="card">
-        <div class="ic"><svg viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="10" rx="1"/><path d="M6 7v3M10 7v4M14 7v3M18 7v4"/></svg></div>
-        <h3 data-i18n="feat.11.h">Screen ruler</h3>
-        <p data-i18n="feat.11.p">Place a pixel ruler over your capture — resize with the arrow keys, move to measure a distance, click to keep the reading.</p>
-      </div>
-
-      <div class="card">
-        <div class="ic"><svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M21 21l-5.4-5.4M10.5 8v5M8 10.5h5"/></svg></div>
-        <h3 data-i18n="feat.12.h">Zoom in on your pixels</h3>
-        <p data-i18n="feat.12.p">Magnify any region into a crisp callout. Everything stays in full-resolution space, so inset and export remain sharp.</p>
-      </div>
-
-      <div class="card">
         <div class="ic"><svg viewBox="0 0 24 24"><path d="M9 4v6l-2 4v2h10v-2l-2-4V4"/><path d="M12 16v5"/><path d="M8 4h8"/></svg></div>
         <h3 data-i18n="feat.2.h">Pin to screen</h3>
         <p data-i18n="feat.2.p">Float any capture above every app and across Spaces. Drag to reposition or resize from a corner — ideal for reference while you work.</p>
@@ -477,12 +480,6 @@
       </div>
 
       <div class="card">
-        <div class="ic"><svg viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M2 10h20"/><circle cx="7" cy="14" r="1.3"/><path d="M11 14h6"/></svg></div>
-        <h3 data-i18n="feat.5.h">Before / after GIF</h3>
-        <p data-i18n="feat.5.p">Combine an original and an edited capture into an animated before-and-after GIF with one click — generated on-device with ImageIO.</p>
-      </div>
-
-      <div class="card">
         <div class="ic"><svg viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M6 9h.01M10 9h.01M14 9h.01M18 9h.01M6 13h.01M10 13h.01M14 13h.01M8 16h8"/></svg></div>
         <h3 data-i18n="feat.6.h">Rebindable hotkeys</h3>
         <p data-i18n="feat.6.p">Global shortcuts for screenshots and recording, fully customizable — along with save folder, format, quality, and auto-copy.</p>
@@ -492,12 +489,6 @@
         <div class="ic"><svg viewBox="0 0 24 24"><path d="M12 3l7 3v5.5c0 4.4-3 7.3-7 8.5-4-1.2-7-4.1-7-8.5V6l7-3z"/><path d="M9 12l2 2 4-4"/></svg></div>
         <h3 data-i18n="feat.9.h">Private &amp; lightweight</h3>
         <p data-i18n="feat.9.p">No accounts, no cloud, no telemetry — everything stays on your Mac. Swift, zero dependencies, quiet in the menu bar.</p>
-      </div>
-
-      <div class="card">
-        <div class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.6 3.8 5.7 3.8 9S14.5 18.4 12 21c-2.5-2.6-3.8-5.7-3.8-9S9.5 5.6 12 3z"/></svg></div>
-        <h3 data-i18n="feat.15.h">Three languages</h3>
-        <p data-i18n="feat.15.p">The entire interface ships in English, German, and Vietnamese — follow the system language, or pick one directly in Settings.</p>
       </div>
 
     </div>
@@ -523,8 +514,13 @@
       <div class="istep">
         <div class="n">2</div>
         <div>
-          <h3 data-i18n="install.2.h">Move it to Applications</h3>
-          <p data-i18n="install.2.p">Drag <strong>m_capture</strong> into your <code>~/Applications</code> folder. Because the app isn't notarized, macOS will block it on first launch — open <strong>Terminal</strong> and run <code>cd ~/Applications &amp;&amp; xattr -dr com.apple.quarantine m_capture.app</code>, then double-click <strong>m_capture</strong> to launch it.</p>
+          <h3 data-i18n="install.2.h">Move it to ~/Applications</h3>
+          <p data-i18n="install.2.p">Drag <strong>m_capture</strong> into <code>~/Applications</code> — your <strong>home</strong> folder, not system-wide <code>/Applications</code>. It isn't notarized, so open <strong>Terminal</strong> and run:</p>
+          <div class="cmd">
+            <code>cd ~/Applications &amp;&amp; xattr -dr com.apple.quarantine m_capture.app</code>
+            <button type="button" data-copy data-i18n="install.copy">Copy</button>
+          </div>
+          <p data-i18n="install.2.p2">Then double-click <strong>m_capture</strong> to launch it.</p>
         </div>
       </div>
 
@@ -630,7 +626,19 @@
       <span class="eyebrow" data-i18n="rel.eyebrow">Changelog</span>
       <h2 data-i18n="rel.h2">Release notes</h2>
     </div>
-    <div class="releases">
+    <div class="releases collapsed" id="releaseList">
+
+      <div class="release">
+        <span class="date" data-i18n="rel.31.date">Aug 15, 2026</span>
+        <span class="ver">v1.6.7</span>
+        <div>
+          <p class="note" data-i18n="rel.31.note">Update checks no longer fail behind a shared office network, and a throttled check says so instead of blaming your connection.</p>
+          <a class="changelog" href="https://github.com/tuyen-nguyen-mesoneer/m_capture/releases/tag/1.6.7">
+            <span data-i18n="rel.changelog">See full changelog</span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+          </a>
+        </div>
+      </div>
 
       <div class="release">
         <span class="date" data-i18n="rel.30.date">Aug 15, 2026</span>
@@ -994,6 +1002,10 @@
 
     </div>
     <div class="releases-more">
+      <button class="btn btn-ghost releases-toggle" type="button" id="releaseToggle" aria-expanded="false" aria-controls="releaseList">
+        <span class="more" data-i18n="rel.more">Show earlier releases</span>
+        <span class="less" data-i18n="rel.less">Show fewer releases</span>
+      </button>
       <a class="btn btn-ghost" href="https://github.com/tuyen-nguyen-mesoneer/m_capture/releases">
         <span data-i18n="cta.releases">All releases</span>
         <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
@@ -1019,7 +1031,7 @@
       </details>
       <details>
         <summary><span data-i18n="faq.3.q">Why does macOS block it on first launch?</span><span class="pm" aria-hidden="true"></span></summary>
-        <p data-i18n="faq.3.a">It isn't notarized by Apple yet. Move it into <code>~/Applications</code> and clear the quarantine flag from <strong>Terminal</strong> — see <a href="#install">Get started</a> above.</p>
+        <p data-i18n="faq.3.a">It isn't notarized by Apple yet. Move it into the <code>Applications</code> folder in your home folder (<code>~/Applications</code>, not <code>/Applications</code>) and clear the quarantine flag from <strong>Terminal</strong> — see <a href="#install">Get started</a> above.</p>
       </details>
       <details>
         <summary><span data-i18n="faq.4.q">Where are my captures saved?</span><span class="pm" aria-hidden="true"></span></summary>
@@ -1083,7 +1095,7 @@
       "nav.feedback": "Feedback",
       "nav.download": "Download",
       "hero.eyebrow": "A native macOS capture tool by <span class='lc'>mesoneer</span>",
-      "hero.h1": 'Capture, annotate,<br><span class="accent">share.</span>',
+      "hero.h1": 'Capture, annotate, <span class="accent">share.</span>',
       "hero.lede": "A lightweight app for screenshots and screen recording. Press a hotkey, drag a region, annotate in place, then copy or save.",
       "cta.download": "Download for macOS",
       "cta.releases": "All releases",
@@ -1099,18 +1111,12 @@
       "feat.1.p": "The editor opens directly over your capture — pencil, marker, arrows, shapes, text, numbered steps, blur, and spotlight.",
       "feat.10.h": "Resize & crop",
       "feat.10.p": "Drag any of eight handles to trim the region or grow it to re-grab more screen — plus crop, rotate, and flip, baked in.",
-      "feat.11.h": "Screen ruler",
-      "feat.11.p": "Place a pixel ruler over your capture — resize with the arrow keys, move to measure a distance, click to keep the reading.",
-      "feat.12.h": "Zoom in on your pixels",
-      "feat.12.p": "Magnify any region into a crisp callout. Everything stays in full-resolution space, so inset and export remain sharp.",
       "feat.2.h": "Pin to screen",
       "feat.2.p": "Float any capture above every app and across Spaces. Drag to reposition or resize from a corner — ideal for reference while you work.",
       "feat.3.h": "Copy text & QR",
       "feat.3.p": "Extract selectable text or decode a QR code directly from any screenshot, using on-device OCR powered by Apple Vision.",
       "feat.4.h": "Share-ready backgrounds",
       "feat.4.p": "Place your capture on a padded frame with shadow and rounded corners — ten presets or a custom color, rendered at full resolution.",
-      "feat.5.h": "Before / after GIF",
-      "feat.5.p": "Combine an original and an edited capture into an animated before-and-after GIF with one click — generated on-device with ImageIO.",
       "feat.6.h": "Rebindable hotkeys",
       "feat.6.p": "Global shortcuts for screenshots and recording, fully customizable — along with save folder, format, quality, and auto-copy.",
       "feat.7.h": "Instant capture",
@@ -1121,8 +1127,8 @@
       "feat.13.p": "Stop a recording straight into a lossless trimmer with live preview, or export it as a looping GIF — with no extra tools required.",
       "feat.14.h": "Capture history",
       "feat.14.p": "Every capture and recording lands in a built-in History panel — copy, pin, trim, reveal, or delete without leaving the app.",
-      "feat.15.h": "Three languages",
-      "feat.15.p": "The entire interface ships in English, German, and Vietnamese — follow the system language, or pick one directly in Settings.",
+      "feat.16.h": "Freeze-frame capture",
+      "feat.16.p": "The screen freezes the moment you press the hotkey, so tooltips, hover menus and popovers stay exactly as they were.",
       "feat.9.h": "Private & lightweight",
       "feat.9.p": "No accounts, no cloud, no telemetry — everything stays on your Mac. Swift, zero dependencies, quiet in the menu bar.",
       "how.eyebrow": "How it works",
@@ -1137,13 +1143,17 @@
       "install.h2": "Installing m_capture",
       "install.1.h": "Download the DMG",
       "install.1.p": "Download the latest <a href='https://github.com/tuyen-nguyen-mesoneer/m_capture/releases/latest/download/m_capture.dmg'>m_capture.dmg</a> from <a href='https://github.com/tuyen-nguyen-mesoneer/m_capture/releases'>Releases</a> and open it.",
-      "install.2.h": "Move it to Applications",
-      "install.2.p": "Drag <strong>m_capture</strong> into your <code>~/Applications</code> folder. Because the app isn't notarized, macOS will block it on first launch — open <strong>Terminal</strong> and run <code>cd ~/Applications &amp;&amp; xattr -dr com.apple.quarantine m_capture.app</code>, then double-click <strong>m_capture</strong> to launch it.",
+      "install.2.h": "Move it to ~/Applications",
+      "install.2.p": "Drag <strong>m_capture</strong> into <code>~/Applications</code> — your <strong>home</strong> folder, not system-wide <code>/Applications</code>. It isn't notarized, so open <strong>Terminal</strong> and run:",
+      "install.2.p2": "Then double-click <strong>m_capture</strong> to launch it.",
+      "install.copy": "Copy",
       "install.3.h": "Grant Screen Recording",
       "install.3.p": "On first capture, macOS asks for <strong>Screen Recording</strong> permission. Approve m_capture under <strong>System Settings → Privacy & Security → Screen Recording</strong> and relaunch.",
       "rel.eyebrow": "Changelog",
       "rel.h2": "Release notes",
       "rel.changelog": "See full changelog",
+      "rel.more": "Show earlier releases",
+      "rel.less": "Show fewer releases",
       "rel.1.date": "Jun 29, 2026",
       "rel.1.note": "First release — region & full-screen capture with annotation. OCR & QR, Pin to screen, backgrounds, before/after GIF.",
       "rel.2.date": "Jun 29, 2026",
@@ -1198,6 +1208,8 @@
       "rel.26.note": "Fixed the drag-to-select overlay occasionally freezing mid-capture, and the region border briefly baking into recordings.",
       "rel.27.date": "Jul 29, 2026",
       "rel.27.note": "A second capture hotkey pressed mid-selection no longer strands a dim overlay on screen, and stacked overlays clear cleanly.",
+      "rel.31.date": "Aug 15, 2026",
+      "rel.31.note": "Update checks no longer fail behind a shared office network, and a throttled check says so instead of blaming your connection.",
       "rel.30.date": "Aug 15, 2026",
       "rel.30.note": "Screenshots freeze the screen the instant you press the hotkey, so tooltips and hover menus stay in the shot, and the Dock icon can be hidden.",
       "rel.29.date": "Aug 9, 2026",
@@ -1222,7 +1234,7 @@
       "faq.2.q": "Which macOS versions are supported?",
       "faq.2.a": "macOS 14 (Sonoma) and later. It lives in the menu bar, with a Dock icon for quick access.",
       "faq.3.q": "Why does macOS block it on first launch?",
-      "faq.3.a": "It isn't notarized by Apple yet. Move it into <code>~/Applications</code> and clear the quarantine flag from <strong>Terminal</strong> — see <a href='#install'>Get started</a> above.",
+      "faq.3.a": "It isn't notarized by Apple yet. Move it into the <code>Applications</code> folder in your home folder (<code>~/Applications</code>, not <code>/Applications</code>) and clear the quarantine flag from <strong>Terminal</strong> — see <a href='#install'>Get started</a> above.",
       "faq.4.q": "Where are my captures saved?",
       "faq.4.a": "To your chosen folder (the Desktop by default) and the clipboard. Set the format and location in Settings.",
       "faq.5.q": "Does it send my screenshots anywhere?",
@@ -1240,7 +1252,7 @@
       "nav.feedback": "Feedback",
       "nav.download": "Download",
       "hero.eyebrow": "Ein natives <span class='lc'>macOS</span>-Capture-Tool von <span class='lc'>mesoneer</span>",
-      "hero.h1": 'Aufnehmen, annotieren,<br><span class="accent">teilen.</span>',
+      "hero.h1": 'Aufnehmen, annotieren, <span class="accent">teilen.</span>',
       "hero.lede": "Eine schlanke App für Screenshots und Bildschirmaufnahmen. Hotkey drücken, Bereich aufziehen, direkt annotieren, dann kopieren oder speichern.",
       "cta.download": "Für macOS herunterladen",
       "cta.releases": "Alle Releases",
@@ -1256,18 +1268,12 @@
       "feat.1.p": "Der Editor öffnet sich direkt über der Aufnahme — mit Stift, Marker, Pfeilen, Formen, Text, Nummerierung, Weichzeichner und Spotlight.",
       "feat.10.h": "Größe ändern & zuschneiden",
       "feat.10.p": "Mit acht Griffen den Bereich verkleinern oder erweitern, um mehr vom Bildschirm zu erfassen — plus Zuschneiden, Drehen und Spiegeln.",
-      "feat.11.h": "Bildschirm-Lineal",
-      "feat.11.p": "Ein Pixel-Lineal über der Aufnahme — mit Pfeiltasten dimensionieren, zum Messen bewegen, per Klick den Wert festhalten.",
-      "feat.12.h": "Bis auf die Pixel zoomen",
-      "feat.12.p": "Jeden Bereich in ein scharfes Callout vergrössern. Alles bleibt in voller Auflösung — Ausschnitt und Export bleiben scharf.",
       "feat.2.h": "Am Bildschirm anheften",
       "feat.2.p": "Jede Aufnahme über allen Apps und Spaces anheften. Ziehen zum Verschieben, an Ecken skalieren — ideal als Referenz.",
       "feat.3.h": "Text & QR kopieren",
       "feat.3.p": "Text extrahieren oder QR-Codes decodieren, direkt aus jedem Screenshot — mit On-Device-OCR auf Basis von Apple Vision.",
       "feat.4.h": "Teilbare Hintergründe",
       "feat.4.p": "Die Aufnahme auf einem Rahmen mit Schatten und runden Ecken platzieren — zehn Vorlagen oder eine eigene Farbe, in voller Auflösung.",
-      "feat.5.h": "Vorher-/Nachher-GIF",
-      "feat.5.p": "Original und bearbeitete Aufnahme mit einem Klick als animiertes Vorher-Nachher-GIF — mit ImageIO, ohne Zusatztools.",
       "feat.6.h": "Frei belegbare Hotkeys",
       "feat.6.p": "Globale Shortcuts für Screenshot und Aufnahme, frei belegbar — dazu Speicherort, Format, Qualität und Auto-Kopie.",
       "feat.7.h": "Sofort aufnehmen",
@@ -1278,8 +1284,8 @@
       "feat.13.p": "Eine Aufnahme direkt im verlustfreien Schnittwerkzeug beenden oder als GIF-Schleife exportieren — ganz ohne zusätzliche Werkzeuge.",
       "feat.14.h": "Aufnahmeverlauf",
       "feat.14.p": "Jede Aufnahme landet im Verlaufspanel — kopieren, anpinnen, schneiden, zeigen oder löschen, ohne die App zu verlassen.",
-      "feat.15.h": "Drei Sprachen",
-      "feat.15.p": "Die Oberfläche gibt es auf Englisch, Deutsch und Vietnamesisch — der Systemsprache folgend oder in den Einstellungen wählbar.",
+      "feat.16.h": "Standbild-Aufnahme",
+      "feat.16.p": "Der Bildschirm friert beim Tastendruck ein, sodass Tooltips, Hover-Menüs und Popover genau so erhalten bleiben.",
       "feat.9.h": "Privat & schlank",
       "feat.9.p": "Kein Konto, keine Cloud, keine Telemetrie — alles bleibt auf dem Mac. In Swift gebaut, ohne Abhängigkeiten, still in der Menüleiste.",
       "how.eyebrow": "So funktioniert's",
@@ -1294,13 +1300,17 @@
       "install.h2": "m_capture installieren",
       "install.1.h": "DMG herunterladen",
       "install.1.p": "Laden Sie die neueste <a href='https://github.com/tuyen-nguyen-mesoneer/m_capture/releases/latest/download/m_capture.dmg'>m_capture.dmg</a> von <a href='https://github.com/tuyen-nguyen-mesoneer/m_capture/releases'>Releases</a> herunter und öffnen Sie sie.",
-      "install.2.h": "In Applications verschieben",
-      "install.2.p": "Ziehen Sie <strong>m_capture</strong> in Ihren Ordner <code>~/Applications</code>. Da die App nicht notarisiert ist, blockiert macOS sie beim ersten Start — öffnen Sie das <strong>Terminal</strong> und führen Sie <code>cd ~/Applications &amp;&amp; xattr -dr com.apple.quarantine m_capture.app</code> aus, doppelklicken Sie anschließend auf <strong>m_capture</strong>, um sie zu starten.",
+      "install.2.h": "Nach ~/Applications verschieben",
+      "install.2.p": "Ziehen Sie <strong>m_capture</strong> nach <code>~/Applications</code> — Ihren <strong>Benutzerordner</strong>, nicht systemweit <code>/Applications</code>. Sie ist nicht notarisiert — im <strong>Terminal</strong> ausführen:",
+      "install.2.p2": "Doppelklicken Sie anschließend auf <strong>m_capture</strong>, um sie zu starten.",
+      "install.copy": "Kopieren",
       "install.3.h": "Bildschirmaufnahme erlauben",
       "install.3.p": "Bei der ersten Aufnahme fragt macOS nach der Berechtigung zur <strong>Bildschirmaufnahme</strong>. Erteilen Sie diese unter <strong>Systemeinstellungen → Datenschutz & Sicherheit → Bildschirmaufnahme</strong> und starten Sie die App neu.",
       "rel.eyebrow": "Änderungen",
       "rel.h2": "Versionshinweise",
       "rel.changelog": "Vollständiges Changelog ansehen",
+      "rel.more": "Frühere Releases anzeigen",
+      "rel.less": "Weniger Releases anzeigen",
       "rel.1.date": "29. Juni 2026",
       "rel.1.note": "Erste Version — Bereichs- & Vollbildaufnahme mit Annotation. OCR & QR, Anheften, Hintergründe, Vorher-/Nachher-GIF.",
       "rel.2.date": "29. Juni 2026",
@@ -1355,6 +1365,8 @@
       "rel.26.note": "Behoben: Das Auswahl-Overlay konnte gelegentlich einfrieren, und der Bereichsrahmen erschien kurz in Aufnahmen.",
       "rel.27.date": "29. Juli 2026",
       "rel.27.note": "Ein zweiter Aufnahme-Kurzbefehl während der Auswahl hinterlässt kein dunkles Overlay mehr, und gestapelte Overlays werden sauber entfernt.",
+      "rel.31.date": "15. August 2026",
+      "rel.31.note": "Update-Prüfungen scheitern nicht mehr hinter einem gemeinsamen Büronetz, und eine gedrosselte Prüfung sagt das auch klar.",
       "rel.30.date": "15. August 2026",
       "rel.30.note": "Screenshots frieren den Bildschirm beim Tastendruck ein, damit Tooltips und Menüs im Bild bleiben, und das Dock-Symbol lässt sich ausblenden.",
       "rel.29.date": "9. August 2026",
@@ -1379,7 +1391,7 @@
       "faq.2.q": "Welche macOS-Versionen werden unterstützt?",
       "faq.2.a": "macOS 14 (Sonoma) und neuer. Lebt in der Menüleiste, mit einem Dock-Symbol für den schnellen Zugriff.",
       "faq.3.q": "Warum blockiert macOS die App beim ersten Start?",
-      "faq.3.a": "Sie ist noch nicht von Apple notarisiert. Verschieben Sie sie nach <code>~/Applications</code> und entfernen Sie das Quarantäne-Flag im <strong>Terminal</strong> — siehe <a href='#install'>Erste Schritte</a> oben.",
+      "faq.3.a": "Sie ist noch nicht von Apple notarisiert. Verschieben Sie sie in den Ordner <code>Applications</code> in Ihrem Benutzerordner (<code>~/Applications</code>, nicht <code>/Applications</code>) und entfernen Sie das Quarantäne-Flag im <strong>Terminal</strong> — siehe <a href='#install'>Erste Schritte</a> oben.",
       "faq.4.q": "Wo werden meine Aufnahmen gespeichert?",
       "faq.4.a": "In dem gewählten Ordner (standardmäßig Schreibtisch) und in der Zwischenablage. Format und Speicherort legen Sie in den Einstellungen fest.",
       "faq.5.q": "Werden meine Screenshots irgendwohin gesendet?",
@@ -1440,6 +1452,18 @@
 </script>
 
 <script>
+// Expand / collapse the changelog; collapsing scrolls back so the reader keeps their place.
+(function(){
+  var list = document.getElementById('releaseList'), btn = document.getElementById('releaseToggle');
+  if(!list || !btn) return;
+  btn.addEventListener('click', function(){
+    var collapsing = !list.classList.contains('collapsed');
+    list.classList.toggle('collapsed');
+    btn.setAttribute('aria-expanded', String(!collapsing));
+    if(collapsing) list.scrollIntoView({block:'start', behavior:'smooth'});
+  });
+})();
+
 // Copy the install command to the clipboard; falls back to selecting it.
 (function(){
   document.querySelectorAll('[data-copy]').forEach(function(b){
@@ -1449,12 +1473,16 @@
       var label = b.getAttribute('data-label') || b.textContent;
       b.setAttribute('data-label', label);
       function flash(){ b.textContent = '✓'; setTimeout(function(){ b.textContent = b.getAttribute('data-label'); }, 1400); }
-      if(navigator.clipboard && navigator.clipboard.writeText){
-        navigator.clipboard.writeText(code.textContent).then(flash, flash);
-      } else {
+      function select(){
         var r = document.createRange(); r.selectNodeContents(code);
-        var s = window.getSelection(); s.removeAllRanges(); s.addRange(r); flash();
+        var s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
       }
+      // Confirm right away: some contexts leave the clipboard promise pending
+      // indefinitely, which would otherwise mean a click with no feedback.
+      flash();
+      if(navigator.clipboard && navigator.clipboard.writeText){
+        navigator.clipboard.writeText(code.textContent).catch(select);
+      } else { select(); }
     });
   });
 })();

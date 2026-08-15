@@ -20,8 +20,16 @@ import AppKit
 /// signed differently costs a one-time re-grant.
 enum Updater {
     private static let repo = "tuyen-nguyen-mesoneer/m_capture"
-    private static let releasesURL = URL(string: "https://api.github.com/repos/\(repo)/releases")!
+    /// The releases **Atom feed**, not `api.github.com`. The API caps unauthenticated
+    /// callers at 60 requests/hour *per egress IP*, so a whole office behind one NAT
+    /// exhausts it collectively and every "Check for Updates" then answers 403 — which
+    /// is what shipped as "Unable to update". The feed is plain github.com HTML-side
+    /// infrastructure with no such quota, and lists tags newest-first just the same.
+    private static let releasesURL = URL(string: "https://github.com/\(repo)/releases.atom")!
     private static let releasesPage = "https://github.com/\(repo)/releases"
+    /// `release.yml` always uploads exactly this name, so the download URL is derivable
+    /// from the tag alone — the feed carries no asset list.
+    private static let dmgAssetName = "m_capture.dmg"
     private static let checkInterval: TimeInterval = 24 * 60 * 60
 
     /// Keeps the repeating timer alive; retained for the process lifetime.
@@ -63,27 +71,15 @@ enum Updater {
         UserDefaults.standard.integer(forKey: failedChecksKey) >= 3
     }
 
-    private struct Release: Decodable {
+    private struct Release {
         let tagName: String
-        let htmlURL: String
-        let prerelease: Bool
-        let draft: Bool
-        let assets: [Asset]
-        struct Asset: Decodable {
-            let name: String
-            let browserDownloadURL: String
-            enum CodingKeys: String, CodingKey {
-                case name
-                case browserDownloadURL = "browser_download_url"
-            }
-        }
-        enum CodingKeys: String, CodingKey {
-            case tagName = "tag_name"
-            case htmlURL = "html_url"
-            case prerelease
-            case draft
-            case assets
-        }
+    }
+
+    /// Why a check couldn't answer. Separated so the alert can say "rate limited, try
+    /// later" instead of blaming the user's network for GitHub's throttle.
+    private enum CheckError: Error {
+        case rateLimited
+        case network
     }
 
     /// The version baked into the running bundle (the *old* one even after a swap, since
@@ -130,8 +126,8 @@ enum Updater {
                 promptAndInstall(release)
             case .success:
                 presentUpToDateAlert()
-            case .failure:
-                presentErrorAlert()
+            case .failure(let error):
+                presentErrorAlert(error as? CheckError ?? .network)
             }
         }
     }
@@ -266,8 +262,9 @@ enum Updater {
     }
 
     private static func dmgURL(for release: Release) -> URL? {
-        guard let asset = release.assets.first(where: { $0.name.hasSuffix(".dmg") }) else { return nil }
-        return URL(string: asset.browserDownloadURL)
+        guard let tag = release.tagName
+            .addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) else { return nil }
+        return URL(string: "https://github.com/\(repo)/releases/download/\(tag)/\(dmgAssetName)")
     }
 
     /// Quit and reopen the bundle. A detached shell waits for this process to
@@ -286,21 +283,70 @@ enum Updater {
 
     private static func fetch(_ completion: @escaping (Result<Release, Error>) -> Void) {
         var request = URLRequest(url: releasesURL)
-        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+        request.setValue("application/atom+xml", forHTTPHeaderField: "Accept")
+        request.setValue("m_capture", forHTTPHeaderField: "User-Agent")
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        request.timeoutInterval = 15
+        URLSession.shared.dataTask(with: request) { data, response, _ in
+            let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+            guard status == 200, let data, let feed = String(data: data, encoding: .utf8) else {
+                // 403/429 is a throttle, not an outage — the status code is the only
+                // thing that tells the two apart, so it must not be discarded.
+                let reason: CheckError = (status == 403 || status == 429) ? .rateLimited : .network
+                DispatchQueue.main.async { completion(.failure(reason)) }
+                return
+            }
+            // Newest first. Drafts never reach the public feed; a tag carrying a
+            // pre-release suffix ("1.7.0-beta1") is skipped here since the feed, unlike
+            // the API, has no flag for it.
+            let tags = releaseTags(in: feed).filter { !$0.contains("-") }
+            guard !tags.isEmpty else {
+                DispatchQueue.main.async { completion(.failure(CheckError.network)) }
+                return
+            }
+            DispatchQueue.main.async { resolveInstallable(tags, from: 0, completion) }
+        }.resume()
+    }
+
+    /// Tags in feed order, read off each entry's `…/releases/tag/<tag>` link.
+    private static func releaseTags(in feed: String) -> [String] {
+        let pattern = "/releases/tag/([^\"]+)\""
+        guard let re = try? NSRegularExpression(pattern: pattern) else { return [] }
+        let range = NSRange(feed.startIndex..., in: feed)
+        return re.matches(in: feed, range: range).compactMap { match in
+            guard let r = Range(match.range(at: 1), in: feed) else { return nil }
+            return String(feed[r]).removingPercentEncoding ?? String(feed[r])
+        }
+    }
+
+    /// Walks the tags newest-first and returns the first one we could actually install.
+    /// Only a candidate that's *newer* than what we're running gets its `.dmg` probed:
+    /// a release whose asset upload failed must not block updates for everyone, but
+    /// there's no reason to spend a request confirming an asset we won't download.
+    private static func resolveInstallable(_ tags: [String], from index: Int,
+                                           _ completion: @escaping (Result<Release, Error>) -> Void) {
+        guard index < tags.count else { completion(.failure(CheckError.network)); return }
+        let release = Release(tagName: tags[index])
+        guard isNewer(release.tagName, than: effectiveCurrentVersion), let dmg = dmgURL(for: release) else {
+            completion(.success(release))
+            return
+        }
+        assetExists(dmg) { exists in
+            if exists { completion(.success(release)) }
+            else { resolveInstallable(tags, from: index + 1, completion) }
+        }
+    }
+
+    /// HEAD-probe a derived download URL — the feed can't tell us whether the asset
+    /// is really there.
+    private static func assetExists(_ url: URL, _ completion: @escaping (Bool) -> Void) {
+        var request = URLRequest(url: url)
+        request.httpMethod = "HEAD"
         request.setValue("m_capture", forHTTPHeaderField: "User-Agent")
         request.timeoutInterval = 15
-        URLSession.shared.dataTask(with: request) { data, _, error in
-            let result: Result<Release, Error>
-            // Newest first; skip pre-releases, drafts, and entries whose .dmg upload
-            // failed — one malformed release must not block updates for everyone.
-            if let data,
-               let release = (try? JSONDecoder().decode([Release].self, from: data))?
-                   .first(where: { !$0.prerelease && !$0.draft && dmgURL(for: $0) != nil }) {
-                result = .success(release)
-            } else {
-                result = .failure(error ?? URLError(.badServerResponse))
-            }
-            DispatchQueue.main.async { completion(result) }
+        URLSession.shared.dataTask(with: request) { _, response, _ in
+            let ok = (response as? HTTPURLResponse)?.statusCode == 200
+            DispatchQueue.main.async { completion(ok) }
         }.resume()
     }
 
@@ -358,9 +404,12 @@ enum Updater {
                    titles: ["OK"], primary: 0, cancel: 0).present()
     }
 
-    private static func presentErrorAlert() {
+    private static func presentErrorAlert(_ reason: CheckError = .network) {
+        let message = reason == .rateLimited
+            ? L("GitHub is rate-limiting update checks right now. Try again later.")
+            : L("Check the network connection and try again.")
         BrandAlert(title: L("Unable to update"),
-                   message: L("Check the network connection and try again."),
+                   message: message,
                    titles: [L("Open Releases"), "OK"], primary: 0, cancel: 1).present { choice in
             if choice == 0, let url = URL(string: releasesPage) { NSWorkspace.shared.open(url) }
         }
