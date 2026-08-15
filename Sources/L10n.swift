@@ -87,6 +87,8 @@ enum L10n {
         "m_capture %@ is the latest version.": "m_capture %@ ist die neueste Version.",
         "Unable to update": "Update fehlgeschlagen",
         "Check the network connection and try again.": "Netzwerkverbindung prüfen und erneut versuchen.",
+        "GitHub is rate-limiting update checks right now. Try again later.":
+            "GitHub drosselt derzeit die Update-Prüfungen. Bitte später erneut versuchen.",
         "Open Releases": "Releases öffnen",
         "Automatic update checks are failing — check network access to GitHub.": "Automatische Update-Prüfungen schlagen fehl — Netzwerkzugriff auf GitHub prüfen.",
 
@@ -363,6 +365,8 @@ enum L10n {
         "m_capture %@ is the latest version.": "m_capture %@ là phiên bản mới nhất.",
         "Unable to update": "Không thể cập nhật",
         "Check the network connection and try again.": "Kiểm tra kết nối mạng rồi thử lại.",
+        "GitHub is rate-limiting update checks right now. Try again later.":
+            "GitHub đang giới hạn tần suất kiểm tra cập nhật. Vui lòng thử lại sau.",
         "Automatic update checks are failing — check network access to GitHub.": "Kiểm tra cập nhật tự động đang thất bại — hãy kiểm tra kết nối mạng tới GitHub.",
         "Open Releases": "Mở trang Releases",
 
