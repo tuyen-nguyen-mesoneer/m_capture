@@ -18,7 +18,7 @@ here. It pins the deployment target with `-target …-macos14.0` to match
 `LSMinimumSystemVersion` (ScreenCaptureKit's capture API needs macOS 14). The app
 shows both a Dock icon and the menu-bar **m.** icon (activation policy `.regular`);
 the menu-bar item stays the primary entry point, the Dock icon is a fallback for
-when the menu bar is hidden.
+when the menu bar is hidden — Settings → General can hide it (`.accessory`).
 No automated tests; smoke-test by hand.
 
 Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
@@ -26,8 +26,11 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
 
 ## How it works
 
-- **Screenshot** (⌃⇧S): a dim selection overlay → drag a region (or **Space** →
-  whole-screen mode → click) → an in-place annotation editor opens over the dimmed screen.
+- **Screenshot** (⌃⇧S): every display is frozen the instant the hotkey fires → the
+  selection overlay dims those stills → drag a region (or **Space** → whole-screen mode →
+  click) → an in-place annotation editor opens over the dimmed screen. Selecting on a
+  frozen frame is what makes tooltips, hover menus and popovers capturable at all: the
+  overlay has to activate the app to get its keyboard, and activating dismisses them.
 - **Record** (⌃⇧R): drag a region → record it in-process via ScreenCaptureKit
   (`SCStream`), encoding HEVC video + AAC audio into an `.mp4` at 30 or 60 fps, with an
   optional start countdown and mouse-click ripples captured into the video. The hotkey
@@ -45,17 +48,17 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
   one app panel (Settings / History / Trim) is open at a time (`AppPanels.closeAll`).
 - **Localization**: the whole UI ships in English / German / Vietnamese (`L10n.swift`),
   following the system language or the Settings → General override.
-- **Quick Screen** (⌃⇧Q): captures the screen under the mouse instantly — no overlay,
-  no delay — for a hover state or tooltip that a drag-to-select would lose.
 - Hotkeys are rebindable defaults (**Settings → Shortcuts**). Captures save to the
   configured folder (default Desktop) and copy to the clipboard; format, location
   and auto-copy live in Settings.
 
 ## Source map (`Sources/`)
 
-- `main.swift` — entry point; sets `.regular` activation (Dock icon + menu-bar item).
+- `main.swift` — entry point; applies the activation policy via
+  `AppDelegate.applyDockVisibility()` (`.regular` = Dock icon + menu-bar item,
+  `.accessory` = menu-bar only, per Settings → General → Hide the Dock icon).
 - `AppDelegate.swift` — status item, menu, global hotkeys, capture actions. The menu is
-  a short action list (Screenshot / Record Video / Quick Screen / History / Library /
+  a short action list (Screenshot / Record Video / History / Library /
   Settings / Check for Updates / Quit); the meta items (Usage Guide, Report a Bug,
   version + license) live in Settings → About instead. Shows the one-time first-run
   welcome (`showWelcome`), the in-menu recording controls (Stop / Stop-as-GIF /
@@ -85,13 +88,19 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
   `deliver(_:)` routes the result per `CaptureBehavior` (editor / save / clipboard).
   Multi-monitor coordinate math lives in `finish`. Gated on
   `ScreenRecordingPermission` so a denied grant guides the user instead of
-  silently producing nothing. `captureQuickScreen()` is the Quick Screen path —
-  skips the overlay and delay entirely, grabbing the screen under the mouse
-  straight away.
+  silently producing nothing. `begin()` freezes every display first (one
+  `SCScreenshotManager` grab each, before `NSApp.activate`), then `presentOverlays`
+  puts the overlay up over those stills; `finish` just crops the still (`crop(_:to:scale:)`)
+  — no second grab. A display whose freeze failed falls back to the old live grab.
+  `warmUp()` keeps a background `SCShareableContent` snapshot ready (launch, display
+  change, after each capture) since that enumeration now sits on the hotkey's critical
+  path. Window mode deliberately stays on the live grab (unoccluded pixels).
 - `Permissions.swift` — `ScreenRecordingPermission`: `CGPreflightScreenCaptureAccess`
   check, `prime()` (fire the grant prompt during onboarding), + the brand guidance alert
   / System Settings deep link when Screen Recording is off.
-- `SelectionOverlay.swift` — the dim drag-to-select overlay; **Space** cycles
+- `SelectionOverlay.swift` — the drag-to-select overlay, dimming either a frozen still
+  of the display (screenshots, via the `frozen:` backdrop) or the live desktop (the
+  record flow and the freeze-failed fallback); **Space** cycles
   Region → Window → Screen mode; draws the cutout, size readout, mode hint, and a
   lavender hover tint over the Window/Screen capture target. An `OverlayCoordinator`
   is shared across every display's overlay so mode-cycling and capture work on any
@@ -176,7 +185,7 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
 - `Settings.swift` — persisted output prefs (`Settings.shared` / `UserDefaults`):
   save dir, format (`ImageFormat`), quality, auto-copy, cursor, sound, delay,
   post-capture `CaptureBehavior`, per-action hotkeys, background padding/radius,
-  launch-at-login (live via `SMAppService`). `fileURL()` + `encode(_:)` are the
+  launch-at-login (live via `SMAppService`), Dock-icon visibility. `fileURL()` + `encode(_:)` are the
   single source for where/how captures are saved; `fileURL()` uniquifies the name and
   `resolvedSaveDirectory()` falls back to the Desktop when the configured folder is
   gone/unwritable.
@@ -219,9 +228,12 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
   `viewRect` into ScreenCaptureKit's `sourceRect` (points, top-left origin, relative
   to the display) by flipping Y within *that screen's* height (`screen.frame.height -
   viewRect.maxY`); pixel size is `viewRect × backingScaleFactor`. Change there, carefully.
-- **Capture latency / overlay.** A short `asyncAfter` delay in `finish` lets the dim
-  overlay clear (a couple of compositor frames) so it isn't in the shot; the actual
-  ScreenCaptureKit grab then runs asynchronously off a `Task`, so the UI never stalls.
+- **Capture latency / overlay.** The screenshot path pays its ScreenCaptureKit cost
+  *up front* (the freeze in `begin()`), so mouse-up only crops — no grab, no
+  wait-for-the-overlay-to-clear delay, nothing of ours that could bake into the shot.
+  That trades latency onto the hotkey instead, which is why `warmUp()` keeps the
+  shareable-content snapshot warm. The live fallback in `finish` keeps the old shape: a
+  short `asyncAfter` for the overlay to clear, then an async `Task` for the grab.
 - **Save is async, but failures aren't silent.** `savePressed` flattens on the main
   thread, then `writeCapture` encodes/writes off a background queue and only closes the
   editor **after** the write succeeds — on failure it keeps the window open and shows a
@@ -236,7 +248,9 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
   and `.activeAlways` tracking (hover) still work, so it looks interactive while
   clicks silently hit the app below. Window/Screen modes therefore punch their bright
   "hole" with a hair of opacity (`punchHole`, alpha 0.02) instead of a true `.clear`,
-  so the window still hit-tests the click. Don't restore a fully-clear cutout.
+  so the window still hit-tests the click. Don't restore a fully-clear cutout. Over a
+  frozen backdrop the still itself is redrawn there instead, so the window is opaque
+  throughout and the hazard doesn't arise — but the live path (recording) still needs it.
 
 ## Conventions
 

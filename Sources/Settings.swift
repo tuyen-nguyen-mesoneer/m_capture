@@ -98,13 +98,12 @@ struct Shortcut: Equatable {
 
 /// The capture actions that each have a rebindable global hotkey.
 enum ShortcutAction: String, CaseIterable {
-    case screenshot, record, quickScreen, forceQuit
+    case screenshot, record, forceQuit
 
     var label: String {
         switch self {
         case .screenshot:  return L("Screenshot")
         case .record:      return L("Record")
-        case .quickScreen: return L("Quick Screen")
         case .forceQuit:   return L("Force Quit")
         }
     }
@@ -114,7 +113,6 @@ enum ShortcutAction: String, CaseIterable {
         switch self {
         case .screenshot:  return Shortcut(keyCode: UInt32(kVK_ANSI_S), modifiers: cs)
         case .record:      return Shortcut(keyCode: UInt32(kVK_ANSI_R), modifiers: cs)
-        case .quickScreen: return Shortcut(keyCode: UInt32(kVK_ANSI_Q), modifiers: cs)
         case .forceQuit:   return Shortcut(keyCode: UInt32(kVK_ANSI_Q), modifiers: UInt32(controlKey | optionKey | shiftKey))
         }
     }
@@ -206,6 +204,7 @@ final class Settings {
         static let videoCountdown = "videoCountdown", videoBarMinimized = "videoBarMinimized"
         static let lastRegion = "lastRegion"
         static let appLanguage = "appLanguage"
+        static let hideDock = "hideDockIcon"
     }
 
     private let defaultPrefix = "m_capture_"
@@ -388,6 +387,14 @@ final class Settings {
     var defaultBackground: Background {
         get { Background.preset(named: d.string(forKey: Key.defaultBG) ?? "") ?? .none }
         set { d.set(newValue.name, forKey: Key.defaultBG) }
+    }
+
+    /// Run as a menu-bar-only app, with no Dock icon (activation policy `.accessory`).
+    /// The Dock icon is the fallback entry point for a menu bar that's hidden behind the
+    /// notch or a menu-bar hider, so this is opt-in — see `AppDelegate.applyDockVisibility`.
+    var hideDockIcon: Bool {
+        get { d.bool(forKey: Key.hideDock) }
+        set { d.set(newValue, forKey: Key.hideDock) }
     }
 
     /// Auto-start the menu-bar app at login. State is read live from

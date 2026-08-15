@@ -73,7 +73,7 @@ No automated suite — smoke-test by hand after a build. Cover what your change
 touches, plus a baseline pass:
 
 - **Hotkeys** `⌃⇧S` / `⌃⇧R` / `⌃⇧Q` (and any you rebound) fire.
-- **Capture** — a region drag shows the overlay + size label; **Space** cycles Region → Window → Screen (window mode hover-highlights the window under the pointer and captures it when the mouse is released over it), for both `⌃⇧S` and `⌃⇧R`. **Quick Screen** (`⌃⇧Q`) grabs the screen under the mouse instantly, with no overlay.
+- **Capture** — a region drag shows the overlay + size label; **Space** cycles Region → Window → Screen (window mode hover-highlights the window under the pointer and captures it when the mouse is released over it), for both `⌃⇧S` and `⌃⇧R`. The overlay dims a frozen still of each display, so a tooltip or open menu that was on screen when the hotkey fired is still in the capture — check one.
 - **Editor** — tools draw correctly; undo/redo, crop, rotate, flip and corner-drag resize work; the **Select** tool (`V`) moves / resizes / deletes a placed mark.
 - **Output** — `⌘C` copy, `⌘S` save, `⇧⌘S` Save As, `Esc` cancel; plus Pin (`⌘P`), OCR, the Before/After GIF, and backgrounds.
 - **Settings** persist across relaunch; check **multi-monitor** geometry if you touched capture.
