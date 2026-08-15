@@ -574,7 +574,7 @@ final class EditorWindowController: NSObject {
             (CGPoint(x: sel.maxX + g, y: cy),       cs.width - (sel.maxX + g + w) - m),
         ]
         let best = candidates.max { $0.1 < $1.1 }!
-        // A selection spanning the whole screen (e.g. Quick Screen) leaves no side
+        // A selection spanning the whole screen (Screen mode) leaves no side
         // with real room — every candidate is a negative-margin worst-fit clamped to
         // an edge. Center the panel instead of pinning it to whichever edge lost least.
         if best.1 < 0 {
@@ -1369,7 +1369,7 @@ final class EditorWindowController: NSObject {
                         width: pc.width * scale, height: pc.height * scale)
 
         // Slide any tool panel out of the crop region first: on a whole-screen capture
-        // (Quick Screen) the panel is centered right over the image, so a centered crop
+        // (Screen mode) the panel is centered right over the image, so a centered crop
         // would otherwise cover it — and the crop bar with it.
         moveClustersClear(of: cr, in: content)
 

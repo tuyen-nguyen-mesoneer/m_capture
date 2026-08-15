@@ -21,11 +21,27 @@ final class ScreenshotController {
         NotificationCenter.default.addObserver(
             forName: NSApplication.didChangeScreenParametersNotification,
             object: nil, queue: .main) { [weak self] _ in
+            // The warm snapshot describes a display layout that no longer exists.
+            ScreenshotController.warmUp()
             guard let self, !self.overlays.isEmpty else { return }
             self.contentPrefetch = nil   // enumerated for a layout that no longer exists
             self.dismiss()
         }
     }
+
+    /// Keep a `SCShareableContent` snapshot ready ahead of the next capture.
+    ///
+    /// The freeze-frame grab in `begin()` runs *before* the overlay appears, so its cost
+    /// is visible to the user as latency on the hotkey — and enumerating shareable
+    /// content alone costs 0.5–2 s. Refreshing it in the background (at launch, after a
+    /// display change, and after every capture) leaves only the ~tens of milliseconds of
+    /// `SCScreenshotManager.captureImage` on the critical path.
+    static func warmUp() {
+        guard ScreenRecordingPermission.isGranted else { return }
+        warmContent = Task { try? await SCShareableContent.current }
+    }
+
+    private static var warmContent: Task<SCShareableContent?, Never>?
 
     /// True from the moment a capture starts (overlay shown, or a quick-screen
     /// grab kicked off) until it's fully handed off to `deliver`, plus for as
@@ -71,6 +87,19 @@ final class ScreenshotController {
         return false
     }
 
+    /// The still frame of each display, grabbed the instant the capture starts and used
+    /// as the selection overlay's backdrop — see `begin()`. Keyed by display ID.
+    private var frozen: [CGDirectDisplayID: (cg: CGImage, scale: CGFloat)] = [:]
+
+    /// Freeze every display, *then* show the selection overlay over those stills.
+    ///
+    /// Selecting on a live desktop can only ever capture what survives the overlay:
+    /// `NSApp.activate` below is what gives the overlay its keyboard, and activating
+    /// tears down whatever transient UI the frontmost app was showing — a tooltip, a
+    /// hover menu, a popover. Grabbing the pixels *before* activation means that state
+    /// is already in hand and the user can take as long as they like framing it. It also
+    /// removes the need to keep the selection chrome out of a later live grab: the frame
+    /// predates every overlay window.
     func begin() {
         if isBusy { return }
         guard ScreenRecordingPermission.isGranted else {
@@ -78,6 +107,41 @@ final class ScreenshotController {
             return
         }
         AppPanels.closeAll()   // no app panel should sit under (or in) the shot
+
+        beginPendingCapture()
+        // The pointer is part of the frozen state the user is trying to keep (it's what
+        // is producing the tooltip), so the setting applies to every mode here — unlike
+        // a live grab, nothing of ours can bake in.
+        let showsCursor = Settings.shared.captureCursor
+        let displays: [(id: CGDirectDisplayID, size: CGSize)] = NSScreen.screens.compactMap {
+            guard let id = $0.displayID else { return nil }
+            return (id, $0.frame.size)
+        }
+        Task {
+            var stills: [CGDirectDisplayID: (cg: CGImage, scale: CGFloat)] = [:]
+            for display in displays {
+                if let r = await ScreenshotController.captureRegion(
+                    displayID: display.id,
+                    sourceRect: CGRect(origin: .zero, size: display.size),
+                    showsCursor: showsCursor,
+                    prefetched: ScreenshotController.warmContent) {
+                    stills[display.id] = r
+                }
+            }
+            let captured = stills   // immutable copy: the closure below outlives the loop
+            await MainActor.run { self.presentOverlays(stills: captured) }
+        }
+    }
+
+    /// Put up one overlay per display over the frozen stills. A display whose still is
+    /// missing (the grab failed or timed out) falls back to the live dim overlay and a
+    /// fresh grab on mouse-up, so a failed freeze costs the tooltip, never the capture.
+    private func presentOverlays(stills: [CGDirectDisplayID: (cg: CGImage, scale: CGFloat)]) {
+        capturePending = false
+        // A second capture can only have started if this one was cancelled or superseded
+        // while the stills were in flight; don't stack a second overlay set on it.
+        if isBusy { return }
+        frozen = stills
 
         let mouse = NSEvent.mouseLocation
         let keyScreen = NSScreen.screens.first { $0.frame.contains(mouse) }
@@ -89,8 +153,10 @@ final class ScreenshotController {
         let coordinator = OverlayCoordinator()
         let last = Settings.shared.lastRegion
         for screen in NSScreen.screens {
+            let still = screen.displayID.flatMap { frozen[$0] }
             let win = OverlayWindow(screen: screen, coordinator: coordinator,
-                                    previousRect: screen.displayID == last?.displayID ? last?.rect : nil)
+                                    previousRect: screen.displayID == last?.displayID ? last?.rect : nil,
+                                    frozen: still.map { ScreenshotController.nsImage(from: $0.cg) })
             win.onComplete = { [weak self] viewRect in
                 self?.finish(viewRect: viewRect, screen: screen, showsCursor: Settings.shared.captureCursor)
             }
@@ -103,6 +169,7 @@ final class ScreenshotController {
             win.onCompleteWindow = { [weak self] windowID in self?.finishWindow(windowID: windowID) }
             win.onCancel = { [weak self] in
                 self?.contentPrefetch = nil
+                self?.frozen = [:]
                 self?.dismiss()
             }
             overlays.append(win)
@@ -112,42 +179,9 @@ final class ScreenshotController {
                 win.orderFront(nil)
             }
         }
-        // Warm up *after* the overlay windows exist so the snapshot contains them —
-        // the capture filter excludes them by ID, which is what keeps the dim/banner
-        // out of the shot regardless of how fast the grab fires after mouse-up.
-        contentPrefetch = Task { try? await SCShareableContent.current }
-    }
-
-    /// Grabs the screen under the mouse immediately, with no overlay and no
-    /// capture delay — for a transient UI state (a tooltip, a hover menu) that
-    /// would vanish the moment the user has to drag a selection.
-    func captureQuickScreen() {
-        if isBusy { return }
-        guard ScreenRecordingPermission.isGranted else {
-            ScreenRecordingPermission.handleDenied()
-            return
-        }
-        AppPanels.closeAll()
-        let mouse = NSEvent.mouseLocation
-        let screen = NSScreen.screens.first { $0.frame.contains(mouse) }
-            ?? NSScreen.main ?? NSScreen.screens[0]
-        guard let displayID = screen.displayID else { return }
-
-        beginPendingCapture()
-        let sourceRect = CGRect(origin: .zero, size: screen.frame.size)
-        ScreenshotController.playCaptureSoundIfEnabled()
-        nonisolated(unsafe) let deliverScreen = screen
-        Task {
-            let result = await ScreenshotController.captureRegion(
-                displayID: displayID, sourceRect: sourceRect, showsCursor: Settings.shared.captureCursor)
-            await MainActor.run {
-                defer { self.capturePending = false }
-                guard let result else { ScreenshotController.handleEmptyCapture(); return }
-                ScreenshotController.deliver(ScreenshotController.image(from: result.cg),
-                                            selectionRect: deliverScreen.frame, screen: deliverScreen,
-                                            captureScale: result.scale)
-            }
-        }
+        // The freeze grab a moment ago already paid for a snapshot; window-pick mode
+        // reuses it and refreshes itself when it doesn't know the picked window.
+        contentPrefetch = ScreenshotController.warmContent
     }
 
     /// The system screenshot shutter sound, played when the user enables it
@@ -372,6 +406,21 @@ final class ScreenshotController {
         }
     }
 
+    /// Crop a frozen full-display still to `sourceRect` — display-local points with a
+    /// top-left origin, the same convention `SCStreamConfiguration.sourceRect` uses — so
+    /// a cropped still and a live grab of the same region produce identical pixels.
+    /// Rounding matches the live path's, and the rect is clamped to the image so a
+    /// selection touching the display edge can't fail on an out-of-bounds crop.
+    private static func crop(_ cg: CGImage, to sourceRect: CGRect, scale: CGFloat) -> CGImage? {
+        let px = CGRect(x: (sourceRect.minX * scale).rounded(),
+                        y: (sourceRect.minY * scale).rounded(),
+                        width: (sourceRect.width * scale).rounded(),
+                        height: (sourceRect.height * scale).rounded())
+        let clamped = px.intersection(CGRect(x: 0, y: 0, width: cg.width, height: cg.height))
+        guard !clamped.isNull, clamped.width >= 1, clamped.height >= 1 else { return nil }
+        return cg.cropping(to: clamped)
+    }
+
     /// Wrap a captured CGImage as a pixel-sized NSImage (scale 1), so the editor's
     /// display-scale math stays correct.
     private static func image(from cg: CGImage) -> NSImage {
@@ -428,9 +477,13 @@ final class ScreenshotController {
         }
     }
 
+    /// Window mode keeps the live grab rather than cropping the frozen still: SCK's
+    /// `desktopIndependentWindow` filter returns the window's own pixels *unoccluded*,
+    /// which a crop out of the composited still can't do.
     private func finishWindow(windowID: CGWindowID) {
         let prefetch = contentPrefetch
         contentPrefetch = nil
+        frozen = [:]
         dismiss()
         beginPendingCapture()
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.06) {
@@ -441,7 +494,7 @@ final class ScreenshotController {
                 let result = await ScreenshotController.captureWindow(windowID: windowID, showsCursor: false,
                                                                       prefetched: prefetch)
                 await MainActor.run {
-                    defer { self.capturePending = false }
+                    defer { self.capturePending = false; ScreenshotController.warmUp() }
                     guard let result else { ScreenshotController.handleEmptyCapture(); return }
                     ScreenshotController.deliver(ScreenshotController.image(from: result.cg),
                                                 selectionRect: result.globalRect, screen: result.screen,
@@ -461,18 +514,30 @@ final class ScreenshotController {
                             width: viewRect.width, height: viewRect.height)
         let prefetch = contentPrefetch
         contentPrefetch = nil
-        // Snapshot the overlay window IDs before dismiss() drops them — the capture
-        // filter excludes them so no remnant of the selection UI lands in the shot.
+        // Snapshot the overlay window IDs before dismiss() drops them — only the live
+        // fallback path needs them, to keep the selection chrome out of the shot.
         let overlayIDs = overlays.map { CGWindowID($0.windowNumber) }
+        let still = screen.displayID.flatMap { frozen[$0] }
+        frozen = [:]
         dismiss()
         guard global.width >= 3, global.height >= 3 else { return }
         guard let displayID = screen.displayID else { return }
 
-        beginPendingCapture()
         let sourceRect = CGRect(x: viewRect.minX,
                                 y: screen.frame.height - viewRect.maxY,
                                 width: viewRect.width, height: viewRect.height)
 
+        // The common path: the pixels are already in hand, so crop and hand off with no
+        // grab, no delay and no chance of the overlay's fade-out being caught in the shot.
+        if let still, let cropped = ScreenshotController.crop(still.cg, to: sourceRect, scale: still.scale) {
+            ScreenshotController.playCaptureSoundIfEnabled()
+            ScreenshotController.deliver(ScreenshotController.image(from: cropped),
+                                        selectionRect: global, screen: screen, captureScale: still.scale)
+            ScreenshotController.warmUp()
+            return
+        }
+
+        beginPendingCapture()
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.06) {
             ScreenshotController.playCaptureSoundIfEnabled()
             nonisolated(unsafe) let deliverScreen = screen
@@ -481,7 +546,7 @@ final class ScreenshotController {
                     displayID: displayID, sourceRect: sourceRect, showsCursor: showsCursor,
                     excluding: overlayIDs, prefetched: prefetch)
                 await MainActor.run {
-                    defer { self.capturePending = false }
+                    defer { self.capturePending = false; ScreenshotController.warmUp() }
                     guard let result else { ScreenshotController.handleEmptyCapture(); return }
                     ScreenshotController.deliver(ScreenshotController.image(from: result.cg),
                                                 selectionRect: global, screen: deliverScreen,

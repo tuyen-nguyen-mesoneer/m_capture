@@ -9,6 +9,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var menu: BrandMenu!
     private var countdownActive = false
 
+    /// Apply the Dock-icon preference. `.accessory` drops the Dock icon (and the app's
+    /// menu bar) leaving the status item as the only entry point; `.regular` restores it.
+    ///
+    /// Switching to `.accessory` at runtime also resigns the app active, so callers
+    /// toggling this from an open panel must re-raise it (see `dockToggled`). Called at
+    /// launch, before the app runs, and whenever the setting is toggled.
+    static func applyDockVisibility() {
+        let hide = Settings.shared.hideDockIcon
+        guard NSApp.activationPolicy() != (hide ? .accessory : .regular) else { return }
+        NSApp.setActivationPolicy(hide ? .accessory : .regular)
+        if NSApp.isRunning { NSApp.activate(ignoringOtherApps: true) }
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         if terminateIfAlreadyRunning() { return }
         if Relocator.relocateToUserApplicationsIfNeeded() { return }
@@ -21,6 +34,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         buildMenu()
         reloadHotKeys()
+
+        // The screenshot flow freezes the screen before showing its overlay, so the
+        // shareable-content enumeration it needs sits on the hotkey's critical path —
+        // pay it now, in the background, rather than on the user's first capture.
+        ScreenshotController.warmUp()
 
         // Reflect recording state in the menu-bar icon so it's obvious the app is
         // recording even when the floating bar is minimized.
@@ -134,9 +152,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .item(title: L("Record Video"), symbol: "record.circle",
                   shortcut: s.shortcut(.record).displayString,
                   enabled: !editorOpen) { [weak self] in self?.record() },
-            .item(title: L("Quick Screen"), symbol: "cursorarrow.rays",
-                  shortcut: s.shortcut(.quickScreen).displayString,
-                  enabled: !editorOpen) { ScreenshotController.shared.captureQuickScreen() },
             .item(title: L("History"), symbol: "clock", shortcut: nil) { HistoryWindowController.shared.show() },
             .item(title: L("Library"), symbol: "folder", shortcut: nil) { [weak self] in self?.openLibrary() },
             // Meta items (Usage Guide / About / Updates / Report a Bug) live in
@@ -157,7 +172,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let s = Settings.shared
         hotKeys.append(HotKey(s.shortcut(.screenshot)) { [weak self] in self?.takeScreenshot() })
         hotKeys.append(HotKey(s.shortcut(.record)) { [weak self] in self?.record() })
-        hotKeys.append(HotKey(s.shortcut(.quickScreen)) { ScreenshotController.shared.captureQuickScreen() })
         hotKeys.append(HotKey(s.shortcut(.forceQuit)) { [weak self] in self?.forceQuit() })
         // ⌥ + the record shortcut discards an in-flight recording (with confirm) —
         // the keyboard path when the floating bar (and its Esc handling) is hidden.
@@ -237,7 +251,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// Open the usage guide (the repo's USAGE.md) so the editor-only features — Pin,
-    /// OCR, Backgrounds, Before/After GIF, Quick Screen — are discoverable from the menu.
+    /// OCR, Backgrounds, Before/After GIF — are discoverable from the menu.
     @objc func openUsageGuide() {
         if let u = URL(string: "https://github.com/tuyen-nguyen-mesoneer/m_capture/blob/trunk/USAGE.md") {
             NSWorkspace.shared.open(u)

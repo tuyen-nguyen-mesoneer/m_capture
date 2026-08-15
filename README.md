@@ -13,7 +13,7 @@ Press a hotkey and drag to select a region; an **in-place annotation editor** op
 immediately, where you can highlight, blur, and add arrows or numbered steps before
 copying the result to the clipboard or saving it to disk. The app lives in the menu
 bar — the current version shows on a badge in its menu — with a Dock icon for quick
-access when the menu bar is hidden.
+access when the menu bar is hidden, which you can turn off in Settings → General.
 
 <p align="center">
   <img src="docs/assets/editor.png" alt="The in-place annotation editor — a captured image surrounded by grouped tool clusters" width="760">
@@ -27,9 +27,9 @@ A complete screenshot workflow — capture, annotate, and share — that runs en
 on-device, with no subscriptions, cloud services, or accounts.
 
 **📸 Capture**
-- **Global hotkeys** — `⌃⇧S` for a screenshot, `⌃⇧R` to record, `⌃⇧Q` for Quick Screen; all fully rebindable.
+- **Global hotkeys** — `⌃⇧S` for a screenshot, `⌃⇧R` to record; all fully rebindable.
 - **Region, window, or full screen** — drag to select a region, or press **Space** to grab a whole window (hover to wash it in a tint, release the mouse over it to capture) or the entire screen in a single click. Fully multi-monitor aware — every mode works on any connected display.
-- **Quick Screen** (`⌃⇧Q`) — grabs the screen under your cursor the instant you press the hotkey, with no selection overlay in between — for a hover state, tooltip, or menu that would vanish once you start dragging a selection.
+- **Tooltips and hover menus, captured** — pressing `⌃⇧S` freezes the screen instantly and you select your region on that frozen frame, so a tooltip, hover state, or open menu is still there in the shot. Take as long as you like framing it.
 - **Self-timer** — a 3, 5, or 10-second delay with a menu-bar countdown, plus an optional mouse cursor and shutter sound.
 - **Recording** — record a region, a single window, or the whole screen in-app to an MP4 (HEVC) at **30 or 60 fps**, optionally mixing in system and/or microphone audio, with an optional **start countdown** and **mouse-click ripples** baked into the video. The record hotkey **toggles** — press `⌃⇧R` again to stop and save; `⌥⌃⇧R` discards (with confirmation).
 - **Trim & GIF export** — finish a recording with **Stop & Trim…** (a lossless in/out trim panel with live preview) or **Stop & Save as GIF** (a looping, share-ready GIF); recordings can also be trimmed later from **History**.

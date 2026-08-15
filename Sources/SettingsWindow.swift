@@ -10,6 +10,7 @@ final class SettingsWindowController: NSObject {
     private var window: NSWindow?
 
     private var loginCheck: NSButton!
+    private var dockCheck: NSButton!
     private var languagePopup: NSPopUpButton!
     private var delayPopup: NSPopUpButton!
     private var behaviorPopup: NSPopUpButton!
@@ -60,6 +61,7 @@ final class SettingsWindowController: NSObject {
         let gradient = Theme.applyPanelGradient(to: content)
 
         loginCheck = checkbox(L("Launch m_capture at login"), #selector(loginToggled))
+        dockCheck = checkbox(L("Hide the Dock icon"), #selector(dockToggled))
         languagePopup = popup(AppLanguage.allCases.map { $0.label }, #selector(languageChanged))
         delayPopup = popup(CaptureDelay.allCases.map { $0.label }, #selector(delayChanged))
         behaviorPopup = popup(CaptureBehavior.allCases.map { $0.label }, #selector(behaviorChanged))
@@ -104,6 +106,7 @@ final class SettingsWindowController: NSObject {
         sections = [
             (L("General"), [
                 checkRow(loginCheck),
+                checkRow(dockCheck),
                 row(L("Language"), languagePopup,
                     tip: L("Interface language. \"System\" follows the macOS language; changes apply after a restart.")),
                 row(L("Capture delay"), delayPopup,
@@ -333,7 +336,6 @@ final class SettingsWindowController: NSObject {
         switch a {
         case .screenshot:  return L("Drag to select a region, or press Space to capture a window or screen.")
         case .record:      return L("Drag to select a region, or press Space to record a window or screen.")
-        case .quickScreen: return L("Captures the screen under the pointer immediately, with no overlay or delay — useful for transient menus and tooltips.")
         case .forceQuit:   return L("Force-quits m_capture and any duplicate instances — use if the menu bar icon is stuck or duplicated.")
         }
     }
@@ -471,6 +473,7 @@ final class SettingsWindowController: NSObject {
     private func refresh() {
         let s = Settings.shared
         loginCheck.state = s.launchAtLogin ? .on : .off
+        dockCheck.state = s.hideDockIcon ? .on : .off
         languagePopup.selectItem(at: AppLanguage.allCases.firstIndex(of: s.appLanguage) ?? 0)
         delayPopup.selectItem(at: CaptureDelay.allCases.firstIndex(of: s.captureDelay) ?? 0)
         behaviorPopup.selectItem(at: CaptureBehavior.allCases.firstIndex(of: s.captureBehavior) ?? 0)
@@ -497,6 +500,14 @@ final class SettingsWindowController: NSObject {
     @objc private func loginToggled() {
         Settings.shared.launchAtLogin = (loginCheck.state == .on)
         loginCheck.state = Settings.shared.launchAtLogin ? .on : .off
+    }
+
+    /// Dropping the Dock icon switches the app to `.accessory`, which resigns it active
+    /// and would leave this very panel stranded behind other windows — re-raise it.
+    @objc private func dockToggled() {
+        Settings.shared.hideDockIcon = (dockCheck.state == .on)
+        AppDelegate.applyDockVisibility()
+        DispatchQueue.main.async { [weak self] in self?.window?.makeKeyAndOrderFront(nil) }
     }
 
     @objc private func delayChanged() {

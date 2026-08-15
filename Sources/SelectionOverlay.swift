@@ -74,15 +74,18 @@ final class OverlayWindow: NSWindow {
     ///   - allowsFullScreenMode: When `false`, Space cannot cycle into whole-screen mode.
     ///   - recording: When `true`, window/screen modes show a video cursor instead of
     ///     the camera, distinguishing the record flow from screenshots.
+    ///   - frozen: This display's still, grabbed before the overlay appeared, drawn as
+    ///     the backdrop instead of dimming the live desktop (see `ScreenshotController.begin`).
     init(screen: NSScreen, coordinator: OverlayCoordinator,
          allowsWindowMode: Bool = true, allowsFullScreenMode: Bool = true, recording: Bool = false,
-         previousRect: CGRect? = nil) {
+         previousRect: CGRect? = nil, frozen: NSImage? = nil) {
         captureScreen = screen
         selectionView = SelectionView(frame: NSRect(origin: .zero, size: screen.frame.size),
                                      coordinator: coordinator,
                                      allowsWindowMode: allowsWindowMode,
                                      allowsFullScreenMode: allowsFullScreenMode,
-                                     recording: recording)
+                                     recording: recording,
+                                     frozen: frozen)
         selectionView.previousRect = previousRect
         super.init(contentRect: screen.frame, styleMask: .borderless,
                    backing: .buffered, defer: false)
@@ -167,12 +170,18 @@ final class SelectionView: NSView {
     private var currentPoint: CGPoint?
     private var trackingAreaRef: NSTrackingArea?
 
+    /// This display's still (pixel-sized, scale 1), when the capture froze the screen
+    /// before opening the overlay. `nil` falls back to dimming the live desktop.
+    private let frozen: NSImage?
+
     init(frame: NSRect, coordinator: OverlayCoordinator,
-         allowsWindowMode: Bool = true, allowsFullScreenMode: Bool = true, recording: Bool = false) {
+         allowsWindowMode: Bool = true, allowsFullScreenMode: Bool = true, recording: Bool = false,
+         frozen: NSImage? = nil) {
         self.coordinator = coordinator
         self.allowsWindowMode = allowsWindowMode
         self.allowsFullScreenMode = allowsFullScreenMode
         self.recording = recording
+        self.frozen = frozen
         super.init(frame: frame)
         coordinator.register(self)
     }
@@ -374,8 +383,14 @@ final class SelectionView: NSView {
     override func draw(_ dirtyRect: NSRect) {
         guard let ctx = NSGraphicsContext.current?.cgContext else { return }
 
-        ctx.setFillColor(Theme.surfaceBase.withAlphaComponent(0.55).cgColor)
-        ctx.fill(bounds)
+        if frozen != nil {
+            drawFrozen(dirtyRect)
+            ctx.setFillColor(Theme.surfaceBase.withAlphaComponent(0.55).cgColor)
+            ctx.fill(dirtyRect)
+        } else {
+            ctx.setFillColor(Theme.surfaceBase.withAlphaComponent(0.55).cgColor)
+            ctx.fill(bounds)
+        }
 
         switch captureMode {
         case .region: drawRegionMode(ctx)
@@ -386,14 +401,36 @@ final class SelectionView: NSView {
         drawModeBanner()
     }
 
-    /// Clear `r` to a bright "hole" in the dim, but leave a hair of opacity (0.02) so
-    /// the non-opaque overlay window still hit-tests clicks there. A fully transparent
-    /// (alpha 0) region of a non-opaque window passes mouse clicks straight through to
-    /// the app underneath — which would make window/screen picking uncapturable.
+    /// Show `r` bright against the dim. Over a frozen backdrop that's just the still
+    /// redrawn at full opacity — the window stays opaque throughout, so none of the
+    /// click-through care below applies.
+    ///
+    /// On the live-desktop fallback the region is cleared instead, but with a hair of
+    /// opacity (0.02) left behind so the non-opaque overlay window still hit-tests
+    /// clicks there. A fully transparent (alpha 0) region of a non-opaque window passes
+    /// mouse clicks straight through to the app underneath — which would make
+    /// window/screen picking uncapturable.
     private func punchHole(_ ctx: CGContext, _ r: CGRect) {
+        if frozen != nil {
+            drawFrozen(r)
+            return
+        }
         ctx.setBlendMode(.clear); ctx.fill(r); ctx.setBlendMode(.normal)
         ctx.setFillColor(Theme.surfaceBase.withAlphaComponent(0.02).cgColor)
         ctx.fill(r)
+    }
+
+    /// Draw the frozen still behind `rect` only. `draw(_:)` runs on every mouse move
+    /// during a drag, and recompositing the whole display each time — a 5K still is ~35
+    /// MPx — would blow the frame budget on exactly the interaction that must stay
+    /// smooth. The still is pixel-sized at scale 1 in the same bottom-left space as the
+    /// view, so the source rect is just `rect` scaled by its pixels-per-point.
+    private func drawFrozen(_ rect: CGRect) {
+        guard let frozen else { return }
+        let scale = frozen.size.width / max(bounds.width, 1)
+        let from = CGRect(x: rect.minX * scale, y: rect.minY * scale,
+                          width: rect.width * scale, height: rect.height * scale)
+        frozen.draw(in: rect, from: from, operation: .copy, fraction: 1)
     }
 
     /// A lavender wash over the hovered target, on top of the bright hole — so the
