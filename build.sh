@@ -65,12 +65,11 @@ echo "==> Code signing"
 # A *stable* signing identity is what lets macOS keep the Screen Recording grant across
 # updates — the grant is keyed to the identity's certificate (its SHA-1), NOT the app's
 # name or path. Ad-hoc signatures ("-") change every build, which is why the permission
-# resets. Two deliberately separate roles — and note a self-signed cert's identity is its
-# HASH, not its name, so two certs both named "m_capture-dev" are DIFFERENT identities:
-#   • m_capture-dev      optional, per-developer, local — keeps YOUR rebuilds' grant.
-#   • m_capture-release  the ONE shared identity every published release must use, so end
-#                        users keep their grant across updates. Export it as a .p12 and
-#                        import it on each release machine / CI. See CONTRIBUTING > Releasing.
+# resets. There is exactly ONE identity, m_capture-release: CI signs every published
+# release with it, and contributors import the same cert locally (certs/m_capture-release.p12,
+# via tools/import-cert.sh) so dev rebuilds keep the grant AND share it with the shipped
+# app. Note a self-signed cert's identity is its HASH, not its name — rolling your own
+# cert called "m_capture-release" is a DIFFERENT identity and won't match.
 # Set RELEASE_CERT_SHA to that shared cert's SHA-1 to hard-fail a release signed by the
 # wrong identity (find it with: security find-identity -p codesigning).
 RELEASE_CERT_SHA="649539CA96FD80DF1FD4C01E5F16F81B12427C00"
@@ -84,17 +83,13 @@ find_identity() {
 
 SIGN_ID="-"
 if [ "$RUN" = "1" ]; then
-    # Dev rebuild — prefer the shared release identity (if imported locally), so the
-    # Screen Recording grant matches the shipped app too; else the local dev
-    # convenience cert; else ad-hoc.
+    # Dev rebuild — the shared identity (if imported locally), so the Screen Recording
+    # grant survives rebuilds and matches the shipped app too; else ad-hoc.
     if [ -n "$(find_identity 'm_capture-release')" ]; then
         SIGN_ID="m_capture-release"
-        echo "    release identity 'm_capture-release' — your local Screen Recording grant persists"
-    elif [ -n "$(find_identity 'm_capture-dev')" ]; then
-        SIGN_ID="m_capture-dev"
-        echo "    dev identity 'm_capture-dev' — your local Screen Recording grant persists"
+        echo "    shared identity 'm_capture-release' — your local Screen Recording grant persists"
     else
-        echo "    ad-hoc (create an 'm_capture-dev' cert, or import 'm_capture-release', to stop re-granting on rebuild)"
+        echo "    ad-hoc (run ./tools/import-cert.sh to stop re-granting on every rebuild)"
     fi
 else
     # Release build (DMG) — require the shared release identity so users keep their grant.
@@ -104,13 +99,8 @@ else
         echo "    release identity 'm_capture-release' ($RELEASE_SHA)"
     else
         echo "    WARNING: no 'm_capture-release' identity — this build will NOT preserve users'" >&2
-        echo "             Screen Recording grant across updates (see CONTRIBUTING > Releasing)." >&2
-        if [ -n "$(find_identity 'm_capture-dev')" ]; then
-            SIGN_ID="m_capture-dev"
-            echo "             falling back to 'm_capture-dev' — OK for local DMG testing, NOT for release." >&2
-        else
-            echo "             falling back to ad-hoc — OK for local DMG testing, NOT for release." >&2
-        fi
+        echo "             Screen Recording grant across updates (run ./tools/import-cert.sh)." >&2
+        echo "             falling back to ad-hoc — OK for local DMG testing, NOT for release." >&2
     fi
     # If a canonical release identity is pinned, the chosen signer MUST match it.
     if [ -n "$RELEASE_CERT_SHA" ]; then

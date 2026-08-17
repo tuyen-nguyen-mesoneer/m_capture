@@ -15,7 +15,7 @@ import AppKit
 /// internal rollout the repo (or its releases) must be public or org-accessible.
 ///
 /// Whether the user keeps their Screen Recording grant across an update is a *signing*
-/// property, not an updater one: releases must share the `m_capture-dev` identity (see
+/// property, not an updater one: releases must share the `m_capture-release` identity (see
 /// `build.sh` / CONTRIBUTING). The updater installs regardless of identity, so a release
 /// signed differently costs a one-time re-grant.
 enum Updater {

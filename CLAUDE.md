@@ -210,6 +210,8 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
 - `tools/shots.swift` — dev-only; regenerates the menu/about/settings screenshots in
   `docs/assets/` (see CONTRIBUTING.md). Its editor preview (from `tools/sample.png`) renders
   to a scratch temp dir, never a committed asset. Not part of the app build.
+- `tools/import-cert.sh` — dev-only; imports the shared `certs/m_capture-release.p12`
+  signing identity into the login keychain so rebuilds keep the Screen Recording grant.
 
 ## Gotchas
 
@@ -217,7 +219,9 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
   `build.sh` ad-hoc signs (`codesign -s -`), so a rebuild can read as a new identity
   and reset the grant — re-approve under *System Settings → Privacy & Security →
   Screen Recording* and relaunch if capture silently produces nothing. A self-signed
-  `m_capture-dev` cert (see CONTRIBUTING.md) gives a stable identity so the grant persists.
+  shared `m_capture-release` cert — committed as `certs/m_capture-release.p12` and imported
+  with `./tools/import-cert.sh` — gives a stable identity, so the grant persists across
+  rebuilds *and* matches the shipped release. See CONTRIBUTING.md.
 - **Capture is in-process** via ScreenCaptureKit (`SCScreenshotManager.captureImage`,
   macOS 14+) — the app grabs the pixels itself, no subprocess. This replaced the old
   `/usr/sbin/screencapture` subprocess, which stalled for *minutes* on managed Macs
