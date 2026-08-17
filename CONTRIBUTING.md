@@ -18,12 +18,20 @@ DMG. No Xcode/SPM project.
 - **Faster development loop**
   - `./build.sh --run` — rebuild, quit, and relaunch in place (skips the DMG).
   - **Keep the Screen Recording grant across rebuilds:** ad-hoc signing resets the
-    grant every build. `./build.sh --run` signs with, in order of preference: the shared
-    **`m_capture-release`** identity if you have it imported locally (e.g. as the release
-    admin — see *Releasing*) — this also matches the grant of any installed release build;
-    otherwise a self-signed **Code Signing** cert named **`m_capture-dev`** you create yourself
-    in Keychain Access (*Self Signed Root*), local and per-developer; otherwise ad-hoc (grant
-    resets every build).
+    grant every build. Import the shared signing cert once and it stops:
+
+    ```sh
+    ./tools/import-cert.sh     # imports certs/m_capture-release.p12 (no password)
+    ```
+
+    `build.sh` then signs with **`m_capture-release`** — the same identity CI signs
+    releases with, so your dev builds also share the grant of any installed release.
+    Without it, builds fall back to ad-hoc and you re-grant every time.
+
+    > The `.p12` in `certs/` holds the private key and is committed deliberately, so
+    > anyone with repo access can sign as this identity. It is a convenience/UX key
+    > (grant persistence), **not** a security boundary — the app is unnotarized and the
+    > cert is an untrusted self-signed root, so it grants no Gatekeeper privilege.
   - `./build.sh && open build/m_capture.app --args --settings-demo` — opens the
     Settings panel at launch to iterate on it.
 
@@ -34,17 +42,25 @@ Release (`.github/workflows/release.yml`). Every release is signed with one shar
 **`m_capture-release`**, so users keep their Screen Recording grant across updates — the grant
 is tied to the signing cert, and a different cert forces everyone to re-grant.
 
-### One-time setup (admin, once)
+### One-time setup (admin, already done)
+
+The cert exists and lives at [`certs/m_capture-release.p12`](certs/m_capture-release.p12);
+its SHA-1 is pinned as `RELEASE_CERT_SHA` in `build.sh`, so a DMG signed by any other
+identity hard-fails. To recreate it from scratch:
 
 1. **Create the cert** — Keychain Access → *Certificate Assistant → Create a Certificate* → a
    **Code Signing** cert (*Self Signed Root*) named exactly **`m_capture-release`**.
-2. **Export it** — right-click the cert → *Export* → `m_capture-release.p12`, and set a password.
+2. **Export it** — right-click the cert → *Export* → `certs/m_capture-release.p12`, leaving the
+   password empty (`tools/import-cert.sh` expects that), and commit it.
 3. **Add two GitHub secrets** — repo → **Settings → Secrets and variables → Actions → New
    repository secret**:
-   - `RELEASE_CERT_P12_BASE64` — run `base64 -i m_capture-release.p12 | pbcopy`, then paste.
-   - `RELEASE_CERT_PASSWORD` — the password from step 2.
+   - `RELEASE_CERT_P12_BASE64` — run `base64 -i certs/m_capture-release.p12 | pbcopy`, then paste.
+   - `RELEASE_CERT_PASSWORD` — empty, to match step 2.
 4. **Pin it** — set `RELEASE_CERT_SHA` in `build.sh` to the cert's SHA-1 (from
    `security find-identity -p codesigning`), so a build signed by any other cert fails.
+
+Replacing the cert forces **every user to re-grant Screen Recording**, so don't rotate it
+casually.
 
 ### Cut a release (anyone)
 

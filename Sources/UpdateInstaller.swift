@@ -9,7 +9,7 @@ import AppKit
 /// from its old (now-relocated) inode, so replacing the on-disk bundle while running is
 /// safe. Downloading via `URLSession` sets no `com.apple.quarantine` xattr, so the
 /// swapped app doesn't re-trigger Gatekeeper on relaunch, and (when releases share the
-/// `m_capture-dev` signing identity) the Screen Recording grant carries over.
+/// `m_capture-release` signing identity) the Screen Recording grant carries over.
 enum UpdateInstaller {
     /// True while a download/swap is in flight, so the background and manual paths can't
     /// kick off two installs at once. Only touched on the main queue.
