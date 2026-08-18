@@ -98,12 +98,13 @@ struct Shortcut: Equatable {
 
 /// The capture actions that each have a rebindable global hotkey.
 enum ShortcutAction: String, CaseIterable {
-    case screenshot, record, forceQuit
+    case screenshot, record, draw, forceQuit
 
     var label: String {
         switch self {
         case .screenshot:  return L("Screenshot")
         case .record:      return L("Record")
+        case .draw:        return L("Draw on Screen")
         case .forceQuit:   return L("Force Quit")
         }
     }
@@ -113,6 +114,7 @@ enum ShortcutAction: String, CaseIterable {
         switch self {
         case .screenshot:  return Shortcut(keyCode: UInt32(kVK_ANSI_S), modifiers: cs)
         case .record:      return Shortcut(keyCode: UInt32(kVK_ANSI_R), modifiers: cs)
+        case .draw:        return Shortcut(keyCode: UInt32(kVK_ANSI_D), modifiers: cs)
         case .forceQuit:   return Shortcut(keyCode: UInt32(kVK_ANSI_Q), modifiers: UInt32(controlKey | optionKey | shiftKey))
         }
     }
@@ -184,6 +186,68 @@ enum VideoAudioSource: String, CaseIterable {
     var capturesMic: Bool { self == .mic || self == .both }
 }
 
+/// A tool for the on-screen drawing overlay (draw mode while recording). Single letters
+/// switch tools *inside* draw mode rather than claiming global hotkeys: the overlay owns
+/// the keyboard while it is up, so five more system-wide combinations would buy nothing.
+/// The default letters match the annotation editor's, so the two surfaces feel like one app.
+enum DrawTool: String, CaseIterable {
+    case pencil, rectangle, circle, line, arrow
+
+    var label: String {
+        switch self {
+        case .pencil:    return L("Pencil")
+        case .rectangle: return L("Rectangle")
+        case .circle:    return L("Circle")
+        case .line:      return L("Line")
+        case .arrow:     return L("Arrow")
+        }
+    }
+
+    var defaultKey: String {
+        switch self {
+        case .pencil:    return "P"
+        case .rectangle: return "R"
+        case .circle:    return "C"
+        case .line:      return "L"
+        case .arrow:     return "A"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .pencil:    return "pencil.tip"
+        case .rectangle: return "rectangle"
+        case .circle:    return "circle"
+        case .line:      return "line.diagonal"
+        case .arrow:     return "arrow.up.right"
+        }
+    }
+
+    fileprivate var keyDefaultsKey: String { "drawKey_\(rawValue)" }
+}
+
+/// How long a finished drawing mark stays on screen before it fades away.
+enum DrawFade: Int, CaseIterable {
+    case two = 2, three = 3, five = 5, ten = 10, never = 0
+    var label: String { self == .never ? L("Never — clear manually") : "\(rawValue)s" }
+    /// Seconds before the fade begins, or nil to keep the mark until it is cleared.
+    var delay: TimeInterval? { self == .never ? nil : TimeInterval(rawValue) }
+}
+
+/// Stroke thickness for on-screen drawing, in points.
+enum DrawStroke: Int, CaseIterable {
+    case thin = 2, medium = 4, thick = 7, heavy = 10
+    var label: String {
+        switch self {
+        case .thin:   return L("Thin")
+        case .medium: return L("Medium")
+        case .thick:  return L("Thick")
+        case .heavy:  return L("Heavy")
+        }
+    }
+    var width: CGFloat { CGFloat(rawValue) }
+}
+
 /// Persisted output preferences (save location, format, filename prefix,
 /// auto-copy). The single source of truth for where and how captures are saved;
 /// the editor, the pin window, and the Library menu all read it.
@@ -202,6 +266,9 @@ final class Settings {
         static let videoQuality = "videoQuality", videoAudioSource = "videoAudioSource"
         static let videoFrameRate = "videoFrameRate", videoShowClicks = "videoShowClicks"
         static let videoCountdown = "videoCountdown", videoBarMinimized = "videoBarMinimized"
+        static let simulateRecording = "simulateRecording"
+        static let drawColor = "drawColor", drawStroke = "drawStroke"
+        static let drawFade = "drawFade", drawTool = "drawTool"
         static let lastRegion = "lastRegion"
         static let appLanguage = "appLanguage"
         static let hideDock = "hideDockIcon"
@@ -352,6 +419,98 @@ final class Settings {
         get { d.object(forKey: Key.videoBarMinimized) == nil ? true : d.bool(forKey: Key.videoBarMinimized) }
         set { d.set(newValue, forKey: Key.videoBarMinimized) }
     }
+
+    /// Colour of marks drawn on screen while recording. Stored as `RRGGBB` rather than an
+    /// archived `NSColor`, so the preference stays readable and isn't tied to AppKit's
+    /// archive format.
+    var drawColor: NSColor {
+        get { Self.color(fromHex: d.string(forKey: Key.drawColor) ?? "") ?? Theme.accent }
+        set { d.set(Self.hex(newValue), forKey: Key.drawColor) }
+    }
+
+    /// Stroke thickness for on-screen drawing (default medium).
+    var drawStroke: DrawStroke {
+        get { DrawStroke(rawValue: d.integer(forKey: Key.drawStroke)) ?? .medium }
+        set { d.set(newValue.rawValue, forKey: Key.drawStroke) }
+    }
+
+    /// How long a finished mark lingers before fading (default 3 s). Checked for presence
+    /// first: `integer(forKey:)` yields 0 for a missing key, and 0 is the `never` case —
+    /// so an unset preference would otherwise read as "keep marks forever".
+    var drawFade: DrawFade {
+        get {
+            guard d.object(forKey: Key.drawFade) != nil else { return .three }
+            return DrawFade(rawValue: d.integer(forKey: Key.drawFade)) ?? .three
+        }
+        set { d.set(newValue.rawValue, forKey: Key.drawFade) }
+    }
+
+    /// The tool draw mode opens with — the last one used, remembered across recordings.
+    var drawTool: DrawTool {
+        get { d.string(forKey: Key.drawTool).flatMap(DrawTool.init) ?? .pencil }
+        set { d.set(newValue.rawValue, forKey: Key.drawTool) }
+    }
+
+    /// The single letter that selects `tool` while draw mode is active.
+    func drawKey(_ tool: DrawTool) -> String {
+        let stored = (d.string(forKey: tool.keyDefaultsKey) ?? "").uppercased()
+        return stored.count == 1 ? stored : tool.defaultKey
+    }
+
+    func setDrawKey(_ key: String, for tool: DrawTool) {
+        d.set(key.uppercased(), forKey: tool.keyDefaultsKey)
+    }
+
+    /// The name of whatever already claims `key`, or nil if it is free. Two tools sharing a
+    /// letter would leave one permanently unreachable, and draw mode reserves ⌫ for Clear
+    /// and Esc for leaving — so those can't be taken either.
+    func drawKeyConflict(_ key: String, excluding tool: DrawTool) -> String? {
+        let k = key.uppercased()
+        for other in DrawTool.allCases where other != tool && drawKey(other) == k {
+            return other.label
+        }
+        return nil
+    }
+
+    /// `NSColor` ⇄ "RRGGBB", via sRGB so a colour picked in any space round-trips to the
+    /// same on-screen result.
+    static func hex(_ color: NSColor) -> String {
+        let c = color.usingColorSpace(.sRGB) ?? .white
+        return String(format: "%02X%02X%02X",
+                      Int(round(c.redComponent * 255)),
+                      Int(round(c.greenComponent * 255)),
+                      Int(round(c.blueComponent * 255)))
+    }
+
+    static func color(fromHex hex: String) -> NSColor? {
+        let s = hex.trimmingCharacters(in: .whitespaces).replacingOccurrences(of: "#", with: "")
+        var v: UInt64 = 0
+        guard s.count == 6, Scanner(string: s).scanHexInt64(&v) else { return nil }
+        return NSColor(srgbRed: CGFloat((v >> 16) & 0xFF) / 255,
+                       green: CGFloat((v >> 8) & 0xFF) / 255,
+                       blue: CGFloat(v & 0xFF) / 255, alpha: 1)
+    }
+
+    /// Run the recording flow without capturing anything: no `SCStream`, no
+    /// `AVAssetWriter`, no file. The selection overlay, countdown, region dim, floating
+    /// bar, timer, click ripples and on-screen drawing all behave exactly as in a real
+    /// recording — only the capture is absent.
+    ///
+    /// This exists so the recording tools stay testable on a Mac whose Screen Recording
+    /// grant is still pending (an MDM-managed device awaiting admin approval), which
+    /// would otherwise block every recording feature behind the permission wall. It is
+    /// therefore *not* gated on that permission — see `VideoRecordController.begin()`.
+    /// `--simulate-recording` forces it on for one launch.
+    var simulateRecording: Bool {
+        get { launchSimulateOverride || d.bool(forKey: Key.simulateRecording) }
+        set { d.set(newValue, forKey: Key.simulateRecording) }
+    }
+
+    /// Whether this process was launched with `--simulate-recording`, which pins
+    /// simulate mode on regardless of the stored preference (the Settings checkbox shows
+    /// it as locked on). Lets `./build.sh --run` come up in simulate mode without
+    /// persisting the flag into the user's defaults.
+    let launchSimulateOverride = CommandLine.arguments.contains("--simulate-recording")
 
     /// Seconds counted down (over the recorded region) after the region is picked,
     /// before the recording starts (0 = start immediately).

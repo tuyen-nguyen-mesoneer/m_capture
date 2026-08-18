@@ -23,7 +23,7 @@ version on a badge. If the menu bar is hidden (notch, menu-bar hider), click the
 opening the menu.
 
 <p align="center">
-  <img src="docs/assets/menu.png" alt="The m_capture menu-bar dropdown with Screenshot, Record Video, Quick Screen, History, Library, Settings, Check for Updates and Quit" height="300">
+  <img src="docs/assets/menu.png" alt="The m_capture menu-bar dropdown with Screenshot, Record Video, History, Library, Settings, Check for Updates and Quit" height="300">
   <br>
   <em>The branded menu-bar dropdown.</em>
 </p>
@@ -32,7 +32,7 @@ opening the menu.
 |-----------------------|:------:|------------------------------------------------------------------------------------------------------------|
 | **Screenshot**        | `⌃⇧S`  | Dim the screen; drag a region, or press **Space** to pick a window or the whole screen; open the editor.  |
 | **Record Video**      | `⌃⇧R`  | Dim the screen; pick a region, a window, or the whole screen; record it in-app to an MP4.                 |
-| **Quick Screen**      | `⌃⇧Q`  | Instantly grab the screen under the pointer — no overlay, no delay.                                       |
+| **Draw on Screen**    | `⌃⇧D`  | While recording, sketch on screen — freehand or shapes; marks fade on their own.                          |
 | **History**           |   —    | Open the [History](#history) panel — the most recent captures with quick actions.                         |
 | **Library**           |   —    | Open the save folder in Finder.                                                                           |
 | **Settings**          |   —    | Language, shortcuts, capture delay, save location, format, video options, more.                           |
@@ -124,6 +124,44 @@ opt into system audio, the microphone, or both. If the microphone is requested b
 permission is denied, the recording continues without the mic track. Quitting the
 app mid-recording still finalizes a playable file, and if the recorded display is
 disconnected the recording stops itself and saves the partial file.
+
+---
+
+## Drawing on screen while recording
+
+Point at things as you talk: while a recording runs, press `⌃⇧D` (rebindable) to
+enter **draw mode** and sketch straight onto the screen. Everything you draw is
+captured into the video — the overlay is composited into the frames, the same way
+click ripples are.
+
+- **Enter / leave** — `⌃⇧D`, the **pencil** tile on the floating bar (it turns
+  lavender while active), or **Draw on Screen** in the menu. **Esc** leaves draw
+  mode; it never discards the recording.
+- **Tools** — while drawing, single letters switch tool: **P** pencil (freehand),
+  **R** rectangle, **C** circle, **L** line, **A** arrow. The tool you used last is
+  remembered for the next recording, and every letter is rebindable in
+  **Settings → Drawing**.
+- **Constrain** — hold `⇧` while dragging for a true square or circle, or to snap a
+  line/arrow to 45° steps — the same convention as the annotation editor.
+- **Marks fade by themselves** — a finished mark disappears a few seconds after you
+  release the mouse, so a long recording never accumulates stale annotations. Set
+  the delay (or **Never**) in Settings → Drawing.
+- **Clear** — press **⌫** to wipe everything at once, or use **Clear Drawings** in
+  the menu. (**C** selects the circle tool, so it does not clear.)
+
+While draw mode is on, clicks go to the drawing overlay rather than the app
+underneath — that is the mode's contract. The record bar stays clickable, so
+**Stop** and **Pause** are always reachable.
+
+**Not available for window recordings.** A single-window recording captures only
+that window's own content, so nothing drawn over it could ever appear in the video —
+the pencil tile and menu items are hidden for those takes. Record a **region** or the
+**whole screen** to draw.
+
+Colour, thickness (thin / medium / thick / heavy), fade delay and the tool letters
+all live in **Settings → Drawing**. Colour offers the editor's palette as swatches
+plus a custom hue/brightness picker. Changes apply to the *next* mark, so you can
+retune mid-recording.
 
 ---
 
@@ -238,8 +276,8 @@ view over the save folder — files moved elsewhere simply don't appear.
 ## Settings
 
 Open **Settings** from the menu. It's an icon **sidebar** — **General**,
-**Shortcuts**, **Capture**, **Output**, **Video** and **About** — showing one
-section at a time in a fixed-size panel. Info dots (ⓘ) next to the less obvious
+**Shortcuts**, **Capture**, **Output**, **Video**, **Drawing** and **About** —
+showing one section at a time in a fixed-size panel. Info dots (ⓘ) next to the less obvious
 rows explain what they do.
 
 <p align="center">
@@ -252,7 +290,7 @@ rows explain what they do.
   UI is localized; changing it offers an immediate restart to apply); launch at
   login; capture delay (with menu-bar countdown); after-capture behavior (open
   editor / save to file / copy to clipboard).
-- **Shortcuts** — rebind the **Screenshot**, **Record**, **Quick Screen** and
+- **Shortcuts** — rebind the **Screenshot**, **Record**, **Draw on Screen** and
   **Force Quit** hotkeys (click a field, press the new combination).
 - **Capture** — include the mouse cursor; play the shutter sound (off by default);
   confirm before discarding an unsaved capture.
@@ -261,7 +299,15 @@ rows explain what they do.
   Large); default editor background; also copy to clipboard when saving.
 - **Video** — recording quality; audio source (**None** by default / system /
   microphone / both); frame rate (30 or 60 fps); start countdown (Off / 3 / 5 /
-  10 s); show mouse clicks in recordings; start with the recording bar minimized.
+  10 s); show mouse clicks in recordings; start with the recording bar minimized;
+  **simulate recording** (runs the whole flow but captures nothing and saves no file —
+  for trying the recording tools while the Screen Recording permission is pending).
+
+- **Drawing** — colour of on-screen marks (the editor's palette as swatches, plus a
+  custom hue/brightness picker); thickness (thin / medium / thick / heavy); **fade
+  after** (2 / 3 / 5 / 10 s, or **Never** to keep marks until you clear them); and the
+  single letter that selects each tool while drawing (**P**encil, **R**ectangle,
+  **C**ircle, **L**ine, **A**rrow — each rebindable, conflicts rejected).
 - **About** — the app card (logo, version, MIT license · © mesoneer AG) with
   **Usage Guide** and **Report a Bug** buttons.
 

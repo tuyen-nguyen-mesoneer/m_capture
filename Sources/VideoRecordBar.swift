@@ -14,6 +14,7 @@ final class VideoRecordBar: NSObject {
     var onPauseResume: (() -> Void)?
     var onDiscard: (() -> Void)?
     var onMinimize: (() -> Void)?
+    var onToggleDraw: (() -> Void)?
 
     var windowNumber: Int { window.windowNumber }
 
@@ -25,11 +26,16 @@ final class VideoRecordBar: NSObject {
     private let sizeLabel = NSTextField(labelWithString: "~0 KB")
     private let pauseBtn: RecordBarButton
     private let stopBtn: RecordBarButton
+    private let drawBtn = BarIconButton()
 
     // Dot layer exposed so we can add/remove the pulse animation
     private var dotLayer: CALayer { dotView.layer! }
 
-    init(quality: String) {
+    /// `simulated` swaps the live-capture styling for the amber SIM treatment
+    /// (Settings → Video → Simulate recording): nothing is being captured, and the HUD
+    /// must not be mistakable for a real recording. `canDraw` shows the on-screen drawing
+    /// tile, which only display-backed targets can use (see `VideoRecordController.canDraw`).
+    init(quality: String, simulated: Bool = false, canDraw: Bool = false) {
         pauseBtn = RecordBarButton(title: L("Pause"), primary: false)
         stopBtn = RecordBarButton(title: L("Stop"), primary: true)
         super.init()
@@ -72,15 +78,18 @@ final class VideoRecordBar: NSObject {
                                width: dotSize, height: dotSize)
         dotView.wantsLayer = true
         dotView.layer!.cornerRadius = dotSize / 2
-        dotView.layer!.backgroundColor = Theme.accent.cgColor
+        dotView.layer!.backgroundColor = (simulated ? Theme.warning : Theme.accent).cgColor
         card.addSubview(dotView)
         startPulse()
 
-        // "REC" eyebrow — the mesoneer accent-label move.
+        // "REC" eyebrow — the mesoneer accent-label move. A simulated recording reads
+        // "SIM" in amber instead, so the HUD never passes for a live capture.
         let recLabel = NSTextField(labelWithString: "")
-        Theme.styleEyebrow(recLabel, "REC", size: 11)
+        Theme.styleEyebrow(recLabel, simulated ? "SIM" : "REC", size: 11,
+                           color: simulated ? Theme.warning : Theme.eyebrow)
         let recH = recLabel.intrinsicContentSize.height
         recLabel.frame = NSRect(x: 30, y: rowCenter - recH / 2, width: 34, height: recH)
+        if simulated { recLabel.toolTip = L("Simulated recording — nothing is captured or saved") }
         card.addSubview(recLabel)
 
         // Timer — monospaced digits so the width doesn't jitter each tick.
@@ -106,7 +115,7 @@ final class VideoRecordBar: NSObject {
 
         // Minimize-to-menu-bar button, tucked left of the quality chip.
         let miniSize: CGFloat = 18
-        let mini = MinimizeButton()
+        let mini = BarIconButton()
         mini.isBordered = false
         mini.imagePosition = .imageOnly
         mini.image = NSImage(systemSymbolName: "minus.circle", accessibilityDescription: "Minimize to menu bar")?
@@ -117,6 +126,22 @@ final class VideoRecordBar: NSObject {
         mini.target = self; mini.action = #selector(minimizePressed)
         mini.toolTip = "Minimize to the menu bar — control from the m. menu"
         card.addSubview(mini)
+
+        // Draw-on-screen toggle, left of the minimize button. Absent for window targets,
+        // where strokes could never appear in the video.
+        if canDraw {
+            drawBtn.isBordered = false
+            drawBtn.imagePosition = .imageOnly
+            drawBtn.image = NSImage(systemSymbolName: "pencil.tip", accessibilityDescription: "Draw on screen")?
+                .withSymbolConfiguration(.init(pointSize: 13, weight: .semibold))
+            drawBtn.contentTintColor = Theme.textSecondary
+            drawBtn.frame = NSRect(x: contentRight - badgeW - 10 - miniSize - 8 - miniSize,
+                                   y: statusRowY + (statusRowH - miniSize) / 2,
+                                   width: miniSize, height: miniSize)
+            drawBtn.target = self; drawBtn.action = #selector(drawPressed)
+            drawBtn.toolTip = L("Draw on Screen")
+            card.addSubview(drawBtn)
+        }
 
         // ── Row 2: actions — two equal halves spanning the content width ────
         let gap: CGFloat = 12
@@ -134,10 +159,18 @@ final class VideoRecordBar: NSObject {
     }
 
     @objc private func minimizePressed() { onMinimize?() }
+    @objc private func drawPressed() { onToggleDraw?() }
 
-    /// Minimize button that shows the pointing-hand (clickable) cursor, overriding the
-    /// card's open-hand drag cursor beneath it.
-    private final class MinimizeButton: NSButton {
+    /// Reflect draw mode in the pencil tile: the toggle can come from the hotkey or the
+    /// status menu, not just this button, so the tint is set from the controller's callback
+    /// rather than on click.
+    func setDrawActive(_ active: Bool) {
+        drawBtn.contentTintColor = active ? Theme.lavender : Theme.textSecondary
+    }
+
+    /// Small icon tile in the status row that shows the pointing-hand (clickable) cursor,
+    /// overriding the card's open-hand drag cursor beneath it.
+    private final class BarIconButton: NSButton {
         override func resetCursorRects() { addCursorRect(bounds, cursor: .pointingHand) }
         /// Clickable from the first click while the app is inactive, like the
         /// bar's other controls (see `RecordBarButton.acceptsFirstMouse`).

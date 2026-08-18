@@ -99,6 +99,20 @@ enum L10n {
         "Open System Settings": "Systemeinstellungen öffnen",
         "Cancel": "Abbrechen",
 
+        // ── Simulated recording ──────────────────────────────────────────
+        "Simulate recording (nothing is captured or saved)":
+            "Aufnahme simulieren (nichts wird aufgezeichnet oder gesichert)",
+        "Simulate recordings?": "Aufnahmen simulieren?",
+        "Recording will run normally — overlay, timer, bar and drawing — but nothing is captured and no file is saved. Useful while the Screen Recording permission is still pending.":
+            "Die Aufnahme läuft normal ab — Auswahl, Timer, Leiste und Zeichnen — aber nichts wird aufgezeichnet und keine Datei gesichert. Nützlich, solange die Bildschirmaufnahme-Berechtigung noch aussteht.",
+        "Simulate": "Simulieren",
+        "Simulated recording — nothing was saved": "Simulierte Aufnahme — nichts gesichert",
+        "Simulated recording — nothing is captured or saved":
+            "Simulierte Aufnahme — nichts wird aufgezeichnet oder gesichert",
+        "Simulate Instead": "Stattdessen simulieren",
+        "Enable it in System Settings → Privacy & Security → Screen Recording, then try again. If your administrator manages this permission, you can simulate a recording meanwhile: every recording tool works, but nothing is captured or saved.":
+            "In Systemeinstellungen → Datenschutz & Sicherheit → Bildschirmaufnahme aktivieren, dann erneut versuchen. Wird die Berechtigung von Ihrer Administration verwaltet, können Sie in der Zwischenzeit eine Aufnahme simulieren: alle Aufnahmewerkzeuge funktionieren, aber nichts wird aufgezeichnet oder gesichert.",
+
         // ── Save / capture alerts ────────────────────────────────────────
         "Unable to save the capture": "Aufnahme konnte nicht gesichert werden",
         "Unable to save the image": "Bild konnte nicht gesichert werden",
@@ -214,6 +228,38 @@ enum L10n {
             "Nimmt den Bildschirm unter dem Zeiger sofort auf — ohne Auswahl, ohne Verzögerung — ideal für flüchtige Menüs und Tooltips.",
         "Force-quits m_capture and any duplicate instances — use if the menu bar icon is stuck or duplicated.":
             "Beendet m_capture und doppelte Instanzen sofort — falls das Menüleisten-Symbol hängt oder doppelt erscheint.",
+        "Draw on Screen": "Auf dem Bildschirm zeichnen",
+        // ── Drawing on screen ────────────────────────────────────────────
+        "Drawing": "Zeichnen",
+        "Pencil": "Stift",
+        "Rectangle": "Rechteck",
+        "Circle": "Kreis",
+        "Line": "Linie",
+        "Arrow": "Pfeil",
+        "Thin": "Dünn",
+        "Thick": "Dick",
+        "Heavy": "Sehr dick",
+        "Color": "Farbe",
+        "Thickness": "Strichstärke",
+        "Fade after": "Ausblenden nach",
+        "Never — clear manually": "Nie — manuell löschen",
+        "Color of marks drawn on screen while recording.":
+            "Farbe der Markierungen, die während der Aufnahme auf den Bildschirm gezeichnet werden.",
+        "How long a finished mark stays before it fades. \"Never\" keeps marks until you clear them with ⌫.":
+            "Wie lange eine fertige Markierung sichtbar bleibt, bevor sie ausblendet. «Nie» behält sie, bis Sie mit ⌫ löschen.",
+        "Press this key while drawing to switch to this tool. Draw mode reserves Esc to exit and ⌫ to clear.":
+            "Diese Taste während des Zeichnens drücken, um zu diesem Werkzeug zu wechseln. Esc beendet den Zeichenmodus, ⌫ löscht alles.",
+        "Press a key…": "Taste drücken…",
+        "Key already in use": "Taste bereits belegt",
+        "%@ is already used by \"%@\". Choose a different key.":
+            "%@ wird bereits von «%@» verwendet. Bitte eine andere Taste wählen.",
+        "OK": "OK",
+
+        "Stop Drawing": "Zeichnen beenden",
+        "Clear Drawings": "Zeichnungen löschen",
+        "Drawing on — Esc to stop, ⌫ to clear": "Zeichnen aktiv — Esc beendet, ⌫ löscht",
+        "While recording, sketch directly on the screen; strokes fade after a few seconds and appear in the video.":
+            "Während der Aufnahme direkt auf dem Bildschirm zeichnen; Striche verblassen nach wenigen Sekunden und erscheinen im Video.",
 
         // ── Settings enum labels ─────────────────────────────────────────
         "None": "Ohne",
@@ -377,6 +423,20 @@ enum L10n {
         "Open System Settings": "Mở Cài đặt hệ thống",
         "Cancel": "Huỷ",
 
+        // ── Simulated recording ──────────────────────────────────────────
+        "Simulate recording (nothing is captured or saved)":
+            "Mô phỏng ghi hình (không ghi và không lưu gì)",
+        "Simulate recordings?": "Mô phỏng ghi hình?",
+        "Recording will run normally — overlay, timer, bar and drawing — but nothing is captured and no file is saved. Useful while the Screen Recording permission is still pending.":
+            "Quá trình ghi vẫn diễn ra bình thường — lớp chọn, đồng hồ, thanh điều khiển và vẽ — nhưng không ghi và không lưu tệp nào. Hữu ích khi quyền Ghi màn hình vẫn đang chờ cấp.",
+        "Simulate": "Mô phỏng",
+        "Simulated recording — nothing was saved": "Bản ghi mô phỏng — không lưu gì",
+        "Simulated recording — nothing is captured or saved":
+            "Bản ghi mô phỏng — không ghi và không lưu gì",
+        "Simulate Instead": "Mô phỏng thay thế",
+        "Enable it in System Settings → Privacy & Security → Screen Recording, then try again. If your administrator manages this permission, you can simulate a recording meanwhile: every recording tool works, but nothing is captured or saved.":
+            "Bật trong Cài đặt hệ thống → Quyền riêng tư & Bảo mật → Ghi màn hình, rồi thử lại. Nếu quyền này do quản trị viên quản lý, bạn có thể mô phỏng ghi hình trong lúc chờ: mọi công cụ ghi hình đều hoạt động, nhưng không ghi và không lưu gì.",
+
         // ── Save / capture alerts ────────────────────────────────────────
         "Unable to save the capture": "Không thể lưu ảnh chụp",
         "Unable to save the image": "Không thể lưu hình ảnh",
@@ -492,6 +552,38 @@ enum L10n {
             "Chụp ngay màn hình dưới con trỏ — không lớp chọn, không trễ — hữu ích với menu và tooltip dễ biến mất.",
         "Force-quits m_capture and any duplicate instances — use if the menu bar icon is stuck or duplicated.":
             "Buộc thoát m_capture và các bản trùng lặp — dùng khi biểu tượng thanh menu bị kẹt hoặc nhân đôi.",
+        "Draw on Screen": "Vẽ lên màn hình",
+        // ── Drawing on screen ────────────────────────────────────────────
+        "Drawing": "Vẽ",
+        "Pencil": "Bút chì",
+        "Rectangle": "Hình chữ nhật",
+        "Circle": "Hình tròn",
+        "Line": "Đường thẳng",
+        "Arrow": "Mũi tên",
+        "Thin": "Mỏng",
+        "Thick": "Dày",
+        "Heavy": "Rất dày",
+        "Color": "Màu",
+        "Thickness": "Độ dày nét",
+        "Fade after": "Mờ dần sau",
+        "Never — clear manually": "Không bao giờ — xoá thủ công",
+        "Color of marks drawn on screen while recording.":
+            "Màu của nét vẽ lên màn hình trong khi ghi hình.",
+        "How long a finished mark stays before it fades. \"Never\" keeps marks until you clear them with ⌫.":
+            "Thời gian một nét vẽ hiển thị trước khi mờ dần. «Không bao giờ» giữ nét cho đến khi bạn xoá bằng ⌫.",
+        "Press this key while drawing to switch to this tool. Draw mode reserves Esc to exit and ⌫ to clear.":
+            "Nhấn phím này khi đang vẽ để chuyển sang công cụ này. Chế độ vẽ dành riêng Esc để thoát và ⌫ để xoá.",
+        "Press a key…": "Nhấn một phím…",
+        "Key already in use": "Phím đã được dùng",
+        "%@ is already used by \"%@\". Choose a different key.":
+            "%@ đã được «%@» sử dụng. Vui lòng chọn phím khác.",
+        "OK": "OK",
+
+        "Stop Drawing": "Dừng vẽ",
+        "Clear Drawings": "Xoá nét vẽ",
+        "Drawing on — Esc to stop, ⌫ to clear": "Đang vẽ — Esc để dừng, ⌫ để xoá",
+        "While recording, sketch directly on the screen; strokes fade after a few seconds and appear in the video.":
+            "Trong khi ghi hình, vẽ trực tiếp lên màn hình; nét vẽ mờ dần sau vài giây và xuất hiện trong video.",
 
         // ── Settings enum labels ─────────────────────────────────────────
         "None": "Không",

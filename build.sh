@@ -5,12 +5,39 @@ set -euo pipefail
 DIR="$(cd "$(dirname "$0")" && pwd)"
 BUILD="$DIR/build"
 APP="$BUILD/m_capture.app"
-VERSION="1.6.7"
+VERSION="1.7.0"
 
 # `./build.sh --run` quits any running instance, relaunches from build/, and
 # skips the DMG — the fast dev loop. Plain `./build.sh` builds the DMG too.
+# Add `--simulate` to relaunch in simulate-recording mode (no capture, no file) — the way
+# to exercise the recording UI while the Screen Recording grant is still pending. It has
+# to be passed here rather than via `open --args`: the relaunch below replaces argv, and
+# `open --args` on an already-running menu-bar app is dropped entirely.
+#
+# Simulate mode is ALSO a persisted app preference (Settings -> Video), and the permission
+# alert's "Simulate Instead" button sets it. So a plain `--run` inherits whatever was last
+# saved: it does not mean "record for real". The relaunch below reports the effective state
+# every time, and `--no-simulate` clears the saved flag.
 RUN=0
-for arg in "$@"; do [ "$arg" = "--run" ] && RUN=1; done
+SIMULATE=0
+NO_SIMULATE=0
+for arg in "$@"; do
+    [ "$arg" = "--run" ] && RUN=1
+    [ "$arg" = "--simulate" ] && SIMULATE=1
+    [ "$arg" = "--no-simulate" ] && NO_SIMULATE=1
+done
+if [ "$SIMULATE" = "1" ] && [ "$NO_SIMULATE" = "1" ]; then
+    echo "!!! --simulate and --no-simulate are contradictory. Aborting." >&2
+    exit 1
+fi
+if [ "$SIMULATE" = "1" ] && [ "$RUN" != "1" ]; then
+    echo "!!! --simulate only applies with --run (it is a relaunch flag). Aborting." >&2
+    exit 1
+fi
+if [ "$NO_SIMULATE" = "1" ] && [ "$RUN" != "1" ]; then
+    echo "!!! --no-simulate only applies with --run (it is a relaunch flag). Aborting." >&2
+    exit 1
+fi
 
 rm -rf "$BUILD"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
@@ -118,7 +145,30 @@ codesign --force --deep -s "$SIGN_ID" "$APP"
 if [ "$RUN" = "1" ]; then
     echo "==> Relaunching"
     killall m_capture 2>/dev/null || true
-    open "$APP"
+    # Wait for it to actually exit before opening the new one: AppDelegate's
+    # terminateIfAlreadyRunning() makes the *new* instance quit itself while the old one is
+    # still alive, which silently drops --args (and leaves the old build running).
+    for _ in $(seq 1 25); do pgrep -x m_capture >/dev/null 2>&1 || break; sleep 0.2; done
+    # Report the mode the app will actually come up in. Simulate is a saved preference, so
+    # "I did not pass --simulate" is NOT the same as "this build records for real" — say so
+    # loudly rather than let a stale flag look like a broken recorder.
+    BUNDLE_ID="io.mesoneer.mcapture"
+    if [ "$NO_SIMULATE" = "1" ]; then
+        defaults write "$BUNDLE_ID" simulateRecording -bool false 2>/dev/null || true
+        echo "    simulate recording: OFF (saved setting cleared)"
+    fi
+    if [ "$SIMULATE" = "1" ]; then
+        echo "    simulate recording: ON for this launch — nothing is captured or saved"
+        open "$APP" --args --simulate-recording
+    else
+        if [ "$(defaults read "$BUNDLE_ID" simulateRecording 2>/dev/null)" = "1" ]; then
+            echo "    !!! simulate recording: ON (saved setting) — recordings will capture NOTHING." >&2
+            echo "        Clear it with ./build.sh --run --no-simulate, or Settings > Video." >&2
+        else
+            echo "    simulate recording: off — recordings capture for real"
+        fi
+        open "$APP"
+    fi
     echo "==> Done: $APP (relaunched, DMG skipped)"
     exit 0
 fi

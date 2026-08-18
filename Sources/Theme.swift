@@ -16,6 +16,9 @@ enum Theme {
     static let accentPurple    = rgb(0x43, 0x2a, 0x84)
     static let lavender        = rgb(0xd5, 0xba, 0xff)
     static let accent          = rgb(0xff, 0x67, 0x5c)
+    /// Amber for states that deliberately aren't the real thing — currently the
+    /// simulated-recording HUD, which must never be mistaken for a live capture.
+    static let warning         = rgb(0xff, 0xb3, 0x4d)
 
     static let textPrimary     = NSColor.white
     static let ink             = NSColor(white: 1, alpha: 0.92)
@@ -86,9 +89,12 @@ enum Theme {
 
     /// Style a label as a brand eyebrow: UPPERCASE, lavender, lightly tracked.
     /// (The single most recognizable mesoneer.io move — used ONLY on short labels.)
-    static func styleEyebrow(_ field: NSTextField, _ text: String, size: CGFloat = 11) {
+    /// `color` overrides the lavender for eyebrows that carry a state, e.g. the
+    /// amber "SIM" on a simulated recording.
+    static func styleEyebrow(_ field: NSTextField, _ text: String, size: CGFloat = 11,
+                             color: NSColor = eyebrow) {
         field.attributedStringValue = NSAttributedString(string: text.uppercased(), attributes: [
-            .foregroundColor: eyebrow,
+            .foregroundColor: color,
             .font: font(size, .medium),
             .kern: 1.2,
         ])
