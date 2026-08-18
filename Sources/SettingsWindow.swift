@@ -32,6 +32,11 @@ final class SettingsWindowController: NSObject {
     private var videoCountdownPopup: NSPopUpButton!
     private var videoClicksCheck: NSButton!
     private var videoBarMinCheck: NSButton!
+    private var videoSimulateCheck: NSButton!
+    private var drawColorRow: DrawColorRow!
+    private var drawStrokePopup: NSPopUpButton!
+    private var drawFadePopup: NSPopUpButton!
+    private var drawKeyFields: [DrawKeyField] = []
     private var shortcutFields: [HotKeyField] = []
     private var toast: NSWindow?
 
@@ -101,6 +106,13 @@ final class SettingsWindowController: NSObject {
         videoCountdownPopup = popup(CaptureDelay.allCases.map { $0.label }, #selector(videoCountdownChanged))
         videoClicksCheck = checkbox(L("Show mouse clicks in recordings"), #selector(videoClicksToggled))
         videoBarMinCheck = checkbox(L("Start with the recording bar minimized"), #selector(videoBarMinToggled))
+        videoSimulateCheck = checkbox(L("Simulate recording (nothing is captured or saved)"),
+                                      #selector(videoSimulateToggled))
+
+        drawColorRow = DrawColorRow()
+        drawStrokePopup = popup(DrawStroke.allCases.map { $0.label }, #selector(drawStrokeChanged))
+        drawFadePopup = popup(DrawFade.allCases.map { $0.label }, #selector(drawFadeChanged))
+        drawKeyFields = DrawTool.allCases.map { DrawKeyField(tool: $0) }
 
         // One tab per former section — the flat list had grown too tall to scan.
         sections = [
@@ -140,7 +152,20 @@ final class SettingsWindowController: NSObject {
                     tip: L("Countdown shown over the selected region before recording starts.")),
                 checkRow(videoClicksCheck),
                 checkRow(videoBarMinCheck),
+                checkRow(videoSimulateCheck),
             ]),
+            // Drawing on screen while recording — the marks' look, how long they last, and
+            // the letters that pick a tool once draw mode is on.
+            (L("Drawing"), [
+                row(L("Color"), drawColorRow,
+                    tip: L("Color of marks drawn on screen while recording.")),
+                row(L("Thickness"), drawStrokePopup),
+                row(L("Fade after"), drawFadePopup,
+                    tip: L("How long a finished mark stays before it fades. \"Never\" keeps marks until you clear them with ⌫.")),
+            ] + zip(DrawTool.allCases, drawKeyFields).map { tool, field in
+                row(tool.label, field,
+                    tip: L("Press this key while drawing to switch to this tool. Draw mode reserves Esc to exit and ⌫ to clear."))
+            }),
             // Meta actions that used to crowd the menu-bar menu.
             (L("About"), [aboutCard()]),
         ]
@@ -148,7 +173,7 @@ final class SettingsWindowController: NSObject {
         // Icon sidebar (macOS System Settings shape): section list on the left,
         // the active section's rows on the right.
         let sidebarIcons = ["gearshape", "command", "viewfinder", "tray.and.arrow.down", "video",
-                            "info.circle"]
+                            "pencil.tip", "info.circle"]
         tabButtons = sections.enumerated().map { i, section in
             let b = SettingsSidebarItem(title: section.title, symbol: sidebarIcons[i])
             b.onClick = { [weak self] in self?.selectTab(i) }
@@ -336,6 +361,7 @@ final class SettingsWindowController: NSObject {
         switch a {
         case .screenshot:  return L("Drag to select a region, or press Space to capture a window or screen.")
         case .record:      return L("Drag to select a region, or press Space to record a window or screen.")
+        case .draw:        return L("While recording, sketch directly on the screen; strokes fade after a few seconds and appear in the video.")
         case .forceQuit:   return L("Force-quits m_capture and any duplicate instances — use if the menu bar icon is stuck or duplicated.")
         }
     }
@@ -495,6 +521,14 @@ final class SettingsWindowController: NSObject {
         videoCountdownPopup.selectItem(at: CaptureDelay.allCases.firstIndex(of: s.videoCountdown) ?? 0)
         videoClicksCheck.state = s.videoShowClicks ? .on : .off
         videoBarMinCheck.state = s.videoStartBarMinimized ? .on : .off
+        videoSimulateCheck.state = s.simulateRecording ? .on : .off
+        // `--simulate-recording` pins the mode on for the whole launch, so the checkbox
+        // shows the state but can't fight it.
+        videoSimulateCheck.isEnabled = !s.launchSimulateOverride
+        drawColorRow.refresh()
+        drawStrokePopup.selectItem(at: DrawStroke.allCases.firstIndex(of: s.drawStroke) ?? 1)
+        drawFadePopup.selectItem(at: DrawFade.allCases.firstIndex(of: s.drawFade) ?? 1)
+        drawKeyFields.forEach { $0.refreshDisplay() }
     }
 
     @objc private func loginToggled() {
@@ -664,6 +698,30 @@ final class SettingsWindowController: NSObject {
 
     @objc private func videoBarMinToggled() {
         Settings.shared.videoStartBarMinimized = (videoBarMinCheck.state == .on)
+    }
+
+    @objc private func drawStrokeChanged() {
+        Settings.shared.drawStroke = DrawStroke.allCases[drawStrokePopup.indexOfSelectedItem]
+    }
+
+    @objc private func drawFadeChanged() {
+        Settings.shared.drawFade = DrawFade.allCases[drawFadePopup.indexOfSelectedItem]
+    }
+
+    /// Simulate mode silently produces no recordings, so switching it on confirms first —
+    /// a flag left on by accident would otherwise present as data loss the next time the
+    /// user actually recorded something.
+    @objc private func videoSimulateToggled() {
+        let on = (videoSimulateCheck.state == .on)
+        if on {
+            let r = BrandAlert(
+                title: L("Simulate recordings?"),
+                message: L("Recording will run normally — overlay, timer, bar and drawing — but nothing is captured and no file is saved. Useful while the Screen Recording permission is still pending."),
+                titles: [L("Simulate"), L("Cancel")],
+                primary: 0, cancel: 1, icon: "eye.slash").runModal()
+            guard r == 0 else { videoSimulateCheck.state = .off; return }
+        }
+        Settings.shared.simulateRecording = on
     }
 
     // MARK: - About section (meta actions relocated from the menu-bar menu)
@@ -923,3 +981,195 @@ private final class BrandTextFieldCell: NSTextFieldCell {
     }
 }
 
+
+// MARK: - Drawing controls
+
+/// The drawing palette as clickable chips plus a Custom chip that opens the brand
+/// `ColorPickerPanel` — the same picker the annotation editor uses, so colour is chosen the
+/// same way on both surfaces. The current colour is marked with a lavender ring.
+private final class DrawColorRow: NSView {
+    /// The editor's palette, so a mark drawn on screen and one drawn in the editor can be
+    /// the same colour by picking the same chip.
+    private let palette: [NSColor] = [
+        Theme.rgb(0xE5, 0x3E, 0x3E), Theme.rgb(0xF9, 0x73, 0x16), Theme.rgb(0xFA, 0xCC, 0x15),
+        Theme.rgb(0x22, 0xC5, 0x5E), Theme.rgb(0x3B, 0x82, 0xF6), Theme.rgb(0xA8, 0x55, 0xF7),
+        Theme.rgb(0xEC, 0x48, 0x99), .white, .black,
+    ]
+    private var picker: ColorPickerPanel?
+    private let chipSize: CGFloat = 18
+    private let gap: CGFloat = 7
+
+    init() {
+        super.init(frame: NSRect(x: 0, y: 0, width: 246, height: 24))
+        translatesAutoresizingMaskIntoConstraints = false
+        // Width is owned by `row(_:_:tip:)` (Layout.controlWidth); only the height is ours.
+        heightAnchor.constraint(equalToConstant: 24).isActive = true
+    }
+    required init?(coder: NSCoder) { fatalError() }
+
+    func refresh() { needsDisplay = true }
+
+    /// Chip index 0..<palette.count are presets; the last chip is Custom.
+    private func chipRect(_ i: Int) -> NSRect {
+        NSRect(x: CGFloat(i) * (chipSize + gap), y: (bounds.height - chipSize) / 2,
+               width: chipSize, height: chipSize)
+    }
+    private var customIndex: Int { palette.count }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let current = Settings.shared.drawColor
+        let currentHex = Settings.hex(current)
+        var matchedPreset = false
+        for (i, c) in palette.enumerated() {
+            let r = chipRect(i)
+            let selected = Settings.hex(c) == currentHex
+            if selected { matchedPreset = true }
+            drawChip(in: r, fill: c, selected: selected)
+        }
+        // Custom chip: shows the live colour when it isn't one of the presets, otherwise a
+        // neutral swatch, so "which chip am I on" is never ambiguous.
+        let r = chipRect(customIndex)
+        drawChip(in: r, fill: matchedPreset ? Theme.surfaceRaised : current, selected: !matchedPreset)
+        let plus = NSBezierPath()
+        let c = NSPoint(x: r.midX, y: r.midY), arm: CGFloat = 4
+        plus.move(to: NSPoint(x: c.x - arm, y: c.y)); plus.line(to: NSPoint(x: c.x + arm, y: c.y))
+        plus.move(to: NSPoint(x: c.x, y: c.y - arm)); plus.line(to: NSPoint(x: c.x, y: c.y + arm))
+        plus.lineWidth = 1.5
+        (matchedPreset ? Theme.textSecondary : NSColor.white).setStroke()
+        plus.stroke()
+    }
+
+    private func drawChip(in r: NSRect, fill: NSColor, selected: Bool) {
+        let path = NSBezierPath(roundedRect: r, xRadius: 4, yRadius: 4)
+        fill.setFill(); path.fill()
+        // Every chip gets a hairline so white reads against the dark panel.
+        (selected ? Theme.lavender : Theme.border).setStroke()
+        path.lineWidth = selected ? 2 : 1
+        path.stroke()
+    }
+
+    override func resetCursorRects() { addCursorRect(bounds, cursor: .pointingHand) }
+
+    override func mouseDown(with event: NSEvent) {
+        let p = convert(event.locationInWindow, from: nil)
+        for i in 0...palette.count where chipRect(i).contains(p) {
+            if i == customIndex { showPicker(at: chipRect(i)) } else {
+                Settings.shared.drawColor = palette[i]
+                needsDisplay = true
+            }
+            return
+        }
+    }
+
+    /// The picker writes through on every drag, so the swatch and the next mark track the
+    /// hue live rather than waiting for the panel to close.
+    private func showPicker(at anchor: NSRect) {
+        let host = NSView(frame: anchor)
+        addSubview(host)
+        let panel = ColorPickerPanel(onPick: { [weak self] color in
+            Settings.shared.drawColor = color
+            self?.needsDisplay = true
+        }, onClose: { [weak self] in
+            self?.picker = nil
+            host.removeFromSuperview()
+        })
+        picker = panel
+        panel.show(near: host, initial: Settings.shared.drawColor)
+    }
+}
+
+/// A brand-styled field that records the single letter which selects one drawing tool.
+/// Click to arm, then press a letter or digit. Unlike `HotKeyField` these are not global
+/// hotkeys — the draw overlay owns the keyboard while it is up — so nothing is registered
+/// with Carbon and no modifiers are involved.
+private final class DrawKeyField: NSView {
+    private let tool: DrawTool
+    private let keyLabel = NSTextField(labelWithString: "")
+    private var monitor: Any?
+    private var resignObserver: Any?
+    private var recording = false { didSet { needsDisplay = true; refreshDisplay() } }
+
+    init(tool: DrawTool) {
+        self.tool = tool
+        super.init(frame: NSRect(x: 0, y: 0, width: 120, height: 24))
+        wantsLayer = true
+        keyLabel.font = Theme.font(12, .semibold)
+        keyLabel.textColor = Theme.textPrimary
+        keyLabel.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(keyLabel)
+        NSLayoutConstraint.activate([
+            keyLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: BrandControl.textInset),
+            keyLabel.centerYAnchor.constraint(equalTo: centerYAnchor),
+            heightAnchor.constraint(equalToConstant: 24),
+        ])
+        refreshDisplay()
+    }
+    required init?(coder: NSCoder) { fatalError() }
+
+    func refreshDisplay() {
+        keyLabel.stringValue = recording ? L("Press a key…") : Settings.shared.drawKey(tool)
+        keyLabel.textColor = recording ? Theme.lavender : Theme.textPrimary
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let r = bounds.insetBy(dx: 0.5, dy: 0.5)
+        let path = NSBezierPath(roundedRect: r, xRadius: Theme.radiusSmall, yRadius: Theme.radiusSmall)
+        Theme.surfaceRaised.setFill(); path.fill()
+        (recording ? Theme.lavender : Theme.border).setStroke()
+        path.lineWidth = recording ? 1.5 : 1
+        path.stroke()
+    }
+
+    override func resetCursorRects() { addCursorRect(bounds, cursor: .pointingHand) }
+    override func mouseDown(with event: NSEvent) { recording ? stopRecording() : startRecording() }
+
+    private func startRecording() {
+        recording = true
+        window?.makeFirstResponder(self)
+        // The Settings panel is a reused singleton that closes by ordering out, so a field
+        // left armed would outlive it — stale prompt on reopen and a monitor eating the
+        // next keystroke. Mirrors `HotKeyField`.
+        if let win = window {
+            resignObserver = NotificationCenter.default.addObserver(
+                forName: NSWindow.didResignKeyNotification, object: win, queue: .main
+            ) { [weak self] _ in self?.stopRecording() }
+        }
+        monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown]) { [weak self] ev in
+            guard let self, self.recording else { return ev }
+            if ev.keyCode == 53 { self.stopRecording(); return nil }        // Esc cancels
+            guard let raw = ev.charactersIgnoringModifiers?.uppercased(), raw.count == 1,
+                  let ch = raw.unicodeScalars.first,
+                  CharacterSet.alphanumerics.contains(ch) else {
+                // Anything that isn't a plain letter or digit would be unreachable or
+                // ambiguous as a tool key — ignore it rather than storing it.
+                return nil
+            }
+            if let owner = Settings.shared.drawKeyConflict(raw, excluding: self.tool) {
+                self.stopRecording()
+                self.reportConflict(raw, owner: owner)
+                return nil
+            }
+            Settings.shared.setDrawKey(raw, for: self.tool)
+            self.stopRecording()
+            return nil
+        }
+    }
+
+    /// Non-modal: this runs from inside a local event monitor, where a nested `runModal`
+    /// can wedge the run loop (same reason `HotKeyField` presents this way).
+    private func reportConflict(_ key: String, owner: String) {
+        BrandAlert(title: L("Key already in use"),
+                   message: String(format: L("%@ is already used by \"%@\". Choose a different key."), key, owner),
+                   titles: [L("OK")], primary: 0, cancel: 0,
+                   icon: "exclamationmark.triangle").present()
+    }
+
+    private func stopRecording() {
+        guard recording else { return }
+        if let m = monitor { NSEvent.removeMonitor(m); monitor = nil }
+        if let o = resignObserver { NotificationCenter.default.removeObserver(o); resignObserver = nil }
+        recording = false
+    }
+
+    deinit { stopRecording() }
+}

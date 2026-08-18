@@ -49,9 +49,17 @@ enum Relocator {
     }
 
     /// Wait for this process to exit, then open the freshly installed copy.
+    ///
+    /// Launch flags are forwarded, because `open` drops the original argv: without this a
+    /// build started with `--simulate-recording` silently came up in normal mode after
+    /// relocating, which reads as the flag being ignored. Only our own `--…` flags are
+    /// passed on, each quoted.
     private static func relaunch(at app: URL) {
         let pid = ProcessInfo.processInfo.processIdentifier
-        let script = "while /bin/kill -0 \(pid) 2>/dev/null; do /bin/sleep 0.2; done; /usr/bin/open \"\(app.path)\""
+        let flags = CommandLine.arguments.dropFirst().filter { $0.hasPrefix("--") }
+        let argsClause = flags.isEmpty ? ""
+            : " --args " + flags.map { "\"\($0)\"" }.joined(separator: " ")
+        let script = "while /bin/kill -0 \(pid) 2>/dev/null; do /bin/sleep 0.2; done; /usr/bin/open \"\(app.path)\"\(argsClause)"
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: "/bin/sh")
         proc.arguments = ["-c", script]

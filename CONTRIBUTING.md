@@ -34,6 +34,20 @@ DMG. No Xcode/SPM project.
     > cert is an untrusted self-signed root, so it grants no Gatekeeper privilege.
   - `./build.sh && open build/m_capture.app --args --settings-demo` — opens the
     Settings panel at launch to iterate on it.
+  - **No Screen Recording grant yet?** `./build.sh --run --simulate` (or *Settings → Video
+    → Simulate recording*, or the **Simulate Instead** button on the permission alert) runs
+    the whole recording flow — selection overlay, countdown, region dim, floating bar,
+    timer, pause, click ripples, on-screen drawing — while capturing nothing and writing no
+    file. Use `--run --simulate`, **not** `open --args --simulate-recording`: `open` drops
+    the arguments when the app is already running, and the relaunch replaces argv anyway.
+    Simulate is also a *saved* setting (the permission alert's **Simulate Instead** button
+    sets it), so a plain `--run` inherits it — `build.sh` prints the effective mode on every
+    relaunch, and `./build.sh --run --no-simulate` clears the saved flag. It
+    deliberately skips the permission check, so the recording UI stays testable on a
+    managed Mac whose grant is still pending admin approval. The HUD turns amber and reads
+    **SIM** so it can't be mistaken for a real capture; Stop confirms with a toast instead
+    of saving. Capture-dependent paths (the video file itself, History, Trim, GIF export)
+    still need the real grant.
 
 ## Releasing
 
@@ -93,6 +107,9 @@ touches, plus a baseline pass:
 - **Editor** — tools draw correctly; undo/redo, crop, rotate, flip and corner-drag resize work; the **Select** tool (`V`) moves / resizes / deletes a placed mark.
 - **Output** — `⌘C` copy, `⌘S` save, `⇧⌘S` Save As, `Esc` cancel; plus Pin (`⌘P`), OCR, the Before/After GIF, and backgrounds.
 - **Settings** persist across relaunch; check **multi-monitor** geometry if you touched capture.
+- **Recording HUD changes** can be exercised without the grant via *Simulate recording*
+  (above) — but verify the real path too before opening a PR: simulate mode never builds an
+  `SCStream`, so it can't catch a capture-side regression.
 
 If the UI changed, regenerate the README screenshots:
 

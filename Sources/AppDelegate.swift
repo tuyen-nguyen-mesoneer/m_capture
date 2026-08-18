@@ -127,12 +127,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if rec.isRecording {
             entries.append(.item(title: L("Stop Recording"), symbol: "stop.circle",
                                  shortcut: nil) { rec.stopFromMenu() })
-            entries.append(.item(title: L("Stop & Save as GIF"), symbol: "photo.stack",
-                                 shortcut: nil) { rec.stopAsGIFFromMenu() })
-            entries.append(.item(title: L("Stop & Trim…"), symbol: "scissors",
-                                 shortcut: nil) { rec.stopAndTrimFromMenu() })
+            // The file-only stop variants are dropped in simulate mode: nothing is
+            // captured, so there'd be no .mp4 to convert or trim.
+            if !rec.isSimulatedRecording {
+                entries.append(.item(title: L("Stop & Save as GIF"), symbol: "photo.stack",
+                                     shortcut: nil) { rec.stopAsGIFFromMenu() })
+                entries.append(.item(title: L("Stop & Trim…"), symbol: "scissors",
+                                     shortcut: nil) { rec.stopAndTrimFromMenu() })
+            }
             entries.append(.item(title: L("Discard Recording"), symbol: "trash",
                                  shortcut: nil) { rec.discardFromMenu() })
+            // On-screen drawing, for the targets whose video can actually show it. Clear
+            // only appears while there is something to clear.
+            if rec.canDraw {
+                entries.append(.item(title: rec.isDrawModeOn ? L("Stop Drawing") : L("Draw on Screen"),
+                                     symbol: rec.isDrawModeOn ? "pencil.slash" : "pencil.tip",
+                                     shortcut: s.shortcut(.draw).displayString) { rec.toggleDrawFromMenu() })
+                if rec.hasDrawings {
+                    entries.append(.item(title: L("Clear Drawings"), symbol: "eraser",
+                                         shortcut: nil) { rec.clearDrawingsFromMenu() })
+                }
+            }
             entries.append(.item(title: rec.isRecordingPaused ? L("Resume Recording") : L("Pause Recording"),
                                  symbol: rec.isRecordingPaused ? "play.circle" : "pause.circle",
                                  shortcut: nil) { rec.togglePauseFromMenu() })
@@ -172,6 +187,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let s = Settings.shared
         hotKeys.append(HotKey(s.shortcut(.screenshot)) { [weak self] in self?.takeScreenshot() })
         hotKeys.append(HotKey(s.shortcut(.record)) { [weak self] in self?.record() })
+        // Draw on screen — only meaningful mid-recording on a display-backed target, so it
+        // no-ops otherwise rather than registering conditionally (the binding has to stay
+        // claimed for the whole session, or Settings → Shortcuts would report it free).
+        hotKeys.append(HotKey(s.shortcut(.draw)) {
+            let rec = VideoRecordController.shared
+            guard rec.isRecording, rec.canDraw else { return }
+            rec.toggleDrawFromMenu()
+        })
         hotKeys.append(HotKey(s.shortcut(.forceQuit)) { [weak self] in self?.forceQuit() })
         // ⌥ + the record shortcut discards an in-flight recording (with confirm) —
         // the keyboard path when the floating bar (and its Esc handling) is hidden.
@@ -282,16 +305,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             button.image = Logo.menuBarImage(); button.title = ""; button.imagePosition = .imageOnly
             return
         }
+        // The menu-bar indicator is the one part of the HUD that's always visible, so it
+        // carries the simulate-mode signal too: an amber hollow dot and a SIM prefix,
+        // unmistakable against the red filled dot of a real capture.
+        let simulated = VideoRecordController.shared.isSimulatedRecording
+        let tint: NSColor = paused ? .systemGray : (simulated ? Theme.warning : .systemRed)
         let conf = NSImage.SymbolConfiguration(pointSize: 12, weight: .bold)
-            .applying(.init(paletteColors: [paused ? .systemGray : .systemRed]))
-        let dot = NSImage(systemSymbolName: "record.circle.fill", accessibilityDescription: "Recording")?
+            .applying(.init(paletteColors: [tint]))
+        let dot = NSImage(systemSymbolName: simulated ? "record.circle" : "record.circle.fill",
+                          accessibilityDescription: "Recording")?
             .withSymbolConfiguration(conf)
         dot?.isTemplate = false
         button.image = dot
         button.imagePosition = .imageLeading
         button.imageHugsTitle = true
         button.font = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .semibold)
-        button.title = paused ? " " + L("Paused") : " " + Self.clockString(elapsed)
+        let clock = paused ? L("Paused") : Self.clockString(elapsed)
+        button.title = simulated ? " SIM " + clock : " " + clock
     }
 
     private static func clockString(_ t: TimeInterval) -> String {

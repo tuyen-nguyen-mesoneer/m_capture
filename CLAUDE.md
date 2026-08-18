@@ -43,6 +43,16 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
   disconnected display auto-stops and saves the partial take. Quality, frame rate,
   countdown, click ripples, bar default and audio source (default none) live in
   Settings → Video.
+- **Simulate recording** (Settings → Video, `./build.sh --run --simulate`, or the
+  "Simulate Instead" button on the permission alert): runs the entire
+  record flow with no capture — no `SCStream`, no `AVAssetWriter`, no file. A
+  `SimulatedRecordingClock` stands in for the session so the bar, timer, pause and
+  menu-bar indicator behave normally, and the HUD switches to amber **SIM** so it can't be
+  read as a live capture. It intentionally **bypasses the Screen Recording permission
+  guard** — being usable while the grant is pending (a managed Mac awaiting admin approval)
+  is the whole point — so don't "fix" that guard back. `isSimulatedRecording` (i.e.
+  `simClock != nil`, not the setting) is the authoritative mid-recording mode flag, so
+  toggling the setting mid-recording can't strand a half-switched teardown.
 - **History**: a brand panel over the save folder's newest captures (thumbnail cards;
   copy / pin / trim / reveal / trash); opens from the menu and after every save. Only
   one app panel (Settings / History / Trim) is open at a time (`AppPanels.closeAll`).
@@ -123,6 +133,9 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
   pause / show-bar), `onRecordingUIUpdate` and `onGIFExportUpdate`;
   `finalizeForTermination()` pump-runs the main run loop so quit/force-quit finish the
   file. `handleUnexpectedStop` also fires when the recorded display disconnects.
+  Every exit path (stop / discard / unexpected / start failure / termination) funnels
+  through one `teardownRecordingUI()` so none can strand an overlay window. Simulate mode
+  short-circuits before the session is built and holds a `SimulatedRecordingClock` instead.
 - `VideoRecordSession.swift` — records a `Target` (display region or a single window)
   via ScreenCaptureKit (`SCStream`), encoding HEVC video + AAC audio into an `.mp4`
   with `AVAssetWriter` (PTS-normalized on a serial `writeQueue`) at the configured
@@ -185,7 +198,9 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
 - `Settings.swift` — persisted output prefs (`Settings.shared` / `UserDefaults`):
   save dir, format (`ImageFormat`), quality, auto-copy, cursor, sound, delay,
   post-capture `CaptureBehavior`, per-action hotkeys, background padding/radius,
-  launch-at-login (live via `SMAppService`), Dock-icon visibility. `fileURL()` + `encode(_:)` are the
+  launch-at-login (live via `SMAppService`), Dock-icon visibility, `simulateRecording`
+  (+ the `--simulate-recording` launch override, which pins it on and disables the
+  checkbox). `fileURL()` + `encode(_:)` are the
   single source for where/how captures are saved; `fileURL()` uniquifies the name and
   `resolvedSaveDirectory()` falls back to the Desktop when the configured folder is
   gone/unwritable.
