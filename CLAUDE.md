@@ -93,11 +93,7 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
   `pendingAction` (`.install` / `.relaunch`), driving the menu-bar badge, the menu item
   and which prompt shows — so those three can't disagree. "Later" snoozes that exact
   version for 24 h (a newer one always gets through). `relaunchFromMenu()` confirms first
-  *only* when pinned windows would be closed by it. `./build.sh --run --update-demo`
-  (`Updater.runDemo()`) walks the real prompts against real release notes, installing
-  nothing: it drives the shipping path, with demo guards only in `install` / `snooze` /
-  `relaunch`, so the screens can't drift from what ships. Its state is two in-memory
-  statics — never `UserDefaults` — so quitting is the whole cleanup. `--update-debug` forgets the stamps and
+  *only* when pinned windows would be closed by it. `--update-debug` forgets the stamps and
   checks now. Requires the repo's releases to be readable by the user.
 - `BrandMenu.swift` — custom mesoneer-styled menu (NSMenu isn't themeable); used for
   the status-item menu and the pin window's right-click.

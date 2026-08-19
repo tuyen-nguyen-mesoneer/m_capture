@@ -88,10 +88,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if CommandLine.arguments.contains("--editor-demo") {
             DispatchQueue.main.async { [weak self] in self?.openEditorDemo() }
         }
-        // Walks the real update prompts against real release notes, installing nothing.
-        if CommandLine.arguments.contains("--update-demo") {
-            DispatchQueue.main.async { Updater.runDemo() }
-        }
         if CommandLine.arguments.contains("--settings-demo") {
             DispatchQueue.main.async { [weak self] in self?.settings() }
         }

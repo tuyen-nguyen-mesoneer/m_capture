@@ -194,7 +194,7 @@ enum Updater {
     }
 
     private static var availableNotes: String? {
-        demoAction != nil ? demoNotes : UserDefaults.standard.string(forKey: availableNotesKey)
+        UserDefaults.standard.string(forKey: availableNotesKey)
     }
 
     /// What the user still has to act on. A single value drives the menu-bar badge, the
@@ -214,7 +214,6 @@ enum Updater {
     }
 
     static var pendingAction: PendingAction? {
-        if let demo = demoAction { return demo }
         if let staged = stagedVersion { return .relaunch(staged) }
         if let tag = availableTag { return .install(normalize(tag)) }
         return nil
@@ -285,7 +284,6 @@ enum Updater {
     /// Remember a dismissed offer. The badge and the menu item stay put meanwhile, so
     /// this defers the interruption without losing the update.
     private static func snooze(_ version: String) {
-        guard demoAction == nil else { return }
         UserDefaults.standard.set(version, forKey: snoozedVersionKey)
         stamp(snoozedAtKey)
     }
@@ -436,7 +434,6 @@ enum Updater {
     /// Install, which is why — unlike the old unattended path — a failure is reported
     /// rather than swallowed: someone is sitting there waiting on it.
     private static func install() {
-        if let demo = demoAction { demoInstall(demo.version); return }
         guard let tag = availableTag, let dmg = dmgURL(for: tag) else {
             presentInstallFailedAlert()
             return
@@ -549,60 +546,6 @@ enum Updater {
         return URL(string: "https://github.com/\(repo)/releases/download/\(tag)/\(dmgAssetName)")
     }
 
-    // MARK: - Demo
-
-    /// In-memory stand-in for `pendingAction` while `--update-demo` runs, so the badge,
-    /// the menu item and both prompts can be looked at without writing a single default
-    /// or downloading a byte. Quitting clears it — there is nothing to clean up after.
-    private static var demoAction: PendingAction?
-    private static var demoNotes: String?
-
-    /// Dev switch (`--update-demo`): walk the real update screens — menu-bar badge, the
-    /// offer with what changed, the "Updating…" indicator, the relaunch prompt — using
-    /// the newest release's *actual* notes, installing nothing.
-    ///
-    /// It deliberately drives the shipping code path rather than a parallel mock: the
-    /// only difference is three guards (`install`, `snooze`, `relaunch`), so what you see
-    /// here is what a real update looks like.
-    static func runDemo() {
-        let version = demoVersion()
-        fetchReleases { result in
-            // The newest few entries, formatted as though all were unseen — the point is
-            // to show what someone several versions behind actually reads. The top one is
-            // relabelled to the demo version so the list agrees with the alert's title.
-            demoNotes = (try? result.get()).flatMap { releases -> String? in
-                var shown = Array(releases.prefix(3))
-                guard !shown.isEmpty else { return nil }
-                shown[0] = Release(tagName: version, items: shown[0].items)
-                return changeLog(shown[...])
-            }
-            demoAction = .install(version)
-            onPendingChange?()
-            offerPending(force: true)
-        }
-    }
-
-    /// The install, minus the install: same progress signal, same follow-up prompt.
-    private static func demoInstall(_ version: String) {
-        onInstallProgress?(true)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
-            onInstallProgress?(false)
-            demoAction = .relaunch(version)
-            onPendingChange?()
-            offerPending(force: true)
-        }
-    }
-
-    /// One minor version above whatever is running, so the demo reads plausibly from
-    /// whichever build it's launched out of.
-    private static func demoVersion() -> String {
-        var parts = normalize(runningVersion).split(separator: ".").map { Int($0) ?? 0 }
-        while parts.count < 3 { parts.append(0) }
-        parts[1] += 1
-        parts[2] = 0
-        return parts.map(String.init).joined(separator: ".")
-    }
-
     /// The status menu's update item: show whatever is outstanding, right now.
     static func showPending() { offerPending(force: true) }
 
@@ -626,14 +569,6 @@ enum Updater {
     /// exit, then relaunches — it outlives our own termination. Internal because
     /// Settings' language switch also restarts through it.
     static func relaunch() {
-        // Every route into a relaunch passes through here, so the demo is stopped once,
-        // in one place, rather than in each of the callers.
-        if demoAction != nil {
-            demoAction = nil
-            onPendingChange?()
-            BrandToast.show("Update demo — the real thing would relaunch here.")
-            return
-        }
         let pid = ProcessInfo.processInfo.processIdentifier
         let path = Bundle.main.bundlePath
         let script = "while /bin/kill -0 \(pid) 2>/dev/null; do /bin/sleep 0.2; done; /usr/bin/open \"\(path)\""
@@ -871,16 +806,13 @@ enum Updater {
     /// check, so the two paths read identically. The relaunch is forced: a single confirm,
     /// then straight into the new build (no "Later" — the swap already happened).
     /// The offer — what changed, and a choice. The only place an update is ever
-    /// described, and the only place it's ever agreed to. Presentation is split from the
-    /// decision so `--update-demo` puts the *shipping* alert on screen rather than a
-    /// look-alike that can drift away from it.
-    private static func presentOffer(_ version: String, notes: String?,
-                                     _ done: @escaping (Bool) -> Void) {
+    /// described, and the only place it's ever agreed to.
+    private static func presentAvailableAlert(_ version: String) {
         guard !alertShowing else { return }
         alertShowing = true
         announce()
         var message = String(format: L("m_capture %@ is available."), version)
-        if let notes, !notes.isEmpty { message += "\n\n" + notes }
+        if let notes = availableNotes, !notes.isEmpty { message += "\n\n" + notes }
         BrandAlert(title: L("Update available"),
                    message: message,
                    titles: [L("Install"), L("Later")], primary: 0, cancel: 1,
@@ -889,20 +821,14 @@ enum Updater {
                    attributedMessage: styledMessage(message)).present { choice in
             alertShowing = false
             NSApp.dockTile.badgeLabel = nil
-            done(choice == 0)
-        }
-    }
-
-    private static func presentAvailableAlert(_ version: String) {
-        presentOffer(version, notes: availableNotes) { confirmed in
-            if confirmed { install() } else { snooze(version) }
+            guard choice == 0 else { snooze(version); return }
+            install()
         }
     }
 
     /// Offered once the build is on disk. Declining is safe and costs nothing — the swap
     /// has already happened, so the next ordinary launch picks it up regardless.
-    private static func presentRelaunchPrompt(_ version: String,
-                                              _ done: @escaping (Bool) -> Void) {
+    private static func presentRelaunchAlert(_ version: String) {
         guard !alertShowing else { return }
         alertShowing = true
         announce()
@@ -918,13 +844,8 @@ enum Updater {
                    icon: "arrow.clockwise").present { choice in
             alertShowing = false
             NSApp.dockTile.badgeLabel = nil
-            done(choice == 0)
-        }
-    }
-
-    private static func presentRelaunchAlert(_ version: String) {
-        presentRelaunchPrompt(version) { confirmed in
-            if confirmed { relaunch() } else { snooze(version) }
+            guard choice == 0 else { snooze(version); return }
+            relaunch()
         }
     }
 
