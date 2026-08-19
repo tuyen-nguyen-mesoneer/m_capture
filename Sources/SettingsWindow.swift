@@ -33,6 +33,7 @@ final class SettingsWindowController: NSObject {
     private var videoClicksCheck: NSButton!
     private var videoBarMinCheck: NSButton!
     private var videoSimulateCheck: NSButton!
+    private var lastCheckedLabel: NSTextField!
     private var drawColorRow: DrawColorRow!
     private var drawStrokePopup: NSPopUpButton!
     private var drawFadePopup: NSPopUpButton!
@@ -106,7 +107,7 @@ final class SettingsWindowController: NSObject {
         videoCountdownPopup = popup(CaptureDelay.allCases.map { $0.label }, #selector(videoCountdownChanged))
         videoClicksCheck = checkbox(L("Show mouse clicks in recordings"), #selector(videoClicksToggled))
         videoBarMinCheck = checkbox(L("Start with the recording bar minimized"), #selector(videoBarMinToggled))
-        videoSimulateCheck = checkbox(L("Simulate recording (nothing is captured or saved)"),
+        videoSimulateCheck = checkbox(L("Simulate recording (nothing is saved)"),
                                       #selector(videoSimulateToggled))
 
         drawColorRow = DrawColorRow()
@@ -156,7 +157,7 @@ final class SettingsWindowController: NSObject {
             ]),
             // Drawing on screen while recording — the marks' look, how long they last, and
             // the letters that pick a tool once draw mode is on.
-            (L("Drawing"), [
+            (L("Live Drawing"), [
                 row(L("Color"), drawColorRow,
                     tip: L("Color of marks drawn on screen while recording.")),
                 row(L("Thickness"), drawStrokePopup),
@@ -525,6 +526,10 @@ final class SettingsWindowController: NSObject {
         // `--simulate-recording` pins the mode on for the whole launch, so the checkbox
         // shows the state but can't fight it.
         videoSimulateCheck.isEnabled = !s.launchSimulateOverride
+        // The About card is built once and cached, so this would otherwise still show
+        // whatever the updater had last done when the panel was first opened.
+        lastCheckedLabel.stringValue = String(format: L("Last checked: %@"),
+                                              Updater.lastCheckDescription)
         drawColorRow.refresh()
         drawStrokePopup.selectItem(at: DrawStroke.allCases.firstIndex(of: s.drawStroke) ?? 1)
         drawFadePopup.selectItem(at: DrawFade.allCases.firstIndex(of: s.drawFade) ?? 1)
@@ -729,6 +734,10 @@ final class SettingsWindowController: NSObject {
     /// The About tab's single centered card: logo, name + version (click either to
     /// open the full About panel with the mesoneer credits), the MIT/© line, and
     /// the two help actions side by side — an identity page, not a settings form.
+    /// The About card: a centered identity block — who this is, the licence, two
+    /// actions. Deliberately sparse. Name and version share a line rather than stacking,
+    /// and the updater's status sits under the buttons as a quiet footer, so the card
+    /// reads as an identity rather than as a column of five labels.
     private func aboutCard() -> NSView {
         let card = NSView()
         card.translatesAutoresizingMaskIntoConstraints = false
@@ -737,16 +746,19 @@ final class SettingsWindowController: NSObject {
         logo.image = Logo.image(size: 56)
         logo.translatesAutoresizingMaskIntoConstraints = false
 
-        let name = NSTextField(labelWithString: "m_capture")
-        name.font = Theme.font(17, .bold)
-        name.textColor = Theme.textPrimary
-        name.translatesAutoresizingMaskIntoConstraints = false
-
+        // "m_capture 1.6.7" on one line: the name carries the weight and the version
+        // rides along quietly, instead of claiming a row of its own.
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "—"
-        let versionLabel = NSTextField(labelWithString: String(format: L("Version %@"), version))
-        versionLabel.font = Theme.font(12)
-        versionLabel.textColor = Theme.textSecondary
-        versionLabel.translatesAutoresizingMaskIntoConstraints = false
+        let title = NSMutableAttributedString(string: "m_capture", attributes: [
+            .font: Theme.font(17, .bold),
+            .foregroundColor: Theme.textPrimary,
+        ])
+        title.append(NSAttributedString(string: "  " + version, attributes: [
+            .font: Theme.font(13),
+            .foregroundColor: Theme.textSecondary,
+        ]))
+        let name = NSTextField(labelWithAttributedString: title)
+        name.translatesAutoresizingMaskIntoConstraints = false
 
         // License + maker line; clicking opens the mesoneer site.
         let license = ClickableLabel(L("MIT License · © mesoneer AG"), onClick: {
@@ -761,13 +773,22 @@ final class SettingsWindowController: NSObject {
         buttons.spacing = 10
         buttons.translatesAutoresizingMaskIntoConstraints = false
 
-        // Surfaces a chronically failing silent update check (blocked network,
-        // rate limit, unreadable repo) — otherwise those users never learn why
-        // they're stuck on an old version.
+        // When the updater last got an answer. A silent updater that quietly stopped
+        // working looks exactly like one with nothing to report, so this is the only
+        // place that difference is visible before someone ends up months behind — but it
+        // is status, not identity, so it sits below the actions. Filled in by `refresh()`.
+        let checked = NSTextField(labelWithString: "")
+        checked.font = Theme.font(11)
+        checked.textColor = Theme.textSecondary.withAlphaComponent(0.7)
+        checked.translatesAutoresizingMaskIntoConstraints = false
+        lastCheckedLabel = checked
+
+        // Surfaces a chronically failing silent update check, named by cause (blocked
+        // network, rate limit, a bundle we can't write to) — otherwise those users never
+        // learn why they're stuck on an old version.
         var updateWarning: NSTextField?
-        if Updater.isCheckFailing {
-            let warning = NSTextField(wrappingLabelWithString:
-                L("Automatic update checks are failing — check network access to GitHub."))
+        if let message = Updater.checkFailureMessage {
+            let warning = NSTextField(wrappingLabelWithString: message)
             warning.font = Theme.font(11)
             warning.textColor = Theme.accentPurple
             warning.alignment = .center
@@ -775,32 +796,32 @@ final class SettingsWindowController: NSObject {
             updateWarning = warning
         }
 
-        ([logo, name, versionLabel, license, buttons] + (updateWarning.map { [$0] } ?? []))
+        ([logo, name, license, buttons, checked] + (updateWarning.map { [$0] } ?? []))
             .forEach { card.addSubview($0) }
         NSLayoutConstraint.activate([
             card.widthAnchor.constraint(equalToConstant: Layout.rowWidth),
-            logo.topAnchor.constraint(equalTo: card.topAnchor, constant: 40),
+            logo.topAnchor.constraint(equalTo: card.topAnchor, constant: 36),
             logo.centerXAnchor.constraint(equalTo: card.centerXAnchor),
             logo.widthAnchor.constraint(equalToConstant: 56),
             logo.heightAnchor.constraint(equalToConstant: 56),
-            name.topAnchor.constraint(equalTo: logo.bottomAnchor, constant: 10),
+            name.topAnchor.constraint(equalTo: logo.bottomAnchor, constant: 12),
             name.centerXAnchor.constraint(equalTo: card.centerXAnchor),
-            versionLabel.topAnchor.constraint(equalTo: name.bottomAnchor, constant: 2),
-            versionLabel.centerXAnchor.constraint(equalTo: card.centerXAnchor),
-            license.topAnchor.constraint(equalTo: versionLabel.bottomAnchor, constant: 2),
+            license.topAnchor.constraint(equalTo: name.bottomAnchor, constant: 4),
             license.centerXAnchor.constraint(equalTo: card.centerXAnchor),
             buttons.centerXAnchor.constraint(equalTo: card.centerXAnchor),
-            buttons.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -8),
+            checked.topAnchor.constraint(equalTo: buttons.bottomAnchor, constant: 16),
+            checked.centerXAnchor.constraint(equalTo: card.centerXAnchor),
+            checked.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -8),
         ])
         if let warning = updateWarning {
             NSLayoutConstraint.activate([
-                warning.topAnchor.constraint(equalTo: license.bottomAnchor, constant: 10),
+                warning.topAnchor.constraint(equalTo: license.bottomAnchor, constant: 14),
                 warning.centerXAnchor.constraint(equalTo: card.centerXAnchor),
                 warning.widthAnchor.constraint(lessThanOrEqualToConstant: Layout.rowWidth - 60),
-                buttons.topAnchor.constraint(equalTo: warning.bottomAnchor, constant: 14),
+                buttons.topAnchor.constraint(equalTo: warning.bottomAnchor, constant: 16),
             ])
         } else {
-            buttons.topAnchor.constraint(equalTo: license.bottomAnchor, constant: 18).isActive = true
+            buttons.topAnchor.constraint(equalTo: license.bottomAnchor, constant: 22).isActive = true
         }
         return card
     }

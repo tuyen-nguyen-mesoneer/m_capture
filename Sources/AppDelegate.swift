@@ -8,6 +8,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var hotKeys: [HotKey] = []
     private var menu: BrandMenu!
     private var countdownActive = false
+    /// Drives the menu-bar "Updating…" state while a user-approved install runs.
+    private var installingUpdate = false
 
     /// Apply the Dock-icon preference. `.accessory` drops the Dock icon (and the app's
     /// menu bar) leaving the status item as the only entry point; `.regular` restores it.
@@ -27,10 +29,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if Relocator.relocateToUserApplicationsIfNeeded() { return }
 
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        statusItem.button?.image = Logo.menuBarImage()
         statusItem.button?.target = self
         statusItem.button?.action = #selector(statusClicked)
         statusItem.button?.setAccessibilityLabel("m_capture")
+        refreshStatusIcon()
 
         buildMenu()
         reloadHotKeys()
@@ -55,15 +57,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 button.font = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .semibold)
                 button.title = " GIF… "
             } else {
-                button.image = Logo.menuBarImage(); button.title = ""; button.imagePosition = .imageOnly
+                self?.refreshStatusIcon()
             }
         }
 
         Updater.reconcileAfterRelaunch()
+        // An outstanding update — offered, or installed and awaiting a relaunch — shows
+        // in the menu bar and the menu until it's dealt with; the alert fires while the
+        // app is in the background and is easy to miss.
+        Updater.onPendingChange = { [weak self] in
+            // A live recording owns the icon — its timer is the more urgent signal — and
+            // the badge lands there anyway once the take ends and the indicator clears.
+            if !VideoRecordController.shared.isRecording { self?.refreshStatusIcon() }
+            self?.buildMenu()
+        }
+        // An install is a download plus a disk swap — tens of seconds during which the
+        // user, having just clicked Install, would otherwise see nothing happen at all.
+        Updater.onInstallProgress = { [weak self] installing in
+            self?.installingUpdate = installing
+            self?.refreshStatusIcon()
+        }
         Updater.scheduleBackgroundChecks()
+        // The user turning up is the cheapest signal there is that now is a good moment
+        // to be current — and it is what someone clicking the app expects to happen.
+        NotificationCenter.default.addObserver(forName: NSApplication.didBecomeActiveNotification,
+                                               object: nil, queue: .main) { _ in
+            Updater.checkIfDue(.userPresent)
+        }
 
         if CommandLine.arguments.contains("--editor-demo") {
             DispatchQueue.main.async { [weak self] in self?.openEditorDemo() }
+        }
+        // Walks the real update prompts against real release notes, installing nothing.
+        if CommandLine.arguments.contains("--update-demo") {
+            DispatchQueue.main.async { Updater.runDemo() }
         }
         if CommandLine.arguments.contains("--settings-demo") {
             DispatchQueue.main.async { [weak self] in self?.settings() }
@@ -79,6 +106,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func statusClicked() {
+        Updater.checkIfDue(.userPresent)
         // Opening the menu is a context switch — drop any open app panel so the
         // menu never floats over a stale Settings/History window.
         AppPanels.closeAll()
@@ -96,6 +124,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // early (a duplicate quitting itself, or a relocation relaunch) — before `statusItem`
         // exists. Force-unwrapping it then traps, so no-op until the status item is live.
         guard let statusItem else { return true }
+        Updater.checkIfDue(.userPresent)
         if !flag {
             AppPanels.closeAll()
             buildMenu()
@@ -159,6 +188,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             entries.append(.item(title: L("Quit"), symbol: "power", shortcut: nil) { [weak self] in self?.quit() })
             menu = BrandMenu(entries: entries)
             return
+        }
+        // Whatever the updater is waiting on. The alert announcing it can be missed (it
+        // fires with the app in the background) or deferred with "Later"; this item is
+        // read straight off `pendingAction`, so it stays put until the update is actually
+        // taken. Omitted while recording — relaunching mid-capture would lose the take.
+        switch Updater.pendingAction {
+        case .relaunch:
+            entries.append(.item(title: L("Relaunch to Finish Update"), symbol: "arrow.clockwise",
+                                 shortcut: nil) { Updater.relaunchFromMenu() })
+            entries.append(.separator)
+        case .install:
+            entries.append(.item(title: L("Install Update…"), symbol: "arrow.down.circle.fill",
+                                 shortcut: nil) { Updater.showPending() })
+            entries.append(.separator)
+        case nil:
+            break
         }
         entries.append(.item(title: L("Screenshot"), symbol: "camera.viewfinder",
                              shortcut: s.shortcut(.screenshot).displayString,
@@ -301,10 +346,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// the floating bar minimized. Reverts to the plain m. logo when idle.
     private func updateRecordingIndicator(active: Bool, elapsed: TimeInterval, paused: Bool) {
         guard let button = statusItem.button else { return }
-        guard active else {
-            button.image = Logo.menuBarImage(); button.title = ""; button.imagePosition = .imageOnly
-            return
-        }
+        guard active else { refreshStatusIcon(); return }
         // The menu-bar indicator is the one part of the HUD that's always visible, so it
         // carries the simulate-mode signal too: an amber hollow dot and a SIM prefix,
         // unmistakable against the red filled dot of a real capture.
@@ -322,6 +364,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         button.font = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .semibold)
         let clock = paused ? L("Paused") : Self.clockString(elapsed)
         button.title = simulated ? " SIM " + clock : " " + clock
+    }
+
+    /// Single owner of the status-item button's idle look: the m. logo, badged when a
+    /// build is staged and waiting on a relaunch. Deliberately unconditional — this is
+    /// also the path that clears the recording indicator, and `teardownRecordingUI` runs
+    /// it while `session` is still set, so anything conditional on `isRecording` here
+    /// would strand the red dot and timer after every stop. Callers that could step on a
+    /// live recording check that themselves (see `Updater.onUpdateStaged`).
+    private func refreshStatusIcon() {
+        guard let button = statusItem?.button else { return }
+        if installingUpdate {
+            button.image = nil
+            button.font = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .semibold)
+            button.title = " " + L("Updating…") + " "
+            return
+        }
+        button.image = Logo.menuBarImage(badged: Updater.pendingAction != nil)
+        button.title = ""
+        button.imagePosition = .imageOnly
     }
 
     private static func clockString(_ t: TimeInterval) -> String {

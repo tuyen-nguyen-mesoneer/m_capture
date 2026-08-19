@@ -69,21 +69,41 @@ enum Logo {
     }
 
     /// Monochrome template image sized to fill the menu bar like other icons.
-    static func menuBarImage() -> NSImage {
+    /// - Parameter badged: draws a small download mark beside the glyph, for a build
+    ///   already swapped onto disk and waiting on a relaunch. The composite stays a
+    ///   template image, so the badge tints with the menu bar exactly like the logo —
+    ///   a coloured badge would have to opt out of that and stop adapting.
+    static func menuBarImage(badged: Bool = false) -> NSImage {
         let h: CGFloat = 16
-        guard let g = Logo.glyph() else {
-            let img = NSImage(size: NSSize(width: h, height: h), flipped: false) { rect in
+        let base: NSImage
+        if let g = Logo.glyph() {
+            base = NSImage(cgImage: g.image, size: NSSize(width: h * g.aspect, height: h))
+        } else {
+            base = NSImage(size: NSSize(width: h, height: h), flipped: false) { rect in
                 "m.".draw(in: rect, withAttributes: [
                     .font: Theme.font(h * 0.8, .bold),
                     .foregroundColor: NSColor.black])
                 return true
             }
-            img.isTemplate = true
-            return img
         }
-        let img = NSImage(cgImage: g.image, size: NSSize(width: h * g.aspect, height: h))
-        img.isTemplate = true
-        return img
+        guard badged,
+              let badge = NSImage(systemSymbolName: "arrow.down.circle.fill",
+                                  accessibilityDescription: nil)?
+                .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 9, weight: .bold))
+        else {
+            base.isTemplate = true
+            return base
+        }
+        let gap: CGFloat = 2
+        let composed = NSImage(size: NSSize(width: base.size.width + gap + badge.size.width,
+                                            height: h), flipped: false) { _ in
+            base.draw(at: .zero, from: .zero, operation: .sourceOver, fraction: 1)
+            badge.draw(at: NSPoint(x: base.size.width + gap, y: h - badge.size.height),
+                       from: .zero, operation: .sourceOver, fraction: 1)
+            return true
+        }
+        composed.isTemplate = true
+        return composed
     }
 }
 

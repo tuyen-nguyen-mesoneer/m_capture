@@ -55,7 +55,6 @@ enum L10n {
         "Recording": "Aufnahme",
         "Discard Recording": "Aufnahme verwerfen",
         "Start with the recording bar minimized": "Aufnahmeleiste minimiert starten",
-        "Version %@": "Version %@",
         "MIT License · © mesoneer AG": "MIT-Lizenz · © mesoneer AG",
         // ── Menu bar ─────────────────────────────────────────────────────
         "Stop Recording": "Aufnahme stoppen",
@@ -82,7 +81,10 @@ enum L10n {
         "Later": "Später",
         "Download": "Laden",
         "Update installed": "Update installiert",
-        "m_capture %@ is ready. Click OK to relaunch.": "m_capture %@ ist bereit. Mit OK neu starten.",
+        "m_capture %@ is installed.": "m_capture %@ ist installiert.",
+        "Install Update…": "Update installieren…",
+        "Updating…": "Wird aktualisiert…",
+        "The update could not be installed.": "Das Update konnte nicht installiert werden.",
         "Up to date": "Alles aktuell",
         "m_capture %@ is the latest version.": "m_capture %@ ist die neueste Version.",
         "Unable to update": "Update fehlgeschlagen",
@@ -91,6 +93,14 @@ enum L10n {
             "GitHub drosselt derzeit die Update-Prüfungen. Bitte später erneut versuchen.",
         "Open Releases": "Releases öffnen",
         "Automatic update checks are failing — check network access to GitHub.": "Automatische Update-Prüfungen schlagen fehl — Netzwerkzugriff auf GitHub prüfen.",
+        "Updates can't be installed — move m_capture to your Applications folder.":
+            "Updates können nicht installiert werden — m_capture in den Programme-Ordner verschieben.",
+        "Relaunch to Finish Update": "Zum Abschluss des Updates neu starten",
+        "Relaunch now?": "Jetzt neu starten?",
+        "Relaunch": "Neu starten",
+        "Pinned windows will close.": "Angeheftete Fenster werden geschlossen.",
+        "Last checked: %@": "Zuletzt geprüft: %@",
+        "Never": "Nie",
 
         // ── Permissions ──────────────────────────────────────────────────
         "Screen Recording permission required": "Bildschirmaufnahme-Berechtigung erforderlich",
@@ -100,8 +110,7 @@ enum L10n {
         "Cancel": "Abbrechen",
 
         // ── Simulated recording ──────────────────────────────────────────
-        "Simulate recording (nothing is captured or saved)":
-            "Aufnahme simulieren (nichts wird aufgezeichnet oder gesichert)",
+        "Simulate recording (nothing is saved)": "Aufnahme simulieren (ohne Datei)",
         "Simulate recordings?": "Aufnahmen simulieren?",
         "Recording will run normally — overlay, timer, bar and drawing — but nothing is captured and no file is saved. Useful while the Screen Recording permission is still pending.":
             "Die Aufnahme läuft normal ab — Auswahl, Timer, Leiste und Zeichnen — aber nichts wird aufgezeichnet und keine Datei gesichert. Nützlich, solange die Bildschirmaufnahme-Berechtigung noch aussteht.",
@@ -230,7 +239,7 @@ enum L10n {
             "Beendet m_capture und doppelte Instanzen sofort — falls das Menüleisten-Symbol hängt oder doppelt erscheint.",
         "Draw on Screen": "Auf dem Bildschirm zeichnen",
         // ── Drawing on screen ────────────────────────────────────────────
-        "Drawing": "Zeichnen",
+        "Live Drawing": "Live-Zeichnen",
         "Pencil": "Stift",
         "Rectangle": "Rechteck",
         "Circle": "Kreis",
@@ -379,7 +388,6 @@ enum L10n {
         "Recording": "Bản ghi hình",
         "Discard Recording": "Huỷ bản ghi",
         "Start with the recording bar minimized": "Bắt đầu với thanh ghi hình thu nhỏ",
-        "Version %@": "Phiên bản %@",
         "MIT License · © mesoneer AG": "Giấy phép MIT · © mesoneer AG",
         // ── Menu bar ─────────────────────────────────────────────────────
         "Stop Recording": "Dừng ghi hình",
@@ -406,7 +414,10 @@ enum L10n {
         "Later": "Để sau",
         "Download": "Tải về",
         "Update installed": "Đã cài bản cập nhật",
-        "m_capture %@ is ready. Click OK to relaunch.": "m_capture %@ đã sẵn sàng. Bấm OK để khởi động lại.",
+        "m_capture %@ is installed.": "Đã cài đặt m_capture %@.",
+        "Install Update…": "Cài bản cập nhật…",
+        "Updating…": "Đang cập nhật…",
+        "The update could not be installed.": "Không thể cài đặt bản cập nhật.",
         "Up to date": "Đang dùng phiên bản mới nhất",
         "m_capture %@ is the latest version.": "m_capture %@ là phiên bản mới nhất.",
         "Unable to update": "Không thể cập nhật",
@@ -414,6 +425,14 @@ enum L10n {
         "GitHub is rate-limiting update checks right now. Try again later.":
             "GitHub đang giới hạn tần suất kiểm tra cập nhật. Vui lòng thử lại sau.",
         "Automatic update checks are failing — check network access to GitHub.": "Kiểm tra cập nhật tự động đang thất bại — hãy kiểm tra kết nối mạng tới GitHub.",
+        "Updates can't be installed — move m_capture to your Applications folder.":
+            "Không thể cài bản cập nhật — hãy chuyển m_capture vào thư mục Applications.",
+        "Relaunch to Finish Update": "Khởi động lại để hoàn tất cập nhật",
+        "Relaunch now?": "Khởi động lại ngay?",
+        "Relaunch": "Khởi động lại",
+        "Pinned windows will close.": "Các cửa sổ đã ghim sẽ đóng lại.",
+        "Last checked: %@": "Lần kiểm tra gần nhất: %@",
+        "Never": "Chưa bao giờ",
         "Open Releases": "Mở trang Releases",
 
         // ── Permissions ──────────────────────────────────────────────────
@@ -424,8 +443,7 @@ enum L10n {
         "Cancel": "Huỷ",
 
         // ── Simulated recording ──────────────────────────────────────────
-        "Simulate recording (nothing is captured or saved)":
-            "Mô phỏng ghi hình (không ghi và không lưu gì)",
+        "Simulate recording (nothing is saved)": "Mô phỏng quay (không lưu tệp)",
         "Simulate recordings?": "Mô phỏng ghi hình?",
         "Recording will run normally — overlay, timer, bar and drawing — but nothing is captured and no file is saved. Useful while the Screen Recording permission is still pending.":
             "Quá trình ghi vẫn diễn ra bình thường — lớp chọn, đồng hồ, thanh điều khiển và vẽ — nhưng không ghi và không lưu tệp nào. Hữu ích khi quyền Ghi màn hình vẫn đang chờ cấp.",
@@ -554,7 +572,7 @@ enum L10n {
             "Buộc thoát m_capture và các bản trùng lặp — dùng khi biểu tượng thanh menu bị kẹt hoặc nhân đôi.",
         "Draw on Screen": "Vẽ lên màn hình",
         // ── Drawing on screen ────────────────────────────────────────────
-        "Drawing": "Vẽ",
+        "Live Drawing": "Vẽ trực tiếp",
         "Pencil": "Bút chì",
         "Rectangle": "Hình chữ nhật",
         "Circle": "Hình tròn",

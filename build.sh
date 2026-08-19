@@ -9,6 +9,8 @@ VERSION="1.7.0"
 
 # `./build.sh --run` quits any running instance, relaunches from build/, and
 # skips the DMG — the fast dev loop. Plain `./build.sh` builds the DMG too.
+# Add `--update-demo` to relaunch straight into the update prompts (offer with real
+# release notes, "Updating…", relaunch prompt) without installing anything.
 # Add `--simulate` to relaunch in simulate-recording mode (no capture, no file) — the way
 # to exercise the recording UI while the Screen Recording grant is still pending. It has
 # to be passed here rather than via `open --args`: the relaunch below replaces argv, and
@@ -21,10 +23,12 @@ VERSION="1.7.0"
 RUN=0
 SIMULATE=0
 NO_SIMULATE=0
+UPDATE_DEMO=0
 for arg in "$@"; do
     [ "$arg" = "--run" ] && RUN=1
     [ "$arg" = "--simulate" ] && SIMULATE=1
     [ "$arg" = "--no-simulate" ] && NO_SIMULATE=1
+    [ "$arg" = "--update-demo" ] && UPDATE_DEMO=1
 done
 if [ "$SIMULATE" = "1" ] && [ "$NO_SIMULATE" = "1" ]; then
     echo "!!! --simulate and --no-simulate are contradictory. Aborting." >&2
@@ -36,6 +40,10 @@ if [ "$SIMULATE" = "1" ] && [ "$RUN" != "1" ]; then
 fi
 if [ "$NO_SIMULATE" = "1" ] && [ "$RUN" != "1" ]; then
     echo "!!! --no-simulate only applies with --run (it is a relaunch flag). Aborting." >&2
+    exit 1
+fi
+if [ "$UPDATE_DEMO" = "1" ] && [ "$RUN" != "1" ]; then
+    echo "!!! --update-demo only applies with --run (it is a relaunch flag). Aborting." >&2
     exit 1
 fi
 
@@ -157,9 +165,10 @@ if [ "$RUN" = "1" ]; then
         defaults write "$BUNDLE_ID" simulateRecording -bool false 2>/dev/null || true
         echo "    simulate recording: OFF (saved setting cleared)"
     fi
+    LAUNCH_ARGS=""
     if [ "$SIMULATE" = "1" ]; then
         echo "    simulate recording: ON for this launch — nothing is captured or saved"
-        open "$APP" --args --simulate-recording
+        LAUNCH_ARGS="$LAUNCH_ARGS --simulate-recording"
     else
         if [ "$(defaults read "$BUNDLE_ID" simulateRecording 2>/dev/null)" = "1" ]; then
             echo "    !!! simulate recording: ON (saved setting) — recordings will capture NOTHING." >&2
@@ -167,8 +176,15 @@ if [ "$RUN" = "1" ]; then
         else
             echo "    simulate recording: off — recordings capture for real"
         fi
-        open "$APP"
     fi
+    if [ "$UPDATE_DEMO" = "1" ]; then
+        echo "    update demo: ON — the update prompts run against the newest release's real"
+        echo "                 notes; nothing is downloaded, installed or saved"
+        LAUNCH_ARGS="$LAUNCH_ARGS --update-demo"
+    fi
+    # Word-splitting is the point here: these are separate argv entries.
+    # shellcheck disable=SC2086
+    if [ -n "$LAUNCH_ARGS" ]; then open "$APP" --args $LAUNCH_ARGS; else open "$APP"; fi
     echo "==> Done: $APP (relaunched, DMG skipped)"
     exit 0
 fi

@@ -9,6 +9,10 @@ import AppKit
 final class PinnedWindowController: NSObject, NSWindowDelegate {
     private static var pinned: [PinnedWindowController] = []
 
+    /// Whether any pin is on screen. A pin holds a capture that was never saved
+    /// anywhere, so the update relaunch prompt warns before closing them.
+    static var hasOpenWindows: Bool { !pinned.isEmpty }
+
     private let window: PinWindow
     private let rep: NSBitmapImageRep
 
