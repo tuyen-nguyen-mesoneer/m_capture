@@ -238,6 +238,16 @@ enum L10n {
         "Force-quits m_capture and any duplicate instances — use if the menu bar icon is stuck or duplicated.":
             "Beendet m_capture und doppelte Instanzen sofort — falls das Menüleisten-Symbol hängt oder doppelt erscheint.",
         "Draw on Screen": "Auf dem Bildschirm zeichnen",
+        "Zoom While Recording": "Während der Aufnahme zoomen",
+        "Zoom %@": "Zoom %@",
+        "Zoom off": "Zoom aus",
+        "Zoom In": "Einzoomen",
+        "Zoom Out": "Auszoomen",
+        "Zoom level": "Zoomstufe",
+        "While recording, zoom the video in on the cursor and back out again. Your own screen is not magnified.":
+            "Während der Aufnahme das Video auf den Zeiger einzoomen und wieder auszoomen. Ihr eigener Bildschirm wird nicht vergrössert.",
+        "Magnification when zoom is toggled while recording. Only the video zooms — your screen is untouched.":
+            "Vergrösserung beim Zoomen während der Aufnahme. Nur das Video zoomt — Ihr Bildschirm bleibt unverändert.",
         // ── Drawing on screen ────────────────────────────────────────────
         "Live Drawing": "Live-Zeichnen",
         "Pencil": "Stift",
@@ -571,6 +581,16 @@ enum L10n {
         "Force-quits m_capture and any duplicate instances — use if the menu bar icon is stuck or duplicated.":
             "Buộc thoát m_capture và các bản trùng lặp — dùng khi biểu tượng thanh menu bị kẹt hoặc nhân đôi.",
         "Draw on Screen": "Vẽ lên màn hình",
+        "Zoom While Recording": "Thu phóng khi ghi hình",
+        "Zoom %@": "Thu phóng %@",
+        "Zoom off": "Tắt thu phóng",
+        "Zoom In": "Phóng to",
+        "Zoom Out": "Thu nhỏ",
+        "Zoom level": "Mức thu phóng",
+        "While recording, zoom the video in on the cursor and back out again. Your own screen is not magnified.":
+            "Trong khi ghi hình, phóng video vào vị trí con trỏ rồi thu nhỏ lại. Màn hình của bạn không bị phóng to.",
+        "Magnification when zoom is toggled while recording. Only the video zooms — your screen is untouched.":
+            "Mức phóng khi bật thu phóng trong lúc ghi hình. Chỉ video được phóng — màn hình của bạn không thay đổi.",
         // ── Drawing on screen ────────────────────────────────────────────
         "Live Drawing": "Vẽ trực tiếp",
         "Pencil": "Bút chì",

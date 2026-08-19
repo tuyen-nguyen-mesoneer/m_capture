@@ -165,6 +165,40 @@ retune mid-recording.
 
 ---
 
+## Zooming while recording
+
+Push in on the detail you are talking about: while a recording runs, press `⌃⇧Z`
+(rebindable) to zoom the **video** in on the cursor, and press it again to zoom back
+out. Your own screen is never magnified — only the recording.
+
+- **Anchored where you point.** The zoom centres on wherever the cursor is at the
+  instant you press, so it lands on what you are pointing at rather than wherever
+  the view happened to be last time.
+- **Eased, not snapped.** The factor animates in and out over about half a second,
+  and pressing again mid-animation reverses smoothly instead of jumping.
+- **The camera follows, slowly.** While zoomed, the view glides after the cursor with
+  a deliberate lag and a small dead-zone, so it holds still through hand jitter
+  instead of drifting. Your pointer itself is untouched; it *reads* calmer because the
+  frame is magnified and the camera trails it.
+- **You can see what is in frame.** Because your screen is not zoomed, a bracketed
+  lavender frame marks the area being recorded, with a badge showing the live factor
+  (`2×`). It fades in, shrinks from the full frame down to the zoomed area as the zoom
+  eases, and glides with the camera. It is excluded from the capture, so it guides you
+  without ever appearing in the video.
+- **Also visible elsewhere:** a toast names the state on each toggle (`Zoom 2×` /
+  `Zoom off`), the record bar's magnifier tile turns lavender, and the menu-bar
+  indicator shows the factor next to the timer — which matters because the bar starts
+  minimized.
+
+**Not available for window recordings.** A single-window recording has no fixed
+display rect to map the cursor into, so the shortcut and the controls are hidden for
+those takes. Record a **region** or the **whole screen** to zoom.
+
+The magnification (**1.5× / 2× / 3×**, default 2×) is in **Settings → Video → Zoom
+level**, and the shortcut is rebindable in **Settings → Shortcuts**.
+
+---
+
 ## The annotation editor
 
 The editor frames your image on a dark backdrop with tools in **clusters**
@@ -290,8 +324,8 @@ rows explain what they do.
   UI is localized; changing it offers an immediate restart to apply); launch at
   login; capture delay (with menu-bar countdown); after-capture behavior (open
   editor / save to file / copy to clipboard).
-- **Shortcuts** — rebind the **Screenshot**, **Record**, **Draw on Screen** and
-  **Force Quit** hotkeys (click a field, press the new combination).
+- **Shortcuts** — rebind the **Screenshot**, **Record**, **Draw on Screen**, **Zoom
+  While Recording** and **Force Quit** hotkeys (click a field, press the new combination).
 - **Capture** — include the mouse cursor; play the shutter sound (off by default);
   confirm before discarding an unsaved capture.
 - **Output** — save location; filename prefix (default `m_capture_`); image format
@@ -299,7 +333,8 @@ rows explain what they do.
   Large); default editor background; also copy to clipboard when saving.
 - **Video** — recording quality; audio source (**None** by default / system /
   microphone / both); frame rate (30 or 60 fps); start countdown (Off / 3 / 5 /
-  10 s); show mouse clicks in recordings; start with the recording bar minimized;
+  10 s); **zoom level** (1.5× / 2× / 3×) for zooming while recording; show mouse clicks
+  in recordings; start with the recording bar minimized;
   **simulate recording** (runs the whole flow but captures nothing and saves no file —
   for trying the recording tools while the Screen Recording permission is pending).
 

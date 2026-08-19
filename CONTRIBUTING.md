@@ -34,6 +34,10 @@ DMG. No Xcode/SPM project.
     > cert is an untrusted self-signed root, so it grants no Gatekeeper privilege.
   - `./build.sh && open build/m_capture.app --args --settings-demo` — opens the
     Settings panel at launch to iterate on it.
+  - `./build.sh && open build/m_capture.app --args --zoom-benchmark` — times the recording
+    **zoom** frame transform (crop + upscale) against the 30/60 fps frame budget across
+    1080p/1440p/4K and both scalers, then exits. Synthetic frames, so it needs no Screen
+    Recording permission — use it before changing the capture pipeline, not after.
   - **No Screen Recording grant yet?** `./build.sh --run --simulate` (or *Settings → Video
     → Simulate recording*, or the **Simulate Instead** button on the permission alert) runs
     the whole recording flow — selection overlay, countdown, region dim, floating bar,

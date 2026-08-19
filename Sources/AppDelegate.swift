@@ -25,6 +25,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Dev-only: measure the zoom frame transform and exit. Checked *before*
+        // `terminateIfAlreadyRunning()` — otherwise the menu-bar app already running would
+        // make this process quit itself and print nothing. Needs no permissions: the
+        // benchmark builds its own frames (see `RecordZoomEngine.runBenchmark`).
+        if CommandLine.arguments.contains("--zoom-benchmark") {
+            RecordZoomEngine.runBenchmark()
+            exit(0)
+        }
         if terminateIfAlreadyRunning() { return }
         if Relocator.relocateToUserApplicationsIfNeeded() { return }
 
@@ -164,6 +172,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                  shortcut: nil) { rec.discardFromMenu() })
             // On-screen drawing, for the targets whose video can actually show it. Clear
             // only appears while there is something to clear.
+            if rec.canZoom {
+                entries.append(.item(title: rec.isZoomed ? L("Zoom Out") : L("Zoom In"),
+                                     symbol: rec.isZoomed ? "minus.magnifyingglass" : "plus.magnifyingglass",
+                                     shortcut: s.shortcut(.zoom).displayString) { rec.toggleZoomFromMenu() })
+            }
             if rec.canDraw {
                 entries.append(.item(title: rec.isDrawModeOn ? L("Stop Drawing") : L("Draw on Screen"),
                                      symbol: rec.isDrawModeOn ? "pencil.slash" : "pencil.tip",
@@ -235,6 +248,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let rec = VideoRecordController.shared
             guard rec.isRecording, rec.canDraw else { return }
             rec.toggleDrawFromMenu()
+        })
+        // Zoom the recording in on the cursor / back out. Like the draw binding it stays
+        // registered for the whole session and no-ops when it can't apply, so Settings →
+        // Shortcuts never reports the combination as free.
+        hotKeys.append(HotKey(s.shortcut(.zoom)) {
+            let rec = VideoRecordController.shared
+            guard rec.isRecording, rec.canZoom else { return }
+            rec.toggleZoomFromMenu()
         })
         hotKeys.append(HotKey(s.shortcut(.forceQuit)) { [weak self] in self?.forceQuit() })
         // ⌥ + the record shortcut discards an in-flight recording (with confirm) —
@@ -358,7 +379,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         button.imagePosition = .imageLeading
         button.imageHugsTitle = true
         button.font = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .semibold)
-        let clock = paused ? L("Paused") : Self.clockString(elapsed)
+        // Zoom shows in the menu bar too, since the floating bar is minimized by default and
+        // would otherwise be the only place the state is visible.
+        let zoomLevel = VideoRecordController.shared.zoomLevelInEffect
+        let zoomTag = zoomLevel > 1.001 ? " " + RecordZoomEngine.label(forFactor: zoomLevel) : ""
+        let clock = (paused ? L("Paused") : Self.clockString(elapsed)) + zoomTag
         button.title = simulated ? " SIM " + clock : " " + clock
     }
 
