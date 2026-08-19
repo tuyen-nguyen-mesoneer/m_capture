@@ -183,7 +183,9 @@ private final class DrawOverlayView: NSView {
 
     /// The tool the next mark will be drawn with. Set from Settings on activate and by the
     /// tool letters while drawing.
-    var tool: DrawTool = .pencil
+    var tool: DrawTool = .pencil {
+        didSet { window?.invalidateCursorRects(for: self) }
+    }
 
     /// One drawn mark. Freehand keeps its sampled `points`; the shapes are defined by the
     /// drag's `origin` and `end`, so they can be rubber-banded live and rebuilt on each move.
@@ -203,7 +205,25 @@ private final class DrawOverlayView: NSView {
     private static let fadeDuration: TimeInterval = 0.8
     private static let clearFadeDuration: TimeInterval = 0.15
 
-    private static let pencilCursor = BrandCursor.make(symbol: "pencil.tip", tipHotspot: true) ?? .crosshair
+    private static var cursorCache: [DrawTool: NSCursor] = [:]
+
+    /// The armed tool's cursor, following the editor's convention (`CanvasView`): the
+    /// pencil carries its own glyph with the hotspot at its tip, while every
+    /// drag-to-define tool takes the precise plus — a miniature rectangle or arrow reads
+    /// as an indistinguishable purple blob at cursor size *and* sits on top of the exact
+    /// point being aimed at. Cached: building one composites a tinted symbol and a halo.
+    private static func cursor(for tool: DrawTool) -> NSCursor {
+        if let cached = cursorCache[tool] { return cached }
+        let made: NSCursor
+        switch tool {
+        case .pencil:
+            made = BrandCursor.make(symbol: "pencil.tip", tipHotspot: true) ?? .crosshair
+        case .rectangle, .circle, .line, .arrow:
+            made = BrandCursor.make(symbol: "plus") ?? .crosshair
+        }
+        cursorCache[tool] = made
+        return made
+    }
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -228,7 +248,14 @@ private final class DrawOverlayView: NSView {
 
     override func resetCursorRects() {
         guard isActive else { return }
-        addCursorRect(bounds, cursor: Self.pencilCursor)
+        addCursorRect(bounds, cursor: Self.cursor(for: tool))
+    }
+
+    /// Assert the tool cursor while the pointer is already inside the overlay — a tool
+    /// letter pressed mid-hover changes the rect but nothing re-enters it to apply it.
+    override func cursorUpdate(with event: NSEvent) {
+        guard isActive else { return super.cursorUpdate(with: event) }
+        Self.cursor(for: tool).set()
     }
 
     /// Drawable from the first click even if the app was inactive a moment ago (see

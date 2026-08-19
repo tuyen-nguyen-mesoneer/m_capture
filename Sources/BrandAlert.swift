@@ -20,8 +20,14 @@ final class BrandAlert: NSObject {
     ///     glyph for a destructive confirmation). Omit for a plain text alert.
     ///   - destructive: Button indices rendered in the accent-red destructive style
     ///     instead of primary/secondary — for actions like "Discard" or "Delete".
+    /// The widest a message line may be before the alert wraps it. Callers that compose
+    /// a multi-line body — the updater's change log — truncate against this and pass it
+    /// as `maxWidth`, so their lines are laid out whole rather than folded in half.
+    static let wideMessageWidth: CGFloat = 520
+
     init(title: String, message: String, titles: [String], primary: Int, cancel: Int,
-         icon: String? = nil, destructive: Set<Int> = []) {
+         icon: String? = nil, destructive: Set<Int> = [],
+         maxWidth: CGFloat = 380, attributedMessage: NSAttributedString? = nil) {
         self.cancelIndex = cancel
         self.result = cancel
 
@@ -31,10 +37,16 @@ final class BrandAlert: NSObject {
         let side: CGFloat = 22
         let iconSize: CGFloat = 40, gIconText: CGFloat = 14
         let textX: CGFloat = icon != nil ? side + iconSize + gIconText : side
-        let minTextWidth: CGFloat = 280, maxTextWidth: CGFloat = 380
+        let minTextWidth: CGFloat = 280, maxTextWidth = maxWidth
         let titleFont = Theme.font(14, .bold), msgFont = Theme.font(12)
-        let neededWidth = max(BrandAlert.singleLineWidth(title, font: titleFont),
-                              BrandAlert.singleLineWidth(message, font: msgFont))
+        // Measure a multi-line body line by line. Measuring the whole string as one run
+        // returns the width of every line laid end to end — a nonsense number that just
+        // slams into the cap, so a two-line message and a twelve-line one both came out
+        // at the maximum width regardless of how wide their longest line really was.
+        let widestLine = message.components(separatedBy: "\n")
+            .map { BrandAlert.singleLineWidth($0, font: msgFont) }
+            .max() ?? 0
+        let neededWidth = max(BrandAlert.singleLineWidth(title, font: titleFont), widestLine)
         // +8 pt slack: a wrapping label reserves a few points of internal padding, so it
         // flows onto a second line unless its width clears the single-line text width by
         // that margin (see `wrapping`).
@@ -52,8 +64,8 @@ final class BrandAlert: NSObject {
 
         let titleField = BrandAlert.wrapping(title, font: titleFont,
                                              color: Theme.textPrimary, width: textWidth)
-        let msgField = BrandAlert.wrapping(message, font: msgFont,
-                                           color: Theme.textMuted, width: textWidth)
+        let msgField: NSView = attributedMessage.map { AlertBody($0, width: textWidth) }
+            ?? BrandAlert.wrapping(message, font: msgFont, color: Theme.textMuted, width: textWidth)
         let titleH = titleField.frame.height, msgH = msgField.frame.height
 
         let textBlock = titleH + gTitleMsg + msgH
@@ -189,7 +201,7 @@ final class BrandAlert: NSObject {
         (text as NSString).size(withAttributes: [.font: font]).width
     }
 
-    /// A center-aligned wrapping label, sized to its wrapped height at `width`.
+    /// A left-aligned wrapping label, sized to its wrapped height at `width`.
     private static func wrapping(_ text: String, font: NSFont, color: NSColor, width: CGFloat) -> NSTextField {
         let f = NSTextField(wrappingLabelWithString: text)
         f.font = font
@@ -202,6 +214,34 @@ final class BrandAlert: NSObject {
         let height = f.sizeThatFits(NSSize(width: width, height: .greatestFiniteMagnitude)).height
         f.frame = NSRect(x: 0, y: 0, width: width, height: ceil(height) + 2)
         return f
+    }
+}
+
+/// Draws a styled alert body itself.
+///
+/// `NSTextField` re-derives what it displays from `stringValue` plus the field's *own*
+/// font and colour whenever it re-renders for a window state change — so the first click
+/// on the alert (which makes the panel key) flattened every highlighted version heading
+/// back to plain body text. A view that owns the attributed string has nothing to
+/// re-derive from and cannot lose it.
+private final class AlertBody: NSView {
+    private let text: NSAttributedString
+    private static let options: NSString.DrawingOptions = [.usesLineFragmentOrigin, .usesFontLeading]
+
+    init(_ text: NSAttributedString, width: CGFloat) {
+        self.text = text
+        super.init(frame: .zero)
+        let bounds = text.boundingRect(
+            with: NSSize(width: width, height: .greatestFiniteMagnitude), options: Self.options)
+        frame = NSRect(x: 0, y: 0, width: width, height: ceil(bounds.height) + 2)
+    }
+    required init?(coder: NSCoder) { fatalError() }
+
+    /// Top-down, so `draw(with:)` lays the first line out at the top of the view.
+    override var isFlipped: Bool { true }
+
+    override func draw(_ dirtyRect: NSRect) {
+        text.draw(with: bounds, options: Self.options)
     }
 }
 

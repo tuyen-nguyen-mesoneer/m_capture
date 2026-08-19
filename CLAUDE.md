@@ -76,14 +76,38 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
   (`updateRecordingIndicator`); opening the menu closes any app panel; Quit/Force-Quit
   finalize an active recording first. The record hotkey toggles (stop & save); a
   derived ⌥ variant discards.
-- `Updater.swift` — checks GitHub Releases (`releases`, newest-first) for a newer build;
-  drives the manual "Check for Updates" item and a silent once-a-day launch check.
-  Requires the repo's releases to be readable by the user.
+- `Updater.swift` — checks GitHub Releases (`releases.atom`, newest-first) for a newer
+  build; drives the manual "Check for Updates" item and the silent daily check. The
+  schedule lives in **wall-clock stamps** (`updater.lastSuccessfulCheck` /
+  `updater.lastAttempt`), never in a timer's progress: `checkIfDue(_:)` is the single
+  gate, and six triggers re-read it — launch, a 15-min heartbeat, wake from sleep, app
+  activation, reopen, and the network coming back (`NWPathMonitor`). A `Trigger` says how
+  much of the gate each may skip (24 h scheduled / 1 h user-present / no floor on a
+  network return). **Nothing installs without consent**: a check *offers* the release with
+  what changed, and only an explicit Install downloads and swaps; the relaunch is a
+  second, declinable question. The offer lists **every version the user hasn't got**, each
+  under its own number — not just the newest — since someone who skipped three releases is
+  being asked to take all three (`changeLog(_:)` over the feed entries newer than
+  `effectiveCurrentVersion`; lines parsed out of each entry's `<content>` — GitHub's `<li>`
+  of PR titles, minus the "by @x in #y" trailer — capped at `maxNoteLines`). Whatever the user still owes is one value,
+  `pendingAction` (`.install` / `.relaunch`), driving the menu-bar badge, the menu item
+  and which prompt shows — so those three can't disagree. "Later" snoozes that exact
+  version for 24 h (a newer one always gets through). `relaunchFromMenu()` confirms first
+  *only* when pinned windows would be closed by it. `--update-debug` forgets the stamps and
+  checks now. Requires the repo's releases to be readable by the user.
 - `BrandMenu.swift` — custom mesoneer-styled menu (NSMenu isn't themeable); used for
   the status-item menu and the pin window's right-click.
 - `BrandAlert.swift` — mesoneer-styled alert (the brand counterpart to `NSAlert`) in
   the native layout: icon badge left, left-aligned text, buttons bottom-right with the
-  primary always rightmost (enforced regardless of call-site order). `runModal()` for
+  primary always rightmost (enforced regardless of call-site order). Width comes from the
+  **widest single line**, not the whole message measured as one run — capped at `maxWidth`
+  (380 by default, `wideMessageWidth` = 520 for the updater's change log). Pass
+  `attributedMessage:` for a body that needs more than one style; `message:` still drives
+  measurement, so pass the same characters. Such a body is drawn by `AlertBody`, not an
+  `NSTextField`: a field re-derives what it shows from `stringValue` plus its *own* font
+  and colour on a window state change, so styling survived until the first click and then
+  flattened. Same trap in `BrandToast`: size a label from `sizeThatFits`, never
+  `intrinsicContentSize` — the latter is 3-4 pt short and clips the last glyph. `runModal()` for
   user-initiated confirms; `present(completion:)` (non-modal, self-retaining) for
   anything fired from a background context — nested `runModal` from callbacks can
   wedge the run loop. Panel level sits above the capture overlays.
@@ -92,7 +116,8 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
   purple glyph + soft white halo, no background chip); shared by the capture overlay's
   camera/video cursors and the editor's per-tool cursors.
 - `Theme.swift` — brand palette + fonts; the single styling source.
-- `Logo.swift` — the "m." logo / menu-bar glyph, drawn in code.
+- `Logo.swift` — the "m." logo / menu-bar glyph, drawn in code; `menuBarImage(badged:)`
+  composes the update badge into the same template image so it still tints with the menu bar.
 - `ScreenshotController.swift` — selection-overlay windows; grabs the rect
   *in-process* via ScreenCaptureKit (`SCScreenshotManager`, macOS 14+);
   `deliver(_:)` routes the result per `CaptureBehavior` (editor / save / clipboard).
@@ -206,10 +231,17 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
   gone/unwritable.
 - `SettingsWindow.swift` — the dark Settings panel (`SettingsWindowController.shared`):
   an icon sidebar (macOS System Settings shape) with General / Shortcuts / Capture /
-  Output / Video / About sections, per-row info-dot tips, and a fixed window size
-  measured once against the tallest section. About is a centered identity card (logo,
-  version, MIT/© mesoneer line, Usage Guide + Report a Bug buttons) — the app's only
-  about surface; there is no separate About panel. `--settings-demo` opens it at launch.
+  Output / Video / Live Drawing / About sections, per-row info-dot tips, and a fixed
+  window size measured once against the tallest section. ("Live Drawing" is the
+  draw-*while-recording* section — named for the one property that separates it from the
+  editor's annotation tools, and the only wording short enough for the sidebar in German.)
+  About is a centered identity card (logo, name + version on one line, MIT/© mesoneer
+  line, Usage Guide + Report a Bug buttons, and the updater's "Last checked" as a quiet
+  footer) — the app's only about surface; there is no separate About panel.
+  `--settings-demo` opens it at launch. Sections are built **once** and cached, so
+  anything live (the "Last checked" stamp) must be filled in `refresh()`, not at build
+  time. Checkbox labels must fit `Layout.rowWidth` minus `controlX` — ~248 pt at
+  `Theme.font(12)` — **in all three languages**, or they wrap; measure before wording.
 - `ShortcutRecorder.swift` — click-to-record shortcut field + `Shortcut` glyph helpers.
 - `BrandPopUpButton.swift` — brand `NSPopUpButton` + `BrandControl` shared inset
   geometry aligning the Settings form controls.
@@ -237,6 +269,13 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
   shared `m_capture-release` cert — committed as `certs/m_capture-release.p12` and imported
   with `./tools/import-cert.sh` — gives a stable identity, so the grant persists across
   rebuilds *and* matches the shipped release. See CONTRIBUTING.md.
+- **Never schedule with a bare repeating `Timer`.** Run-loop timers don't fire while the
+  Mac sleeps and their interval counts *awake* time, so the updater's old 24 h timer meant
+  "every few days" on any laptop that gets closed — a release could sit unnoticed for a
+  week with the app running the whole time. Anything periodic stamps a `Date` in
+  `UserDefaults` and re-reads it from several triggers (`Updater.checkIfDue`); the timer
+  is only a heartbeat. Stamps in the *future* (clock correction, restored backup) must
+  count as overdue, or the gate stays shut until the clock catches up.
 - **Capture is in-process** via ScreenCaptureKit (`SCScreenshotManager.captureImage`,
   macOS 14+) — the app grabs the pixels itself, no subprocess. This replaced the old
   `/usr/sbin/screencapture` subprocess, which stalled for *minutes* on managed Macs

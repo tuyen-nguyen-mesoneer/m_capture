@@ -14,15 +14,20 @@ enum BrandToast {
 
         let label = NSTextField(labelWithString: message)
         label.font = Theme.font(13, .semibold); label.textColor = .white
-        let ts = label.intrinsicContentSize
+        // `intrinsicContentSize` comes back 3-4 pt narrower than the field needs to draw
+        // its own text, so a frame cut to it clips the last glyph — which is how the
+        // draw-mode tool toasts came out as "Rectangl" and "Arro". `sizeThatFits` is the
+        // honest width.
+        let ts = label.sizeThatFits(NSSize(width: CGFloat.greatestFiniteMagnitude,
+                                           height: CGFloat.greatestFiniteMagnitude))
         let pad: CGFloat = 12
-        let size = NSSize(width: ts.width + pad * 2, height: ts.height + pad)
+        let size = NSSize(width: ceil(ts.width) + pad * 2, height: ceil(ts.height) + pad)
 
         let pill = NSView(frame: NSRect(origin: .zero, size: size))
         pill.wantsLayer = true
         pill.layer?.backgroundColor = Theme.accentPurple.withAlphaComponent(0.95).cgColor
         pill.layer?.cornerRadius = 8
-        label.frame = NSRect(x: pad, y: pad / 2, width: ts.width, height: ts.height)
+        label.frame = NSRect(x: pad, y: pad / 2, width: ceil(ts.width), height: ceil(ts.height))
         pill.addSubview(label)
 
         let vf = screen.visibleFrame
