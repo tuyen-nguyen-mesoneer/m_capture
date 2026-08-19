@@ -15,6 +15,7 @@ final class VideoRecordBar: NSObject {
     var onDiscard: (() -> Void)?
     var onMinimize: (() -> Void)?
     var onToggleDraw: (() -> Void)?
+    var onToggleZoom: (() -> Void)?
 
     var windowNumber: Int { window.windowNumber }
 
@@ -27,6 +28,7 @@ final class VideoRecordBar: NSObject {
     private let pauseBtn: RecordBarButton
     private let stopBtn: RecordBarButton
     private let drawBtn = BarIconButton()
+    private let zoomBtn = BarIconButton()
 
     // Dot layer exposed so we can add/remove the pulse animation
     private var dotLayer: CALayer { dotView.layer! }
@@ -35,7 +37,8 @@ final class VideoRecordBar: NSObject {
     /// (Settings → Video → Simulate recording): nothing is being captured, and the HUD
     /// must not be mistakable for a real recording. `canDraw` shows the on-screen drawing
     /// tile, which only display-backed targets can use (see `VideoRecordController.canDraw`).
-    init(quality: String, simulated: Bool = false, canDraw: Bool = false) {
+    init(quality: String, simulated: Bool = false, canDraw: Bool = false,
+         canZoom: Bool = false) {
         pauseBtn = RecordBarButton(title: L("Pause"), primary: false)
         stopBtn = RecordBarButton(title: L("Stop"), primary: true)
         super.init()
@@ -143,6 +146,22 @@ final class VideoRecordBar: NSObject {
             card.addSubview(drawBtn)
         }
 
+        // Zoom toggle, left of the drawing tile. Same availability rule as drawing.
+        if canZoom {
+            zoomBtn.isBordered = false
+            zoomBtn.imagePosition = .imageOnly
+            zoomBtn.image = NSImage(systemSymbolName: "plus.magnifyingglass",
+                                    accessibilityDescription: "Zoom while recording")?
+                .withSymbolConfiguration(.init(pointSize: 13, weight: .semibold))
+            zoomBtn.contentTintColor = Theme.textSecondary
+            zoomBtn.frame = NSRect(x: contentRight - badgeW - 10 - miniSize - 8 - miniSize - 8 - miniSize,
+                                   y: statusRowY + (statusRowH - miniSize) / 2,
+                                   width: miniSize, height: miniSize)
+            zoomBtn.target = self; zoomBtn.action = #selector(zoomPressed)
+            zoomBtn.toolTip = L("Zoom While Recording")
+            card.addSubview(zoomBtn)
+        }
+
         // ── Row 2: actions — two equal halves spanning the content width ────
         let gap: CGFloat = 12
         let buttonW = (contentRight - sidePad - gap) / 2      // 148
@@ -160,10 +179,20 @@ final class VideoRecordBar: NSObject {
 
     @objc private func minimizePressed() { onMinimize?() }
     @objc private func drawPressed() { onToggleDraw?() }
+    @objc private func zoomPressed() { onToggleZoom?() }
 
     /// Reflect draw mode in the pencil tile: the toggle can come from the hotkey or the
     /// status menu, not just this button, so the tint is set from the controller's callback
     /// rather than on click.
+    /// Reflect zoom state in the magnifier tile, and flip the glyph so the tile says what
+    /// pressing it will do next.
+    func setZoomActive(_ active: Bool) {
+        zoomBtn.contentTintColor = active ? Theme.lavender : Theme.textSecondary
+        zoomBtn.image = NSImage(systemSymbolName: active ? "minus.magnifyingglass" : "plus.magnifyingglass",
+                                accessibilityDescription: "Zoom while recording")?
+            .withSymbolConfiguration(.init(pointSize: 13, weight: .semibold))
+    }
+
     func setDrawActive(_ active: Bool) {
         drawBtn.contentTintColor = active ? Theme.lavender : Theme.textSecondary
     }

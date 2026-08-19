@@ -98,13 +98,14 @@ struct Shortcut: Equatable {
 
 /// The capture actions that each have a rebindable global hotkey.
 enum ShortcutAction: String, CaseIterable {
-    case screenshot, record, draw, forceQuit
+    case screenshot, record, draw, zoom, forceQuit
 
     var label: String {
         switch self {
         case .screenshot:  return L("Screenshot")
         case .record:      return L("Record")
         case .draw:        return L("Draw on Screen")
+        case .zoom:        return L("Zoom While Recording")
         case .forceQuit:   return L("Force Quit")
         }
     }
@@ -115,6 +116,7 @@ enum ShortcutAction: String, CaseIterable {
         case .screenshot:  return Shortcut(keyCode: UInt32(kVK_ANSI_S), modifiers: cs)
         case .record:      return Shortcut(keyCode: UInt32(kVK_ANSI_R), modifiers: cs)
         case .draw:        return Shortcut(keyCode: UInt32(kVK_ANSI_D), modifiers: cs)
+        case .zoom:        return Shortcut(keyCode: UInt32(kVK_ANSI_Z), modifiers: cs)
         case .forceQuit:   return Shortcut(keyCode: UInt32(kVK_ANSI_Q), modifiers: UInt32(controlKey | optionKey | shiftKey))
         }
     }
@@ -184,6 +186,25 @@ enum VideoAudioSource: String, CaseIterable {
     }
     var capturesSystemAudio: Bool { self == .system || self == .both }
     var capturesMic: Bool { self == .mic || self == .both }
+}
+
+/// How far live recording zoom magnifies when engaged.
+enum VideoZoomFactor: String, CaseIterable {
+    case oneAndHalf, two, three
+    var label: String {
+        switch self {
+        case .oneAndHalf: return "1.5×"
+        case .two:        return "2×"
+        case .three:      return "3×"
+        }
+    }
+    var factor: CGFloat {
+        switch self {
+        case .oneAndHalf: return 1.5
+        case .two:        return 2
+        case .three:      return 3
+        }
+    }
 }
 
 /// A tool for the on-screen drawing overlay (draw mode while recording). Single letters
@@ -269,6 +290,7 @@ final class Settings {
         static let simulateRecording = "simulateRecording"
         static let drawColor = "drawColor", drawStroke = "drawStroke"
         static let drawFade = "drawFade", drawTool = "drawTool"
+        static let videoZoomFactor = "videoZoomFactor"
         static let lastRegion = "lastRegion"
         static let appLanguage = "appLanguage"
         static let hideDock = "hideDockIcon"
@@ -420,6 +442,12 @@ final class Settings {
         set { d.set(newValue, forKey: Key.videoBarMinimized) }
     }
 
+    /// How far live zoom magnifies while recording (default 2×).
+    var videoZoomFactor: VideoZoomFactor {
+        get { d.string(forKey: Key.videoZoomFactor).flatMap(VideoZoomFactor.init) ?? .two }
+        set { d.set(newValue.rawValue, forKey: Key.videoZoomFactor) }
+    }
+
     /// Colour of marks drawn on screen while recording. Stored as `RRGGBB` rather than an
     /// archived `NSColor`, so the preference stays readable and isn't tied to AppKit's
     /// archive format.
@@ -475,7 +503,9 @@ final class Settings {
     /// `NSColor` ⇄ "RRGGBB", via sRGB so a colour picked in any space round-trips to the
     /// same on-screen result.
     static func hex(_ color: NSColor) -> String {
-        let c = color.usingColorSpace(.sRGB) ?? .white
+        // The fallback must itself be an sRGB colour: `redComponent` and friends trap on a
+        // catalog colour like `NSColor.white`, and the palette hands us exactly those.
+        let c = color.usingColorSpace(.sRGB) ?? NSColor(srgbRed: 1, green: 1, blue: 1, alpha: 1)
         return String(format: "%02X%02X%02X",
                       Int(round(c.redComponent * 255)),
                       Int(round(c.greenComponent * 255)),

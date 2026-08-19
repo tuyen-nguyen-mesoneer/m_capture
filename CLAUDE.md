@@ -177,6 +177,17 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
 - `TrimWindow.swift` — lossless post-recording trim panel: `AVPlayerLayer` preview,
   custom in/out `TrimSlider`, passthrough `AVAssetExportSession` over the original file;
   opened by "Stop & Trim…" and History's Trim action.
+- `RecordZoomEngine.swift` — live recording zoom: crops each captured frame to a viewport
+  and scales it back to the output size via one CoreImage pass into a private 420v
+  `CVPixelBufferPool`, hooked at the single adaptor append in `VideoRecordSession`. Owns the
+  ease state machine (smoothstep, wall clock — a pause needs no special case since frames stop
+  reaching the transform), cursor sampling via `CGEvent` (safe off the main thread) and the
+  time-constant follow smoothing with a dead-zone. Built in `start()` because
+  `SCContentFilter.pointPixelScale` is the only authoritative pixels-per-point. Viewport
+  geometry is forced **even** — 420v chroma is 2×2 subsampled, so an odd crop shifts colour
+  against luma. Also holds `ZoomIndicatorWindow` (the excluded-from-capture viewport frame) and
+  `--zoom-benchmark`, which times the transform on synthetic frames with no permissions needed.
+  Region/whole-screen targets only: a window filter has no fixed display rect to map a cursor into.
 - `ClickVisualizer.swift` — expanding ripple windows at mouse clicks while recording
   (global `NSEvent` monitor; deliberately *not* excluded from the stream).
 - `HistoryWindow.swift` — the History panel: newest captures from the save folder as

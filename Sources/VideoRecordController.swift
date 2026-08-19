@@ -55,6 +55,18 @@ final class VideoRecordController {
     /// On-screen drawing for this recording (⌃⇧D). Non-nil only for region and whole-screen
     /// targets — see `canDraw`.
     private var drawOverlay: RecordDrawOverlay?
+    /// Shows which sub-rect is being recorded while zoomed. Created before the stream starts
+    /// so its windowNumber can join the exclusion list — the list is fixed at stream start,
+    /// so a window made later could not be kept out of the video.
+    private var zoomIndicator: ZoomIndicatorWindow?
+    /// Drives the indicator while zoom is active. Separate from the 4 Hz HUD tick because a
+    /// 250 ms indicator would visibly stutter against a camera gliding at 30–60 fps.
+    private var zoomTicker: DispatchSourceTimer?
+    /// Simulate mode has no capture session to own an engine, so the controller owns one —
+    /// which is what makes the shortcut, the easing and the follow testable without the
+    /// Screen Recording grant. Its scale is the screen's, not SCK's authoritative value.
+    private var simZoomEngine: RecordZoomEngine?
+    private var zoomTargetIsRegion = false
     private var updateTimer: DispatchSourceTimer?
     private var overlays: [OverlayWindow] = []
     private var dimWindows: [RecordingDimWindow] = []
@@ -128,6 +140,62 @@ final class VideoRecordController {
     var hasDrawings: Bool { drawOverlay?.hasStrokes == true }
     /// Turn drawing on/off. Reached from the draw hotkey, the bar's pencil, and the menu.
     func toggleDrawFromMenu() { drawOverlay?.toggle() }
+
+    /// Whether this recording can zoom. Region and whole-screen targets can; a window target
+    /// has no fixed display rect to map the cursor into, so it cannot.
+    var canZoom: Bool { zoomTargetIsRegion }
+    /// Whether zoom is engaged right now (drives the menu title and the bar's magnifier).
+    var isZoomed: Bool { zoomEngineInUse?.isZoomed == true }
+
+    /// The engine driving this recording — the session's in a real recording, the
+    /// controller's own in simulate mode.
+    private var zoomEngineInUse: RecordZoomEngine? { session?.zoomEngine ?? simZoomEngine }
+
+    /// Toggle zoom, anchored on the cursor's position at this instant.
+    func toggleZoomFromMenu() {
+        guard let engine = zoomEngineInUse else { return }
+        engine.toggle()
+        // Simulate mode has no frames to advance the engine, so the ticker does it there.
+        startZoomTicker(advance: session == nil)
+        let zoomed = engine.isZoomed
+        bar?.setZoomActive(zoomed)
+        // The bar starts minimized by default, so without this a hotkey press would have no
+        // acknowledgement until the viewport outline caught up.
+        BrandToast.show(zoomed
+            ? String(format: L("Zoom %@"), RecordZoomEngine.label(forFactor: Settings.shared.videoZoomFactor.factor))
+            : L("Zoom off"))
+    }
+
+    /// The zoom factor in effect, for the menu-bar indicator. 1 when not zoomed.
+    var zoomLevelInEffect: CGFloat { zoomEngineInUse?.currentZoomLevel ?? 1 }
+
+    /// Show and move the viewport indicator while zoom is active, then stop once the camera
+    /// has fully eased back out (so an idle recording pays nothing).
+    private func startZoomTicker(advance: Bool) {
+        guard zoomTicker == nil else { return }
+        let t = DispatchSource.makeTimerSource(queue: .main)
+        t.schedule(deadline: .now(), repeating: 1.0 / 30)
+        t.setEventHandler { [weak self] in
+            guard let self, let engine = self.zoomEngineInUse else { return }
+            if advance { _ = engine.advanceAndViewport() }
+            let level = engine.currentZoomLevel
+            // Stop only once the ease has fully returned to 1x. Keying this off a nil
+            // viewport instead would kill the indicator in the gap before the first frame
+            // arrives (toggling during the countdown, say) while the engine stayed zoomed.
+            if !engine.isZoomed && level <= 1.001 {
+                self.zoomIndicator?.hide()
+                self.zoomTicker?.cancel()
+                self.zoomTicker = nil
+                self.bar?.setZoomActive(false)
+                return
+            }
+            if let rect = engine.latestIndicatorRect() {
+                self.zoomIndicator?.show(rect: rect, factor: level)
+            }
+        }
+        t.resume()
+        zoomTicker = t
+    }
     func clearDrawingsFromMenu() { drawOverlay?.clear() }
     /// Hide/show the floating record bar without ending the recording.
     func setBarHidden(_ hidden: Bool) { bar?.setVisible(!hidden) }
@@ -357,12 +425,14 @@ final class VideoRecordController {
         // the bar's pencil tile is present only for those.
         let targetCanDraw: Bool
         if case .region = target { targetCanDraw = true } else { targetCanDraw = false }
+        // Zoom needs a fixed display rect to map the cursor into — same constraint as drawing.
+        zoomTargetIsRegion = targetCanDraw
 
         // Phase 2a — create/position the bar FIRST so its windowNumber is available
         // before SCStream begins. By default it starts minimized to the menu bar (the
         // timer + stop/pause live in the status item); Settings → Video toggles that.
         let recordBar = VideoRecordBar(quality: qualityLetter, simulated: isSimulating,
-                                       canDraw: targetCanDraw)
+                                       canDraw: targetCanDraw, canZoom: targetCanDraw)
         if Settings.shared.videoStartBarMinimized {
             recordBar.prepare(near: barScreen)
         } else {
@@ -374,7 +444,15 @@ final class VideoRecordController {
         // bounds are unmistakable, for region, whole-screen and window targets alike. The
         // dim windows are excluded from the region/display capture below; a window filter
         // already captures only the target window, so they never reach that video.
+        // The indicator must exist before the stream starts to be excludable at all (the
+        // filter's exclusion list is resolved once, in `VideoRecordSession.start()`). Created
+        // hidden; the ticker reveals it when zoom engages.
+        if case .region = target {
+            let indicator = ZoomIndicatorWindow()
+            zoomIndicator = indicator
+        }
         var excluded = [CGWindowID(recordBar.windowNumber)]
+        if let indicator = zoomIndicator { excluded.append(CGWindowID(indicator.windowNumber)) }
         switch target {
         case let .region(rect, _):
             excluded += showDim(forRegion: rect)
@@ -388,6 +466,15 @@ final class VideoRecordController {
         // no output file, just a wall-clock stand-in driving the same HUD.
         if isSimulating {
             simClock = SimulatedRecordingClock()
+            // No capture session exists to own an engine, so build one here purely to drive
+            // the indicator: it makes the shortcut, the easing and the cursor follow testable
+            // while the Screen Recording grant is pending. `backingScaleFactor` stands in for
+            // SCK's authoritative pixels-per-point, which only a real stream can provide.
+            if case let .region(rect, screen) = target {
+                simZoomEngine = RecordZoomEngine(region: rect,
+                                                 pixelScale: screen.backingScaleFactor,
+                                                 factor: Settings.shared.videoZoomFactor.factor)
+            }
         } else {
             let url = videoURL()
             currentURL = url
@@ -397,7 +484,8 @@ final class VideoRecordController {
                 audioSource: audioSource,
                 outputURL: url,
                 excludedWindowIDs: excluded,
-                contentPrefetch: contentPrefetch
+                contentPrefetch: contentPrefetch,
+                zoomFactor: targetCanDraw ? Settings.shared.videoZoomFactor.factor : nil
             )
             session = recordSession
             recordSession.onUnexpectedStop = { [weak self] reason in self?.handleUnexpectedStop(reason) }
@@ -420,6 +508,7 @@ final class VideoRecordController {
         recordBar.onDiscard = { [weak self] in self?.discardRecording() }
         recordBar.onMinimize = { [weak self] in self?.setBarHidden(true) }
         recordBar.onToggleDraw = { [weak self] in self?.toggleDrawFromMenu() }
+        recordBar.onToggleZoom = { [weak self] in self?.toggleZoomFromMenu() }
 
         if Settings.shared.videoShowClicks { clickVisualizer.start() }
 
@@ -482,6 +571,12 @@ final class VideoRecordController {
         bar = nil
         drawOverlay?.tearDown()
         drawOverlay = nil
+        zoomTicker?.cancel()
+        zoomTicker = nil
+        zoomIndicator?.tearDown()
+        zoomIndicator = nil
+        simZoomEngine = nil
+        zoomTargetIsRegion = false
         dismissDim()
         clearRecordingUI()
     }

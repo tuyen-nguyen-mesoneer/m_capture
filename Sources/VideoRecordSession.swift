@@ -40,14 +40,25 @@ final class VideoRecordSession: NSObject, @unchecked Sendable {
          audioSource: VideoAudioSource,
          outputURL: URL,
          excludedWindowIDs: [CGWindowID] = [],
-         contentPrefetch: Task<SCShareableContent?, Never>? = nil) {
+         contentPrefetch: Task<SCShareableContent?, Never>? = nil,
+         zoomFactor: CGFloat? = nil) {
         self.target = target
         self.quality = quality
         self.audioSource = audioSource
         self.outputURL = outputURL
         self.excludedWindowIDs = excludedWindowIDs
         self.contentPrefetch = contentPrefetch
+        self.zoomFactor = zoomFactor
     }
+
+    /// Requested zoom level, or nil for no zoom. The engine itself is built in `start()`,
+    /// which is the only place the authoritative pixels-per-point is known.
+    private let zoomFactor: CGFloat?
+
+    /// Live zoom for this recording, or nil if zoom isn't available for the target. Assigned
+    /// once during `start()`, before any frame reaches `append`, then only read — the same
+    /// lifetime the writer and stream references already have.
+    private(set) var zoomEngine: RecordZoomEngine?
 
     /// Optional `SCShareableContent` warm-up started when the selection overlay
     /// opened. Enumerating shareable content costs 0.5–2 s; consuming a prefetch
@@ -215,6 +226,15 @@ final class VideoRecordSession: NSObject, @unchecked Sendable {
         self.videoInput   = videoInput
         self.videoAdaptor = adaptor
         self.audioInput   = audioInput
+
+        // Live zoom: built here because `SCContentFilter.pointPixelScale` is the only
+        // authoritative pixels-per-point (see the note above — `CGDisplayMode` is ambiguous on
+        // some externals), and a wrong scale would map the cursor to the wrong part of the
+        // frame. Region targets only: a window filter's frame isn't a fixed display rect, so
+        // there is nothing stable to map a global cursor position into.
+        if let factor = zoomFactor, case let .region(region, _) = target {
+            zoomEngine = RecordZoomEngine(region: region, pixelScale: scale, factor: factor)
+        }
 
         // Start mic capture before SCStream so both sources are ready.
         if audioSource.capturesMic { startMicCapture() }
@@ -476,7 +496,16 @@ final class VideoRecordSession: NSObject, @unchecked Sendable {
                   let imageBuffer = CMSampleBufferGetImageBuffer(buffer) else {
                 return  // No pixel data — drop silently
             }
-            ok = adaptor.append(imageBuffer, withPresentationTime: normPTS)
+            // Live zoom: crop to the viewport and scale back to the output size. Zoomed out,
+            // `advanceAndViewport()` returns nil and the frame is appended untouched, so the
+            // common case costs one comparison. A failed transform also falls through to the
+            // original frame — a dropped frame would be worse than an un-zoomed one.
+            var outBuffer = imageBuffer
+            if let engine = zoomEngine, let viewport = engine.advanceAndViewport(),
+               let zoomed = engine.transform(imageBuffer, viewport: viewport) {
+                outBuffer = zoomed
+            }
+            ok = adaptor.append(outBuffer, withPresentationTime: normPTS)
         } else {
             guard let normalised = buffer.subtractingPresentationTimeStamp(totalSkip) else {
                 print("[VRS] subtractingPresentationTimeStamp returned nil — buffer dropped")

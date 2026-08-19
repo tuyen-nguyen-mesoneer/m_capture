@@ -33,6 +33,7 @@ final class SettingsWindowController: NSObject {
     private var videoClicksCheck: NSButton!
     private var videoBarMinCheck: NSButton!
     private var videoSimulateCheck: NSButton!
+    private var videoZoomPopup: NSPopUpButton!
     private var lastCheckedLabel: NSTextField!
     private var drawColorRow: DrawColorRow!
     private var drawStrokePopup: NSPopUpButton!
@@ -106,6 +107,7 @@ final class SettingsWindowController: NSObject {
         videoFrameRatePopup = popup(["30 fps", "60 fps"], #selector(videoFrameRateChanged))
         videoCountdownPopup = popup(CaptureDelay.allCases.map { $0.label }, #selector(videoCountdownChanged))
         videoClicksCheck = checkbox(L("Show mouse clicks in recordings"), #selector(videoClicksToggled))
+        videoZoomPopup = popup(VideoZoomFactor.allCases.map { $0.label }, #selector(videoZoomChanged))
         videoBarMinCheck = checkbox(L("Start with the recording bar minimized"), #selector(videoBarMinToggled))
         videoSimulateCheck = checkbox(L("Simulate recording (nothing is saved)"),
                                       #selector(videoSimulateToggled))
@@ -151,6 +153,8 @@ final class SettingsWindowController: NSObject {
                     tip: L("60 fps captures motion more smoothly at roughly twice the file size.")),
                 row(L("Countdown"), videoCountdownPopup,
                     tip: L("Countdown shown over the selected region before recording starts.")),
+                row(L("Zoom level"), videoZoomPopup,
+                    tip: L("Magnification when zoom is toggled while recording. Only the video zooms — your screen is untouched.")),
                 checkRow(videoClicksCheck),
                 checkRow(videoBarMinCheck),
                 checkRow(videoSimulateCheck),
@@ -363,6 +367,7 @@ final class SettingsWindowController: NSObject {
         case .screenshot:  return L("Drag to select a region, or press Space to capture a window or screen.")
         case .record:      return L("Drag to select a region, or press Space to record a window or screen.")
         case .draw:        return L("While recording, sketch directly on the screen; strokes fade after a few seconds and appear in the video.")
+        case .zoom:        return L("While recording, zoom the video in on the cursor and back out again. Your own screen is not magnified.")
         case .forceQuit:   return L("Force-quits m_capture and any duplicate instances — use if the menu bar icon is stuck or duplicated.")
         }
     }
@@ -522,6 +527,7 @@ final class SettingsWindowController: NSObject {
         videoCountdownPopup.selectItem(at: CaptureDelay.allCases.firstIndex(of: s.videoCountdown) ?? 0)
         videoClicksCheck.state = s.videoShowClicks ? .on : .off
         videoBarMinCheck.state = s.videoStartBarMinimized ? .on : .off
+        videoZoomPopup.selectItem(at: VideoZoomFactor.allCases.firstIndex(of: s.videoZoomFactor) ?? 1)
         videoSimulateCheck.state = s.simulateRecording ? .on : .off
         // `--simulate-recording` pins the mode on for the whole launch, so the checkbox
         // shows the state but can't fight it.
@@ -703,6 +709,10 @@ final class SettingsWindowController: NSObject {
 
     @objc private func videoBarMinToggled() {
         Settings.shared.videoStartBarMinimized = (videoBarMinCheck.state == .on)
+    }
+
+    @objc private func videoZoomChanged() {
+        Settings.shared.videoZoomFactor = VideoZoomFactor.allCases[videoZoomPopup.indexOfSelectedItem]
     }
 
     @objc private func drawStrokeChanged() {
