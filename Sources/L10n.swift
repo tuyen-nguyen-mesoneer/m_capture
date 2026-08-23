@@ -191,6 +191,10 @@ enum L10n {
         "General": "Allgemein",
         "Shortcuts": "Kurzbefehle",
         "Capture": "Aufnahme",
+        "While recording": "Während der Aufnahme",
+        "App": "App",
+        "Draw": "Zeichnen",
+        "Zoom": "Zoomen",
         "Output": "Ausgabe",
         "Video": "Video",
         "Capture delay": "Auslöseverzögerung",
@@ -249,7 +253,8 @@ enum L10n {
         "Magnification when zoom is toggled while recording. Only the video zooms — your screen is untouched.":
             "Vergrösserung beim Zoomen während der Aufnahme. Nur das Video zoomt — Ihr Bildschirm bleibt unverändert.",
         // ── Drawing on screen ────────────────────────────────────────────
-        "Live Drawing": "Live-Zeichnen",
+        "Drawing": "Zeichnen",
+        "Drawing keys": "Zeichentasten",
         "Pencil": "Stift",
         "Rectangle": "Rechteck",
         "Circle": "Kreis",
@@ -534,6 +539,10 @@ enum L10n {
         "General": "Chung",
         "Shortcuts": "Phím tắt",
         "Capture": "Chụp",
+        "While recording": "Khi đang ghi hình",
+        "App": "Ứng dụng",
+        "Draw": "Vẽ",
+        "Zoom": "Thu phóng",
         "Output": "Xuất",
         "Video": "Video",
         "Capture delay": "Trễ khi chụp",
@@ -592,7 +601,8 @@ enum L10n {
         "Magnification when zoom is toggled while recording. Only the video zooms — your screen is untouched.":
             "Mức phóng khi bật thu phóng trong lúc ghi hình. Chỉ video được phóng — màn hình của bạn không thay đổi.",
         // ── Drawing on screen ────────────────────────────────────────────
-        "Live Drawing": "Vẽ trực tiếp",
+        "Drawing": "Vẽ lên màn hình",
+        "Drawing keys": "Phím vẽ",
         "Pencil": "Bút chì",
         "Rectangle": "Hình chữ nhật",
         "Circle": "Hình tròn",

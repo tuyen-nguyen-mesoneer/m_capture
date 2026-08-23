@@ -5,7 +5,7 @@ set -euo pipefail
 DIR="$(cd "$(dirname "$0")" && pwd)"
 BUILD="$DIR/build"
 APP="$BUILD/m_capture.app"
-VERSION="1.7.1"
+VERSION="1.7.2"
 
 # `./build.sh --run` quits any running instance, relaunches from build/, and
 # skips the DMG — the fast dev loop. Plain `./build.sh` builds the DMG too.

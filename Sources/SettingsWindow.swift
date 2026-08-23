@@ -117,6 +117,38 @@ final class SettingsWindowController: NSObject {
         drawFadePopup = popup(DrawFade.allCases.map { $0.label }, #selector(drawFadeChanged))
         drawKeyFields = DrawTool.allCases.map { DrawKeyField(tool: $0) }
 
+        videoSubRows = [
+            [
+                row(L("Quality"), videoQualityPopup),
+                row(L("Audio"), videoAudioSourcePopup),
+                row(L("Frame rate"), videoFrameRatePopup,
+                    tip: L("60 fps captures motion more smoothly at roughly twice the file size.")),
+                row(L("Countdown"), videoCountdownPopup,
+                    tip: L("Countdown shown over the selected region before recording starts.")),
+                row(L("Zoom level"), videoZoomPopup,
+                    tip: L("Magnification when zoom is toggled while recording. Only the video zooms — your screen is untouched.")),
+                checkRow(videoClicksCheck),
+                checkRow(videoBarMinCheck),
+                checkRow(videoSimulateCheck),
+            ],
+            // The marks' look, how long they last, and the letters that pick a tool
+            // once draw mode is on.
+            [
+                row(L("Color"), drawColorRow,
+                    tip: L("Color of marks drawn on screen while recording.")),
+                row(L("Thickness"), drawStrokePopup),
+                row(L("Fade after"), drawFadePopup,
+                    tip: L("How long a finished mark stays before it fades. \"Never\" keeps marks until you clear them with ⌫.")),
+                groupHeading(L("Drawing keys"), firstInSection: false),
+            ] + zip(DrawTool.allCases, drawKeyFields).map { tool, field in
+                row(tool.label, field,
+                    tip: L("Press this key while drawing to switch to this tool. Draw mode reserves Esc to exit and ⌫ to clear."))
+            },
+        ]
+        videoTabBar = SectionTabBar(titles: [L("Recording"), L("Drawing")],
+                                    width: Layout.rowWidth)
+        videoTabBar.onSelect = { [weak self] i in self?.selectVideoSubTab(i) }
+
         // One tab per former section — the flat list had grown too tall to scan.
         sections = [
             (L("General"), [
@@ -129,8 +161,7 @@ final class SettingsWindowController: NSObject {
                 row(L("After capture"), behaviorPopup,
                     tip: L("Action performed immediately after capture: open the editor, save to a file, or copy to the clipboard.")),
             ]),
-            (L("Shortcuts"), zip(ShortcutAction.allCases, shortcutFields)
-                .map { action, field in row(action.label, field, tip: Self.shortcutTip(action)) }),
+            (L("Shortcuts"), shortcutRows()),
             (L("Capture"), [
                 checkRow(cursorCheck, indented: false),
                 checkRow(soundCheck, indented: false),
@@ -146,31 +177,11 @@ final class SettingsWindowController: NSObject {
                 radiusRow,
                 checkRow(autoCopyCheck),
             ]),
-            (L("Video"), [
-                row(L("Quality"), videoQualityPopup),
-                row(L("Audio"), videoAudioSourcePopup),
-                row(L("Frame rate"), videoFrameRatePopup,
-                    tip: L("60 fps captures motion more smoothly at roughly twice the file size.")),
-                row(L("Countdown"), videoCountdownPopup,
-                    tip: L("Countdown shown over the selected region before recording starts.")),
-                row(L("Zoom level"), videoZoomPopup,
-                    tip: L("Magnification when zoom is toggled while recording. Only the video zooms — your screen is untouched.")),
-                checkRow(videoClicksCheck),
-                checkRow(videoBarMinCheck),
-                checkRow(videoSimulateCheck),
-            ]),
-            // Drawing on screen while recording — the marks' look, how long they last, and
-            // the letters that pick a tool once draw mode is on.
-            (L("Live Drawing"), [
-                row(L("Color"), drawColorRow,
-                    tip: L("Color of marks drawn on screen while recording.")),
-                row(L("Thickness"), drawStrokePopup),
-                row(L("Fade after"), drawFadePopup,
-                    tip: L("How long a finished mark stays before it fades. \"Never\" keeps marks until you clear them with ⌫.")),
-            ] + zip(DrawTool.allCases, drawKeyFields).map { tool, field in
-                row(tool.label, field,
-                    tip: L("Press this key while drawing to switch to this tool. Draw mode reserves Esc to exit and ⌫ to clear."))
-            }),
+            // Everything about a recording under one sidebar item — drawing does nothing
+            // outside a recording, so a tab of its own read as a separate feature. The two
+            // halves are each a section's worth of rows, so they sit behind sub-tabs
+            // rather than stacked: stacked, every other tab inherited their combined height.
+            (L("Video"), [videoTabBar] + videoSubRows[0]),
             // Meta actions that used to crowd the menu-bar menu.
             (L("About"), [aboutCard()]),
         ]
@@ -178,7 +189,7 @@ final class SettingsWindowController: NSObject {
         // Icon sidebar (macOS System Settings shape): section list on the left,
         // the active section's rows on the right.
         let sidebarIcons = ["gearshape", "command", "viewfinder", "tray.and.arrow.down", "video",
-                            "pencil.tip", "info.circle"]
+                            "info.circle"]
         tabButtons = sections.enumerated().map { i, section in
             let b = SettingsSidebarItem(title: section.title, symbol: sidebarIcons[i])
             b.onClick = { [weak self] in self?.selectTab(i) }
@@ -213,8 +224,9 @@ final class SettingsWindowController: NSObject {
         let stack = NSStackView(views: [])
         stack.orientation = .vertical
         stack.alignment = .leading
-        stack.spacing = 12
+        stack.spacing = Layout.rowGap
         stack.translatesAutoresizingMaskIntoConstraints = false
+
         content.addSubview(stack)
 
         NSLayoutConstraint.activate([
@@ -234,8 +246,7 @@ final class SettingsWindowController: NSObject {
             sectionTitle.topAnchor.constraint(equalTo: content.topAnchor, constant: Layout.topInset + 6),
             stack.leadingAnchor.constraint(equalTo: content.leadingAnchor,
                                            constant: Layout.sidebarWidth + Layout.sideMargin),
-            stack.topAnchor.constraint(equalTo: content.topAnchor,
-                                       constant: Layout.topInset + 6 + Layout.titleHeight + Layout.tabGap),
+            stack.topAnchor.constraint(equalTo: content.topAnchor, constant: Layout.chromeHeight),
         ])
         rowStack = stack
         gradientLayer = gradient
@@ -247,14 +258,20 @@ final class SettingsWindowController: NSObject {
     }
 
     private var sections: [(title: String, rows: [NSView])] = []
+    /// Video's two row sets (recording / drawing) and the bar that switches them.
+    private var videoSubRows: [[NSView]] = []
+    private var videoTabBar: SectionTabBar!
+    private var videoSub = 0
+    private var videoSection: Int { sections.firstIndex { $0.title == L("Video") } ?? -1 }
     private var tabButtons: [SettingsSidebarItem] = []
     private var rowStack: NSStackView!
     private var sectionTitleLabel: NSTextField!
     private var gradientLayer: CAGradientLayer?
     private var activeTab = 0
 
-    /// Swap the visible section. The panel keeps one fixed size — measured once
-    /// against the tallest section — so switching never resizes or shifts it.
+    /// Swap the visible section. The panel keeps one fixed size — measured once against
+    /// the tallest row set, sub-tab variants included — so switching never resizes or
+    /// shifts it.
     private func selectTab(_ index: Int) {
         guard let w = window, let content = w.contentView else { return }
         activeTab = index
@@ -266,19 +283,41 @@ final class SettingsWindowController: NSObject {
             // First layout: measure every section and lock the window to the tallest.
             var tallest: CGFloat = 0
             for (i, _) in sections.enumerated() {
-                rowStack.setViews(sections[i].rows, in: .top)
-                content.layoutSubtreeIfNeeded()
-                tallest = max(tallest, rowStack.fittingSize.height)
+                for variant in rowVariants(i) {
+                    rowStack.setViews(variant, in: .top)
+                    content.layoutSubtreeIfNeeded()
+                    tallest = max(tallest, rowStack.fittingSize.height)
+                }
             }
             rowStack.setViews(sections[index].rows, in: .top)
-            fixedHeight = ceil(Layout.topInset + 6 + Layout.titleHeight + Layout.tabGap
-                               + tallest + Layout.bottomInset)
+            fixedHeight = ceil(Layout.chromeHeight + tallest + Layout.bottomInset)
             w.setContentSize(NSSize(width: Layout.windowWidth, height: fixedHeight))
             gradientLayer?.frame = content.bounds
         }
         content.layoutSubtreeIfNeeded()
     }
     private var fixedHeight: CGFloat = 0
+
+    /// Swap Video's row set. Only the rows change — the window is already sized to the
+    /// taller of the two, so switching sub-tabs never resizes the panel either.
+    private func selectVideoSubTab(_ index: Int) {
+        guard videoSection >= 0, index < videoSubRows.count else { return }
+        videoSub = index
+        videoTabBar.selected = index
+        hideTip()
+        sections[videoSection].rows = [videoTabBar] + videoSubRows[index]
+        if activeTab == videoSection {
+            rowStack.setViews(sections[activeTab].rows, in: .top)
+            window?.contentView?.layoutSubtreeIfNeeded()
+        }
+    }
+
+    /// Every row set a section can show — one, except Video, which has a set per sub-tab.
+    /// The panel is measured against all of them so no switch can resize it.
+    private func rowVariants(_ index: Int) -> [[NSView]] {
+        guard index == videoSection else { return [sections[index].rows] }
+        return videoSubRows.map { [videoTabBar] + $0 }
+    }
 
     private func checkbox(_ title: String, _ action: Selector) -> NSButton {
         let b = PointerButton(checkboxWithTitle: title, target: self, action: action)
@@ -331,11 +370,19 @@ final class SettingsWindowController: NSObject {
     private enum Layout {
         static let labelWidth: CGFloat = 116
         static let gap: CGFloat = 14
-        static let topInset: CGFloat = 36
-        static let bottomInset: CGFloat = 24
+        static let topInset: CGFloat = 32
+        static let bottomInset: CGFloat = 20
         static let sidebarWidth: CGFloat = 156
         static let titleHeight: CGFloat = 16
-        static let tabGap: CGFloat = 18
+        static let tabGap: CGFloat = 16
+        /// Every row is this tall and this far from the next, whatever it holds — the
+        /// form controls are all 24 pt, but a checkbox's own height is 16, so rows sized
+        /// to their content gave checkbox blocks a visibly tighter pitch than popup ones.
+        static let rowHeight: CGFloat = 24
+        static let rowGap: CGFloat = 10
+        /// A group heading takes one row's height plus a breath above it, so the heading
+        /// sits with the rows it introduces rather than floating between two groups.
+        static let headingGap: CGFloat = 12
         static var controlX: CGFloat { labelWidth + gap }
         static let infoCol: CGFloat = 24
         static let sideMargin: CGFloat = 24
@@ -345,6 +392,8 @@ final class SettingsWindowController: NSObject {
         static let rowWidth: CGFloat = 400
         /// Controls stop short of the right edge, leaving `infoCol` for the ⓘ marker.
         static var controlWidth: CGFloat { rowWidth - controlX - infoCol }
+        /// Everything above the rows: the top inset, the section eyebrow, and the gap under it.
+        static var chromeHeight: CGFloat { topInset + 6 + titleHeight + tabGap }
         static var windowWidth: CGFloat { sidebarWidth + rowWidth + sideMargin * 2 }
     }
 
@@ -354,6 +403,9 @@ final class SettingsWindowController: NSObject {
         l.font = Theme.font(12, .semibold)
         l.textColor = Theme.textPrimary
         l.alignment = .right
+        // The column is a fixed width, so an overlong translation has to end in an
+        // ellipsis rather than a hard cut mid-word.
+        l.lineBreakMode = .byTruncatingTail
         l.translatesAutoresizingMaskIntoConstraints = false
         return l
     }
@@ -372,6 +424,45 @@ final class SettingsWindowController: NSObject {
         }
     }
 
+    /// The Shortcuts section, grouped by when each hotkey applies. Draw and Zoom do
+    /// nothing outside a recording, and a heading says that once instead of every label
+    /// repeating it — which is also what lets those labels stay inside the label column:
+    /// spelled out, "Zoom While Recording" was clipped in all three languages.
+    private func shortcutRows() -> [NSView] {
+        let fields = Dictionary(uniqueKeysWithValues: zip(ShortcutAction.allCases, shortcutFields))
+        let groups: [(String, [ShortcutAction])] = [
+            (L("Capture"), [.screenshot, .record]),
+            (L("While recording"), [.draw, .zoom]),
+            (L("App"), [.forceQuit]),
+        ]
+        return groups.enumerated().flatMap { index, group -> [NSView] in
+            [groupHeading(group.0, firstInSection: index == 0)]
+                + group.1.compactMap { action in
+                    fields[action].map { row(action.label, $0, tip: Self.shortcutTip(action)) }
+                }
+        }
+    }
+
+    /// A quiet small-caps heading inside a section: the section eyebrow's little
+    /// sibling, at the left margin with air above it, so a group reads as a group
+    /// without needing a divider rule.
+    private func groupHeading(_ title: String, firstInSection: Bool) -> NSView {
+        let row = NSView()
+        row.translatesAutoresizingMaskIntoConstraints = false
+        let label = NSTextField(labelWithString: "")
+        Theme.styleEyebrow(label, title, size: 9, color: Theme.textMuted)
+        label.translatesAutoresizingMaskIntoConstraints = false
+        row.addSubview(label)
+        NSLayoutConstraint.activate([
+            row.widthAnchor.constraint(equalToConstant: Layout.rowWidth),
+            row.heightAnchor.constraint(equalToConstant: Layout.rowHeight
+                                        + (firstInSection ? 0 : Layout.headingGap)),
+            label.leadingAnchor.constraint(equalTo: row.leadingAnchor),
+            label.bottomAnchor.constraint(equalTo: row.bottomAnchor, constant: -4),
+        ])
+        return row
+    }
+
     private func row(_ title: String, _ control: NSView, tip: String? = nil) -> NSView {
         let row = NSView()
         row.translatesAutoresizingMaskIntoConstraints = false
@@ -381,13 +472,13 @@ final class SettingsWindowController: NSObject {
         row.addSubview(control)
         NSLayoutConstraint.activate([
             row.widthAnchor.constraint(equalToConstant: Layout.rowWidth),
+            row.heightAnchor.constraint(equalToConstant: Layout.rowHeight),
             label.leadingAnchor.constraint(equalTo: row.leadingAnchor),
             label.widthAnchor.constraint(equalToConstant: Layout.labelWidth),
-            label.centerYAnchor.constraint(equalTo: control.centerYAnchor),
+            label.centerYAnchor.constraint(equalTo: row.centerYAnchor),
             control.leadingAnchor.constraint(equalTo: row.leadingAnchor, constant: Layout.controlX),
             control.widthAnchor.constraint(equalToConstant: Layout.controlWidth),
-            control.topAnchor.constraint(equalTo: row.topAnchor),
-            control.bottomAnchor.constraint(equalTo: row.bottomAnchor),
+            control.centerYAnchor.constraint(equalTo: row.centerYAnchor),
         ])
         attachInfo(tip, to: row, alignedTo: control)
         return row
@@ -456,10 +547,10 @@ final class SettingsWindowController: NSObject {
         row.addSubview(check)
         NSLayoutConstraint.activate([
             row.widthAnchor.constraint(equalToConstant: Layout.rowWidth),
+            row.heightAnchor.constraint(equalToConstant: Layout.rowHeight),
             check.leadingAnchor.constraint(equalTo: row.leadingAnchor,
                                            constant: indented ? Layout.controlX : 0),
-            check.topAnchor.constraint(equalTo: row.topAnchor),
-            check.bottomAnchor.constraint(equalTo: row.bottomAnchor),
+            check.centerYAnchor.constraint(equalTo: row.centerYAnchor),
             check.trailingAnchor.constraint(lessThanOrEqualTo: row.trailingAnchor),
         ])
         return row
@@ -478,15 +569,16 @@ final class SettingsWindowController: NSObject {
         row.addSubview(choose)
         NSLayoutConstraint.activate([
             row.widthAnchor.constraint(equalToConstant: Layout.rowWidth),
+            row.heightAnchor.constraint(equalToConstant: Layout.rowHeight),
             label.leadingAnchor.constraint(equalTo: row.leadingAnchor),
             label.widthAnchor.constraint(equalToConstant: Layout.labelWidth),
-            label.centerYAnchor.constraint(equalTo: choose.centerYAnchor),
+            label.centerYAnchor.constraint(equalTo: row.centerYAnchor),
             pathLabel.leadingAnchor.constraint(equalTo: row.leadingAnchor, constant: Layout.controlX),
-            pathLabel.centerYAnchor.constraint(equalTo: choose.centerYAnchor),
+            pathLabel.centerYAnchor.constraint(equalTo: row.centerYAnchor),
             pathLabel.trailingAnchor.constraint(lessThanOrEqualTo: choose.leadingAnchor, constant: -Layout.gap),
             choose.trailingAnchor.constraint(equalTo: row.trailingAnchor, constant: -Layout.infoCol),
-            choose.topAnchor.constraint(equalTo: row.topAnchor),
-            choose.bottomAnchor.constraint(equalTo: row.bottomAnchor),
+            choose.centerYAnchor.constraint(equalTo: row.centerYAnchor),
+            choose.heightAnchor.constraint(equalToConstant: Layout.rowHeight),
         ])
         attachInfo(tip, to: row, alignedTo: choose)
         return row
@@ -882,6 +974,112 @@ private final class ClickableLabel: NSTextField {
 /// One row in the Settings sidebar (macOS System Settings style): SF-Symbol icon
 /// + label, full-width. Selected = raised pill + lavender icon + white label;
 /// unselected = muted, filling on hover.
+/// The tab strip that switches between one section's sub-tabs. Underlined tabs on a
+/// hairline baseline, not pills: a selected pill alone reads as a toggled button, so the
+/// unselected label beside it looked like a stray link rather than the other tab. The
+/// baseline is what makes the row a strip — it says both labels belong to one control.
+final class SectionTabBar: NSView {
+    var onSelect: ((Int) -> Void)?
+    var selected = 0 { didSet { tabs.enumerated().forEach { $1.isSelected = $0 == selected } } }
+    private var tabs: [SectionTab] = []
+
+    init(titles: [String], width: CGFloat) {
+        super.init(frame: .zero)
+        translatesAutoresizingMaskIntoConstraints = false
+        tabs = titles.enumerated().map { index, title in
+            let tab = SectionTab(title: title)
+            tab.isSelected = index == 0
+            tab.onClick = { [weak self] in self?.onSelect?(index) }
+            return tab
+        }
+        let stack = NSStackView(views: tabs)
+        stack.orientation = .horizontal
+        stack.spacing = 22
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(stack)
+
+        let baseline = NSView()
+        baseline.wantsLayer = true
+        baseline.layer?.backgroundColor = Theme.border.cgColor
+        baseline.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(baseline, positioned: .below, relativeTo: stack)
+
+        NSLayoutConstraint.activate([
+            widthAnchor.constraint(equalToConstant: width),
+            stack.leadingAnchor.constraint(equalTo: leadingAnchor),
+            stack.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor),
+            stack.topAnchor.constraint(equalTo: topAnchor),
+            stack.bottomAnchor.constraint(equalTo: baseline.bottomAnchor),
+            baseline.leadingAnchor.constraint(equalTo: leadingAnchor),
+            baseline.trailingAnchor.constraint(equalTo: trailingAnchor),
+            // A little air under the strip, so the first row reads as content below the
+            // tabs rather than as part of the tab bar.
+            baseline.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -6),
+            baseline.heightAnchor.constraint(equalToConstant: 1),
+        ])
+    }
+    required init?(coder: NSCoder) { fatalError() }
+}
+
+/// One tab in a `SectionTabBar`: label above a 2 pt lavender underline that sits on the
+/// strip's baseline when selected.
+private final class SectionTab: NSView {
+    var onClick: (() -> Void)?
+    var isSelected = false { didSet { if isSelected != oldValue { restyle() } } }
+    private var hovering = false { didSet { if hovering != oldValue { restyle() } } }
+    private let label = NSTextField(labelWithString: "")
+
+    init(title: String) {
+        super.init(frame: .zero)
+        wantsLayer = true
+        label.stringValue = title
+        label.font = Theme.font(12, .semibold)
+        label.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(label)
+        translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            heightAnchor.constraint(equalToConstant: 28),
+            label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 2),
+            label.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -2),
+            label.topAnchor.constraint(equalTo: topAnchor, constant: 4),
+        ])
+        setAccessibilityElement(true)
+        setAccessibilityRole(.radioButton)
+        setAccessibilityLabel(title)
+        restyle()
+    }
+    required init?(coder: NSCoder) { fatalError() }
+
+    private func restyle() {
+        label.textColor = isSelected ? Theme.textPrimary
+            : (hovering ? Theme.textPrimary : Theme.textSecondary)
+        needsDisplay = true
+    }
+
+    /// The underline is drawn rather than layered so it lands exactly on the baseline
+    /// the bar draws behind every tab, selected or not.
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+        guard isSelected || hovering else { return }
+        (isSelected ? Theme.lavender : Theme.textSecondary.withAlphaComponent(0.35)).setFill()
+        NSBezierPath(rect: NSRect(x: 0, y: 0, width: bounds.width, height: 2)).fill()
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        trackingAreas.forEach(removeTrackingArea)
+        addTrackingArea(NSTrackingArea(rect: bounds,
+                                       options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+                                       owner: self, userInfo: nil))
+    }
+    override func mouseEntered(with event: NSEvent) { hovering = true }
+    override func mouseExited(with event: NSEvent) { hovering = false }
+    override func mouseUp(with event: NSEvent) {
+        if bounds.contains(convert(event.locationInWindow, from: nil)) { onClick?() }
+    }
+    override func resetCursorRects() { addCursorRect(bounds, cursor: .pointingHand) }
+}
+
 final class SettingsSidebarItem: NSView {
     var onClick: (() -> Void)?
     var isSelected = false { didSet { if isSelected != oldValue { restyle() } } }

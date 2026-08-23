@@ -104,8 +104,10 @@ enum ShortcutAction: String, CaseIterable {
         switch self {
         case .screenshot:  return L("Screenshot")
         case .record:      return L("Record")
-        case .draw:        return L("Draw on Screen")
-        case .zoom:        return L("Zoom While Recording")
+        // Short on purpose: the Settings rows sit under a "While recording" heading
+        // that carries the context these two would otherwise have to spell out.
+        case .draw:        return L("Draw")
+        case .zoom:        return L("Zoom")
         case .forceQuit:   return L("Force Quit")
         }
     }
@@ -641,6 +643,16 @@ final class Settings {
             url = dir.appendingPathComponent("\(base)-\(n).\(e)"); n += 1
         }
         return url
+    }
+
+    /// Whether a file in the save folder is one of ours. The save folder is
+    /// usually the Desktop, shared with everything else the user drops there, so
+    /// History matches on the filename prefix `fileURL()` writes rather than
+    /// showing every image in the directory. The built-in default counts too, so
+    /// changing the prefix doesn't hide captures taken before the change.
+    func isCaptureFile(_ url: URL) -> Bool {
+        let name = url.lastPathComponent
+        return name.hasPrefix(filenamePrefix) || name.hasPrefix(defaultPrefix)
     }
 
     func encode(_ rep: NSBitmapImageRep) -> Data? { format.encode(rep) }

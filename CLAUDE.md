@@ -242,10 +242,28 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
   gone/unwritable.
 - `SettingsWindow.swift` — the dark Settings panel (`SettingsWindowController.shared`):
   an icon sidebar (macOS System Settings shape) with General / Shortcuts / Capture /
-  Output / Video / Live Drawing / About sections, per-row info-dot tips, and a fixed
-  window size measured once against the tallest section. ("Live Drawing" is the
-  draw-*while-recording* section — named for the one property that separates it from the
-  editor's annotation tools, and the only wording short enough for the sidebar in German.)
+  Output / Video / About sections, per-row info-dot tips, and a fixed window size
+  measured once against the tallest row set — **sub-tab variants included**
+  (`rowVariants(_:)`), so no switch can resize the panel.
+  Video carries the drawing settings too, behind a `SectionTabBar` (Recording /
+  Drawing): each half is a section's worth of rows, and stacking them made every other
+  tab as tall as their sum — a scrolling rows area fixed the height but put a scrollbar
+  over the controls, so sub-tabs it is. The strip is **underlined tabs on a hairline
+  baseline**, not pills: a lone selected pill reads as a toggled button, leaving the
+  other label looking like a stray link instead of the tab it is. Adding rows to either half raises every tab's
+  height; measure before adding.
+  Rows share one rhythm — `Layout.rowHeight` (24) + `rowGap` (10) for *every* row type.
+  Sizing rows to their content instead is what made the pitch jump between blocks: the
+  form controls are all 24 pt but a checkbox's own height is 16, so checkbox runs read
+  tighter than popup runs. A row that needs a different control height changes the
+  control, not the row.
+  Sections group their rows with `groupHeading(_:firstInSection:)`,
+  a quieter small-caps sibling of the section eyebrow: Shortcuts splits into
+  Capture / While recording / App; inside Video's Drawing sub-tab, Drawing keys.
+  The heading is what carries a row's context, which is what lets a label be one word —
+  spelled out, "Zoom While Recording" was clipped in all three languages. Drawing lives
+  under Video (it used to be its own "Live Drawing" tab) because it does nothing outside
+  a recording.
   About is a centered identity card (logo, name + version on one line, MIT/© mesoneer
   line, Usage Guide + Report a Bug buttons, and the updater's "Last checked" as a quiet
   footer) — the app's only about surface; there is no separate About panel.
