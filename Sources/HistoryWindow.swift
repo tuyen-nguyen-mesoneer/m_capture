@@ -7,7 +7,8 @@ import AVFoundation
 /// folder as a thumbnail grid. Hovering a cell reveals its actions — Copy, Pin
 /// (images), Reveal in Finder, Delete (to Trash); double-click opens the file.
 /// It's a live view over the folder (rebuilt on every open), not a database —
-/// captures saved elsewhere or moved away simply don't appear.
+/// captures saved elsewhere, renamed off the capture prefix, or moved away simply
+/// don't appear, and unrelated images sharing the folder are filtered out.
 final class HistoryWindowController {
     static let shared = HistoryWindowController()
     private var window: PanelWindow?
@@ -57,14 +58,17 @@ final class HistoryWindowController {
     }
 
     /// The save folder's capture files, newest first, capped at `maxItems`.
+    /// Only files this app named (`Settings.isCaptureFile`) — the save folder is
+    /// the Desktop by default, and everything else living there is not history.
     private static func captureFiles() -> [URL] {
         let dir = Settings.shared.saveDirectory
         let files = (try? FileManager.default.contentsOfDirectory(
             at: dir, includingPropertiesForKeys: [.contentModificationDateKey],
             options: [.skipsHiddenFiles])) ?? []
         return Array(files
-            .filter { imageExts.contains($0.pathExtension.lowercased())
-                   || videoExts.contains($0.pathExtension.lowercased()) }
+            .filter { Settings.shared.isCaptureFile($0)
+                   && (imageExts.contains($0.pathExtension.lowercased())
+                    || videoExts.contains($0.pathExtension.lowercased())) }
             .sorted { (a, b) in
                 let da = (try? a.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
                 let db = (try? b.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast

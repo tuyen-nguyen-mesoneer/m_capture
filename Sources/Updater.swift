@@ -145,6 +145,9 @@ enum Updater {
         /// This release's own change lines, cleaned of provenance. Empty when the feed
         /// entry carried no body.
         let items: [String]
+        /// When the release was published, off the entry's `<updated>`. nil if the feed
+        /// entry carried no parsable stamp.
+        var date: Date?
         /// Every unseen version's lines, formatted for the offer. Filled in when a
         /// release is resolved as installable; nil on the entries it was chosen from.
         var notes: String?
@@ -622,8 +625,25 @@ enum Updater {
     private static func entries(in feed: String) -> [Release] {
         feed.components(separatedBy: "<entry").dropFirst().compactMap { entry in
             guard let tag = firstGroup("/releases/tag/([^\"]+)\"", in: entry) else { return nil }
-            return Release(tagName: tag.removingPercentEncoding ?? tag, items: items(in: entry))
+            return Release(tagName: tag.removingPercentEncoding ?? tag, items: items(in: entry),
+                           date: date(in: entry))
         }
+    }
+
+    /// A feed entry's publication stamp. GitHub writes RFC 3339 in `<updated>`; anything
+    /// else is simply left out of the heading rather than guessed at.
+    private static func date(in entry: String) -> Date? {
+        guard let raw = firstGroup("<updated>([^<]+)</updated>", in: entry) else { return nil }
+        return ISO8601DateFormatter().date(from: raw.trimmingCharacters(in: .whitespacesAndNewlines))
+    }
+
+    /// A release date for the offer's heading: absolute and locale-formatted, so it needs
+    /// no vocabulary of its own in three languages (same reasoning as "Last checked").
+    private static func headingDate(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .none
+        return formatter.string(from: date)
     }
 
     /// One release's change lines.
@@ -662,10 +682,11 @@ enum Updater {
     private static func changeLog(_ releases: ArraySlice<Release>) -> String? {
         var lines: [String] = []
         var truncated = false
-        for release in releases where !release.items.isEmpty {
+        for release in releases where !release.items.isEmpty || release.date != nil {
             guard lines.count < maxNoteLines else { truncated = true; break }
             if !lines.isEmpty { lines.append("") }
-            lines.append(normalize(release.tagName))
+            let heading = normalize(release.tagName)
+            lines.append(release.date.map { "\(heading)  \u{2014}  \(headingDate($0))" } ?? heading)
             for item in release.items {
                 guard lines.count < maxNoteLines else { truncated = true; break }
                 lines.append(fit("•  " + item))
@@ -705,8 +726,9 @@ enum Updater {
             .foregroundColor: Theme.textMuted,
             .paragraphStyle: paragraph,
         ])
-        // A line that is nothing but a version number is a heading.
-        let headings = try? NSRegularExpression(pattern: "^[0-9]+(\\.[0-9]+)+$",
+        // A line that opens with a bare version number is a heading; only the version
+        // itself is picked out, so the release date beside it stays quiet.
+        let headings = try? NSRegularExpression(pattern: "^[0-9]+(\\.[0-9]+)+",
                                                 options: [.anchorsMatchLines])
         headings?.enumerateMatches(in: text, range: NSRange(text.startIndex..., in: text)) { match, _, _ in
             guard let range = match?.range else { return }
