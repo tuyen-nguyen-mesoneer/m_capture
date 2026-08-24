@@ -338,6 +338,8 @@ enum L10n {
         "Highlighter — translucent highlight  (H)": "Textmarker — transparente Hervorhebung  (H)",
         "Eraser — click a mark to remove it  (E)": "Radierer — Markierung anklicken zum Entfernen  (E)",
         "Text — click and type a label  (T)": "Text — klicken und Beschriftung tippen  (T)",
+        "Censor — paint over sensitive content to pixelate it  (M)":
+            "Zensieren — sensible Inhalte übermalen, um sie zu verpixeln  (M)",
         "Blur — obscure sensitive content  (B)":
             "Weichzeichnen — sensible Inhalte unkenntlich machen  (B)",
         "Spotlight — dim everything around an area  (S)":
@@ -686,6 +688,8 @@ enum L10n {
         "Highlighter — translucent highlight  (H)": "Bút dạ quang — tô sáng trong suốt  (H)",
         "Eraser — click a mark to remove it  (E)": "Tẩy — bấm vào nét vẽ để xoá  (E)",
         "Text — click and type a label  (T)": "Văn bản — bấm và gõ nhãn  (T)",
+        "Censor — paint over sensitive content to pixelate it  (M)":
+            "Che — tô lên nội dung nhạy cảm để pixel hoá  (M)",
         "Blur — obscure sensitive content  (B)":
             "Làm mờ — che nội dung nhạy cảm  (B)",
         "Spotlight — dim everything around an area  (S)":

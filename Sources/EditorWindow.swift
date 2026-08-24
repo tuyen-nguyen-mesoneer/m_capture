@@ -354,6 +354,8 @@ final class EditorWindowController: NSObject {
             toolButton(.eraser, "eraser", L("Eraser — click a mark to remove it  (E)")),
             toolButton(.text, .text("T"), L("Text — click and type a label  (T)")),
             toolButton(.blur, .mosaic, L("Blur — obscure sensitive content  (B)")),
+            toolButton(.censor, "paintbrush.pointed.fill",
+                       L("Censor — paint over sensitive content to pixelate it  (M)")),
             toolButton(.spotlight, .spotlightGlyph, L("Spotlight — dim everything around an area  (S)")),
             counterBtn,
             emojiBtn,
@@ -826,7 +828,8 @@ final class EditorWindowController: NSObject {
         "p": .pencil, "h": .marker, "l": .line, "a": .arrow, "r": .rect, "o": .ellipse,
         "g": .triangle, "d": .diamond, "y": .star, "u": .roundedRect, "k": .checkmark,
         "5": .pentagon, "6": .hexagon, "8": .octagon,
-        "t": .text, "c": .counter, "b": .blur, "s": .spotlight, "i": .eyedropper, "e": .eraser,
+        "t": .text, "c": .counter, "b": .blur, "m": .censor, "s": .spotlight,
+        "i": .eyedropper, "e": .eraser,
         "z": .zoom, "v": .select,
     ]
     private func handleShortcut(_ key: String) {

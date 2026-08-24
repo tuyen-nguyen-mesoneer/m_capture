@@ -216,6 +216,7 @@ the clusters gather into one draggable panel so they never cover the image.
 | Eraser         | `E`  | Remove the annotation under the click.                                                 |
 | Text           | `T`  | Click to place a label and type inline. A floating bar lets you set size, bold, alignment and the box's own background (fill/outline + color) while you type.  |
 | Blur           | `B`  | Soften a region (redact sensitive content).                                            |
+| Censor         | `M`  | **Paint** over sensitive content to pixelate it — follows the brush, not a rectangle.  |
 | Spotlight      | `S`  | Dim everything outside a rectangle.                                                    |
 | Counter        | `C`  | Auto-incrementing badge — numbers, letters or Roman. Deleting one renumbers the rest so the sequence stays in order. |
 | Emoji          |  —   | Stamp an emoji (click the tile to choose).                                             |

@@ -309,6 +309,58 @@ final class CheckmarkAnnotation: TwoPointAnnotation {
     }
 }
 
+/// A freehand-painted redaction: the brush stroke becomes a clip, and a heavily pixelated
+/// copy of the image beneath is drawn through it. Where `BlurAnnotation` covers a dragged
+/// rectangle, this follows whatever the user paints — so one column of a table, or an address
+/// inside a paragraph, can be hidden without covering its neighbours.
+///
+/// **The redaction is destructive on export.** `CanvasView` flattens marks into the saved
+/// pixels, so what leaves the app is the mosaic, not a removable overlay hiding real data.
+///
+/// The coarse block size is a deliberate safety margin, not an aesthetic: fine-grained
+/// mosaics over known fonts have been reconstructed before, so `CanvasView` floors the block
+/// well above the point where per-character detail survives, however thin the brush is.
+final class CensorAnnotation: FreehandAnnotation {
+    /// Pixelated copy of the region under the stroke; rendered by `CanvasView`, which is what
+    /// owns the source image.
+    var patch: CGImage?
+    /// The image-space rect `patch` was rendered for.
+    var patchRect: CGRect = .zero
+
+    /// Redaction wants coverage, not precision, so the brush is much wider than the shared
+    /// stroke width — while still following the stroke-width tile, so it stays adjustable.
+    override var strokeWidth: CGFloat { max(18, style.lineWidth * 6) }
+
+    override func draw(in ctx: CGContext) {
+        guard let first = points.first else { return }
+        ctx.saveGState()
+        ctx.setLineCap(.round); ctx.setLineJoin(.round)
+        ctx.setLineWidth(strokeWidth)
+        ctx.beginPath()
+        ctx.move(to: first)
+        if points.count == 1 {
+            // A tap with no drag still redacts a dot rather than silently nothing.
+            ctx.addLine(to: CGPoint(x: first.x + 0.01, y: first.y))
+        } else {
+            for p in points.dropFirst() { ctx.addLine(to: p) }
+        }
+        // Turn the thick stroke into the clip, so the mosaic appears only where painted.
+        ctx.replacePathWithStrokedPath()
+        ctx.clip()
+        if let patch, patchRect.width > 1 {
+            // No smoothing: interpolation would soften the blocks back toward legibility.
+            ctx.interpolationQuality = .none
+            ctx.draw(patch, in: patchRect)
+        } else {
+            // Opaque while the patch is still being rendered (i.e. during the drag). A
+            // translucent preview would leave the very content being redacted readable.
+            ctx.setFillColor(NSColor(white: 0.32, alpha: 1).cgColor)
+            ctx.fill(bounds)
+        }
+        ctx.restoreGState()
+    }
+}
+
 /// A region obscured by a smooth Gaussian blur.
 final class BlurAnnotation: TwoPointAnnotation {
     var patch: CGImage?

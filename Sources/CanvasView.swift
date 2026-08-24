@@ -6,7 +6,7 @@ import CoreImage
 enum Tool {
     case pencil, marker, line, arrow, rect, ellipse
     case triangle, diamond, star, roundedRect, checkmark, pentagon, hexagon, octagon
-    case text, blur, counter, spotlight, eyedropper, eraser, crop, ocr, zoom, emoji
+    case text, blur, censor, counter, spotlight, eyedropper, eraser, crop, ocr, zoom, emoji
     case overlay, ruler, select
 }
 
@@ -321,7 +321,7 @@ final class CanvasView: NSView, NSTextViewDelegate {
     /// Tools whose "point" is at the glyph's lower-left tip rather than its centre.
     private static func usesTipHotspot(_ tool: Tool) -> Bool {
         switch tool {
-        case .pencil, .marker, .eraser, .eyedropper: return true
+        case .pencil, .marker, .censor, .eraser, .eyedropper: return true
         default: return false
         }
     }
@@ -345,6 +345,7 @@ final class CanvasView: NSView, NSTextViewDelegate {
         switch tool {
         case .pencil:      return "pencil"
         case .marker:      return "highlighter"
+        case .censor:      return "paintbrush.pointed.fill"
         // Drag-to-define tools — shapes, line/arrow, and the blur / spotlight region
         // drags — all share the precise crosshair: a filled glyph sits as an opaque
         // blob over the exact start point you're aiming at.
@@ -523,6 +524,7 @@ final class CanvasView: NSView, NSTextViewDelegate {
         switch tool {
         case .pencil:  let a = PencilAnnotation(style: style); a.add(p); live = a
         case .marker:  let a = MarkerAnnotation(style: style); a.add(p); live = a
+        case .censor:  let a = CensorAnnotation(style: style); a.add(p); live = a
         case .line, .arrow:
             if let ec = editingCurve, let h = curveHandle(ec, at: p) {
                 curveDrag = (ec, h); NSCursor.closedHand.push()
@@ -1237,10 +1239,34 @@ final class CanvasView: NSView, NSTextViewDelegate {
         return CIContext().createCGImage(out, from: CGRect(origin: .zero, size: size))
     }
 
-    /// Re-render a blur mark's patch after its rect changed.
+    /// Heavy mosaic — the censor brush. The block size follows the brush width so a thicker
+    /// brush reads as coarser, but never drops below `minBlock` pixels: fine mosaics over
+    /// known fonts have been reconstructed, and this tool exists to prevent exactly that.
+    /// Blocks are anchored at the crop's origin so they don't drift between re-renders.
+    private func mosaic(_ rect: CGRect, strokeWidth: CGFloat) -> CGImage? {
+        guard let (crop, size) = cropPixels(rect) else { return nil }
+        let scale = size.width / max(rect.width, 1)          // points → pixels
+        let minBlock: CGFloat = 16
+        let block = max(minBlock, (strokeWidth * scale) / 3)
+        let ci = CIImage(cgImage: crop).clampedToExtent()
+        guard let f = CIFilter(name: "CIPixellate") else { return nil }
+        f.setValue(ci, forKey: kCIInputImageKey)
+        f.setValue(block, forKey: kCIInputScaleKey)
+        f.setValue(CIVector(x: 0, y: 0), forKey: kCIInputCenterKey)
+        guard let out = f.outputImage else { return nil }
+        return CIContext().createCGImage(out, from: CGRect(origin: .zero, size: size))
+    }
+
+    /// Re-render an obscuring mark's patch after its geometry changed — a dragged blur rect,
+    /// or a censor stroke that was moved over different content.
     private func refreshObscurePatch(_ a: Annotation?) {
-        guard let b = a as? BlurAnnotation else { return }
-        b.patch = gaussianBlur(b.rect)
+        if let b = a as? BlurAnnotation {
+            b.patch = gaussianBlur(b.rect)
+        } else if let c = a as? CensorAnnotation {
+            let r = c.bounds
+            c.patchRect = r
+            c.patch = mosaic(r, strokeWidth: c.strokeWidth)
+        }
     }
 
     func undo() { clearSelections(); if let a = annotations.popLast() { redoStack.append(a); renumberCounters(); onChange?(); needsDisplay = true } }
@@ -1287,7 +1313,12 @@ final class CanvasView: NSView, NSTextViewDelegate {
     func restrokeSelection(_ width: CGFloat) {
         style.lineWidth = width
         if let target = selected ?? editingShape ?? editingCurve {
-            target.restroke(width); onChange?()
+            target.restroke(width)
+            // A censor stroke's clip grows with its width, past the rect its mosaic was
+            // rendered for — leaving the widened band drawing nothing, which would expose
+            // exactly the pixels the mark exists to hide. Re-render before it can be seen.
+            refreshObscurePatch(target)
+            onChange?()
         }
         needsDisplay = true
     }

@@ -45,7 +45,7 @@ on-device, with no subscriptions, cloud services, or accounts.
 - **Draw** — pencil, highlighter, and eraser.
 - **Shapes** — arrows (with bendable curves), lines, rectangles, ellipses, triangles, diamonds, stars, polygons (pentagon, hexagon, octagon), rounded rectangles, and checkmarks.
 - **Text & counters** — inline text labels with a live size/bold/alignment/background toolbar, auto-incrementing badges (numbers, letters, or Roman numerals — renumbered automatically if you delete one), and emoji stamps.
-- **Focus & redaction** — **blur** to obscure sensitive information, **spotlight** to dim the surroundings, and **zoom** callouts to magnify detail.
+- **Focus & redaction** — a **censor brush** (`M`) you paint over anything sensitive, pixelating exactly the shape you cover rather than a rectangle (coarse by design, and baked into the exported pixels — not an overlay with real data underneath); **blur** to soften a region; **spotlight** to dim the surroundings; and **zoom** callouts to magnify detail.
 - **Measure & compose** — an on-screen **ruler** (drag at any angle, hold `⇧` to snap horizontal/vertical), image overlays, and an **eyedropper** for color matching.
 - **Style** — a preset color palette with a custom hue/brightness picker, plus a stroke-width control (thin / medium / thick).
 - **Select & edit** — every placed mark stays editable: with the **Select** tool (`V`) — or right after you draw it — drag it to reposition, resize shapes from **any of eight handles** (four corners plus four edges, so you can stretch one side), reshape arrows and lines by their **endpoints or bend handle**, or press **⌫** to delete.
