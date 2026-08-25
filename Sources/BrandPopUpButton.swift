@@ -221,7 +221,7 @@ private final class PopUpRow: NSView {
         highlight.frame = bounds.insetBy(dx: Self.hInset, dy: Self.vInset)
         highlight.autoresizingMask = [.width, .height]
         highlight.wantsLayer = true
-        highlight.layer?.cornerRadius = 6
+        highlight.layer?.cornerRadius = Theme.radiusSmall
         highlight.layer?.backgroundColor = NSColor.clear.cgColor
         addSubview(highlight)
 

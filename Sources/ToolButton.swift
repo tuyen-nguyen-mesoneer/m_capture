@@ -88,7 +88,7 @@ final class ToolButton: NSButton {
 
     override func draw(_ dirtyRect: NSRect) {
         guard let ctx = NSGraphicsContext.current?.cgContext else { return }
-        let corner: CGFloat = 6
+        let corner: CGFloat = Theme.radiusSmall
         let tile = bounds.insetBy(dx: 1.5, dy: 1.5)
         let path = CGPath(roundedRect: tile, cornerWidth: corner, cornerHeight: corner, transform: nil)
 
@@ -98,13 +98,13 @@ final class ToolButton: NSButton {
             }
             let s = radius * 1.3
             let chip = CGRect(x: bounds.midX - s / 2, y: bounds.midY - s / 2, width: s, height: s)
-            let cr = s * 0.3
+            let cr = Theme.radiusSmall
             let chipPath = CGPath(roundedRect: chip, cornerWidth: cr, cornerHeight: cr, transform: nil)
             ctx.addPath(chipPath); ctx.setFillColor(c.cgColor); ctx.fillPath()
             ctx.addPath(chipPath); ctx.setStrokeColor(NSColor(white: 1, alpha: 0.25).cgColor); ctx.setLineWidth(1); ctx.strokePath()
             if selectedState {
                 let r2 = chip.insetBy(dx: -3, dy: -3)
-                ctx.addPath(CGPath(roundedRect: r2, cornerWidth: cr + 3, cornerHeight: cr + 3, transform: nil))
+                ctx.addPath(CGPath(roundedRect: r2, cornerWidth: cr, cornerHeight: cr, transform: nil))
                 ctx.setStrokeColor(Theme.lavender.cgColor); ctx.setLineWidth(1.5); ctx.strokePath()
             }
             return
@@ -113,7 +113,7 @@ final class ToolButton: NSButton {
         if selectedState {
             ctx.addPath(path); ctx.setFillColor(Theme.accentPurple.cgColor); ctx.fillPath()
             ctx.addPath(CGPath(roundedRect: bounds.insetBy(dx: 0.75, dy: 0.75),
-                               cornerWidth: corner + 1, cornerHeight: corner + 1, transform: nil))
+                               cornerWidth: corner, cornerHeight: corner, transform: nil))
             ctx.setStrokeColor(Theme.lavender.cgColor); ctx.setLineWidth(1.5); ctx.strokePath()
         } else if hovering {
             ctx.addPath(path); ctx.setFillColor(NSColor(white: 1, alpha: 0.10).cgColor); ctx.fillPath()

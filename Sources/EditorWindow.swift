@@ -10,25 +10,146 @@ private final class KeyableWindow: NSWindow {
 
 /// A card/panel the user can drag (clicks on tool buttons still work; clicks on
 /// the card background move it). Lets the user reposition tools off the capture.
+///
+/// Every card moves on its own — the gathered layout only *looks* like one slab, and a
+/// single grab hauling all five cards along read as a bug.
 private final class DraggablePanel: NSView {
-    private var grabOffset: CGPoint?
     /// Fires on every drag move — lets a caller know the panel was manually
     /// repositioned (e.g. so auto-positioning logic stops fighting the user).
     var onDrag: (() -> Void)?
+
+    private var grabbed = false
+    private var grabOffset = CGPoint.zero
+
     override func mouseDown(with event: NSEvent) {
         guard let sv = superview else { return }
         let p = sv.convert(event.locationInWindow, from: nil)
+        grabbed = true
         grabOffset = CGPoint(x: p.x - frame.minX, y: p.y - frame.minY)
+        NSCursor.closedHand.set()
     }
+
     override func mouseDragged(with event: NSEvent) {
-        guard let off = grabOffset, let sv = superview else { return }
+        guard grabbed, let sv = superview else { return }
         let p = sv.convert(event.locationInWindow, from: nil)
-        let x = min(max(0, p.x - off.x), sv.bounds.width - frame.width)
-        let y = min(max(0, p.y - off.y), sv.bounds.height - frame.height)
-        setFrameOrigin(NSPoint(x: x, y: y))
+        setFrameOrigin(NSPoint(x: min(max(0, p.x - grabOffset.x), sv.bounds.width - frame.width),
+                               y: min(max(0, p.y - grabOffset.y), sv.bounds.height - frame.height)))
         onDrag?()
     }
+
+    /// Open hand while hovering, closed while actually dragging — the convention
+    /// `PinnedWindow` and `VideoRecordBar` already use for a borderless HUD.
+    override func mouseUp(with event: NSEvent) {
+        grabbed = false
+        NSCursor.openHand.set()
+    }
     override func resetCursorRects() { addCursorRect(bounds, cursor: .openHand) }
+}
+
+/// The header above each tool cluster: a grip glyph, the group's eyebrow label and
+/// the hairline under it. The grip is the only *standing* cue that the card can be
+/// moved — an open-hand cursor is invisible until the pointer is already over the
+/// card, so nothing on screen ever said "grab me". It sits quiet at rest and
+/// brightens under the pointer. The row draws its own text instead of hosting an
+/// `NSTextField`: a control consumes the mouse-down, which is why dragging by the
+/// caption never worked at all.
+private final class ClusterHeader: NSView {
+    /// 17 pt of cap height plus the 6 pt gap down to the hairline, so the label,
+    /// the grip and the rule are one grab target.
+    static let height: CGFloat = 23
+    private static let capH: CGFloat = 17
+
+    var onEnter: ((ClusterHeader) -> Void)?
+    var onExit: (() -> Void)?
+    /// Fires the moment the header is pressed, i.e. when a drag begins.
+    var onPress: (() -> Void)?
+
+    /// Six dots in two columns — the grabber every platform uses, so it carries its
+    /// meaning without a legend and still fits inside the eyebrow's cap height.
+    private let dot: CGFloat = 2, dotStep: CGFloat = 3.5, gripGap: CGFloat = 7
+    private var gripSize: NSSize { NSSize(width: dot + dotStep, height: dot + dotStep * 2) }
+
+    private let text: NSAttributedString
+    private var hovering = false {
+        didSet { if hovering != oldValue { needsDisplay = true } }
+    }
+
+    /// Width the grip and label actually need, so `makeCluster` sizes the card around
+    /// a long localized group name instead of clipping it. The grip eats into the
+    /// breathing room a centered label already had rather than adding to it —
+    /// otherwise German's "HINTERGRUND" pushed the Background card 2 pt wider than
+    /// the cards beside it.
+    var contentWidth: CGFloat { gripSize.width + gripGap + ceil(text.size().width) }
+
+    init(_ title: String) {
+        let shadow = NSShadow()
+        shadow.shadowColor = Theme.textShadow
+        shadow.shadowBlurRadius = 2
+        shadow.shadowOffset = NSSize(width: 0, height: -1)
+        text = NSAttributedString(string: title.uppercased(), attributes: [
+            .foregroundColor: Theme.eyebrow,
+            .font: Theme.font(11, .medium),
+            .kern: 1.2,
+            .shadow: shadow,
+        ])
+        super.init(frame: .zero)
+    }
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        trackingAreas.forEach(removeTrackingArea)
+        addTrackingArea(NSTrackingArea(rect: bounds,
+                                       options: [.mouseEnteredAndExited, .activeAlways],
+                                       owner: self))
+    }
+    override func mouseEntered(with event: NSEvent) { hovering = true; onEnter?(self) }
+    override func mouseExited(with event: NSEvent) { hovering = false; onExit?() }
+    override func resetCursorRects() { addCursorRect(bounds, cursor: .openHand) }
+
+    /// A press starts a drag, and the tip is positioned against where the card *was* —
+    /// leaving it up would park a stale label next to the moving card, since the
+    /// pointer never exits the header it is dragging by. `super` still forwards the
+    /// press up to the card so the drag itself happens.
+    override func mouseDown(with event: NSEvent) {
+        onPress?()
+        super.mouseDown(with: event)
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        guard let ctx = NSGraphicsContext.current?.cgContext else { return }
+        let ts = text.size()
+        let grip = gripSize
+        let midY = bounds.height - Self.capH / 2
+        var x = ((bounds.width - (grip.width + gripGap + ceil(ts.width))) / 2).rounded()
+
+        // Muted at rest so it never competes with the label it sits beside; full ink
+        // under the pointer, the same brightening every tool tile does on hover.
+        ctx.setFillColor((hovering ? Theme.ink : Theme.textMuted).cgColor)
+        for col in 0..<2 {
+            for row in 0..<3 {
+                ctx.fillEllipse(in: CGRect(x: x + CGFloat(col) * dotStep,
+                                           y: midY + grip.height / 2 - dot - CGFloat(row) * dotStep,
+                                           width: dot, height: dot))
+            }
+        }
+        x += grip.width + gripGap
+        text.draw(at: NSPoint(x: x, y: (midY - ts.height / 2).rounded()))
+
+        Theme.divider.setFill()
+        NSRect(x: (bounds.width * 0.14).rounded(), y: 0,
+               width: (bounds.width * 0.72).rounded(), height: 1).fill()
+    }
+}
+
+/// One of the four strips of screen outside the selection, measured in whole tool
+/// cards. A gutter beside the capture runs its cards vertically, a strip above or below
+/// runs them in a horizontal row — so a run is always shaped like the space it lives in.
+private enum Side { case left, right, top, bottom }
+private struct Gap {
+    let capacity: Int
+    var taken = 0
+    var hasRoom: Bool { taken < capacity }
 }
 
 /// Live preview of a share-ready background: painted behind the canvas, extended
@@ -104,7 +225,7 @@ private final class BrandSliderCell: NSSliderCell {
         return NSRect(x: full.minX, y: full.midY - h / 2, width: full.width, height: h)
     }
     override func drawBar(inside rect: NSRect, flipped: Bool) {
-        let radius = rect.height / 2
+        let radius = Theme.radiusSmall
         Theme.border.setFill()
         NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius).fill()
         let frac = CGFloat((doubleValue - minValue) / max(0.0001, maxValue - minValue))
@@ -244,7 +365,14 @@ final class EditorWindowController: NSObject {
         window.backgroundColor = .clear
         window.hasShadow = false
         window.isReleasedWhenClosed = false
-        window.level = .normal
+        // `.screenSaver`, not `.normal`: the editor is a full-screen surface over a frozen
+        // capture, so anything the window server puts above it *clips the tools*. At
+        // `.normal` the Dock (level 20) and the menu bar (24) cut the bottom and top rows
+        // of tool cards off, and any other app's window could come up over the whole
+        // editor. The rest of the app is built on this level — the pickers and toast sit at
+        // `.screenSaver + 1` and `BrandAlert` at `+2` precisely to clear the editor — so
+        // lowering it also silently put those *below* what they were written to cover.
+        window.level = .screenSaver
         window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
 
         let content = NSView(frame: NSRect(origin: .zero, size: screen.frame.size))
@@ -432,39 +560,45 @@ final class EditorWindowController: NSObject {
         let background = makeCluster(L("Background"), bgTiles, perRow: 4, radius: bgR)
 
         let cs = content.bounds.size
-        let g: CGFloat = 16
+        let g: CGFloat = 16, m: CGFloat = 8
+        let cards = [draw, shapes, color, background, actions].map(cardFit)
+        let cardSize = NSSize(width: cards.map { $0.frame.width }.max() ?? 0,
+                              height: cards.map { $0.frame.height }.max() ?? 0)
 
-        let cp: CGFloat = 9
-        let leftW = draw.frame.width + 2 * cp
-        let leftH = draw.frame.height + 2 * cp
-        let rightW = shapes.frame.width + 2 * cp
-        let rightH = shapes.frame.height + 2 * cp
-        let rowH = [color.frame.height, background.frame.height, actions.frame.height].max()! + 2 * cp
-        let topFits = cs.height - sel.maxY >= rowH + 2 * g
-        let bottomFits = sel.minY >= rowH + 2 * g
-        let canScatter =
-            sel.minX >= leftW + 2 * g &&
-            cs.width - sel.maxX >= rightW + 2 * g &&
-            (topFits || bottomFits) &&
-            sel.height >= max(leftH, rightH) * 0.7
-
-        if canScatter {
-            let d = cardFit(draw), s = cardFit(shapes)
-            let co = cardFit(color), bgc = cardFit(background), ac = cardFit(actions)
-            stackVertically([d], onLeft: true, sel: sel, gap: g, cs: cs, content)
-            stackVertically([s], onLeft: false, sel: sel, gap: g, cs: cs, content)
-            if topFits && bottomFits {
-                rowOutside([co, bgc], above: true, sel: sel, gap: g, cs: cs, content)
-                rowOutside([ac], above: false, sel: sel, gap: g, cs: cs, content)
+        // Where each cluster would rather live, best first. Markup hugs the left and Shape
+        // the right — that is the scattered look — while the three wide tile rows prefer
+        // the horizontal strips, which is the shape they lay out in.
+        let preference: [[Side]] = [
+            [.left,   .right,  .bottom, .top],   // Markup
+            [.right,  .left,   .bottom, .top],   // Shape
+            [.top,    .bottom, .right,  .left],  // Style
+            [.top,    .bottom, .left,   .right], // Background
+            [.bottom, .top,    .right,  .left],  // Action
+        ]
+        var gaps = measureGaps(sel: sel, cs: cs, card: cardSize, g: g, m: m)
+        var runs: [Side: [NSView]] = [:]
+        var leftover: [NSView] = []
+        for (card, prefs) in zip(cards, preference) {
+            if let side = prefs.first(where: { gaps[$0]?.hasRoom == true }) {
+                gaps[side]?.taken += 1
+                runs[side, default: []].append(card)
             } else {
-                rowOutside([co, bgc, ac], above: topFits, sel: sel, gap: g, cs: cs, content)
+                leftover.append(card)
             }
-            return [d, s, co, bgc, ac]
-        } else {
-            let panel = makePanel([[draw, shapes], [color, background, actions]])
-            positionPanel(panel, sel: sel, cs: cs, content)
-            return [panel]
         }
+        if let v = runs[.left]   { stackVertically(v, onLeft: true,  sel: sel, gap: g, cs: cs, content) }
+        if let v = runs[.right]  { stackVertically(v, onLeft: false, sel: sel, gap: g, cs: cs, content) }
+        if let v = runs[.top]    { rowOutside(v, above: true,  sel: sel, gap: g, cs: cs, content) }
+        if let v = runs[.bottom] { rowOutside(v, above: false, sel: sel, gap: g, cs: cs, content) }
+        if !leftover.isEmpty {
+            let (offsets, size) = gatherOffsets(leftover, rows: rowSplit(leftover.count))
+            let origin = overCaptureOrigin(size, sel: sel, cs: cs)
+            for (v, off) in zip(leftover, offsets) {
+                v.setFrameOrigin(NSPoint(x: origin.x + off.x, y: origin.y + off.y))
+                content.addSubview(v)
+            }
+        }
+        return cards
     }
 
     /// Center the cluster in its card on both axes (uniform panel cards leave
@@ -497,95 +631,82 @@ final class EditorWindowController: NSObject {
         return c
     }
 
-    /// A uniform-size tile used *inside* the gathered panel. The panel has no
-    /// background of its own, so each card is solid (brand gradient + edge +
-    /// shadow), the same as a floating scatter card, to read on any backdrop.
-    private func styleCard(_ c: NSView, _ inner: NSView, _ size: NSSize, topPad: CGFloat) {
-        c.frame = NSRect(origin: .zero, size: size)
-        c.wantsLayer = true
-        guard let layer = c.layer else { return }
-        let radius: CGFloat = 0
-        layer.cornerRadius = radius
-        layer.masksToBounds = false
-        layer.shadowColor = NSColor.black.cgColor
-        layer.shadowOpacity = 0.55
-        layer.shadowRadius = 16
-        layer.shadowOffset = CGSize(width: 0, height: -5)
-        Theme.applyPanelGradient(to: c, cornerRadius: radius)
-        inner.setFrameOrigin(NSPoint(x: (size.width - inner.frame.width) / 2,
-                                     y: size.height - inner.frame.height - topPad))
-        c.addSubview(inner)
+    /// Measure the four strips of screen around the selection, in whole tool cards. Each
+    /// cluster then takes the best gap that still has room, and only what nothing can hold
+    /// gets gathered. The old test was all-or-nothing — one short gutter and *all five*
+    /// clusters went into a single block dumped over the image — so a capture anywhere
+    /// near a screen edge lost the scattered layout entirely.
+    private func measureGaps(sel: NSRect, cs: CGSize, card: NSSize,
+                             g: CGFloat, m: CGFloat) -> [Side: Gap] {
+        /// Cards of `extent` that fit in `span`: n·extent + (n−1)·g ≤ span.
+        func fit(_ span: CGFloat, _ extent: CGFloat) -> Int {
+            Int(max(0, (span + g) / (extent + g)))
+        }
+        var out: [Side: Gap] = [:]
+        let row = fit(cs.width - 2 * m, card.width)
+        if cs.height - sel.maxY - g - m >= card.height { out[.top] = Gap(capacity: row) }
+        if sel.minY - g - m >= card.height { out[.bottom] = Gap(capacity: row) }
+
+        // A gutter only reads as *flanking* the capture if the capture is tall enough to
+        // flank; below that, a tower of cards beside a sliver of image looks wrong.
+        guard sel.height >= card.height * 0.7 else { return out }
+        // A gutter run is centred on the capture, so a long one spills past it into the
+        // bands above and below. That only collides when those bands hold cards, so cap
+        // the run to the capture's own height exactly when both strips are in play —
+        // capping it unconditionally pushed a card over the image in the very case that
+        // had the whole screen height free for it.
+        let span = out[.top] != nil && out[.bottom] != nil
+            ? min(sel.height, cs.height - 2 * m) : cs.height - 2 * m
+        let run = max(1, fit(span, card.height))
+        if sel.minX - g - m >= card.width { out[.left] = Gap(capacity: run) }
+        if cs.width - sel.maxX - g - m >= card.width { out[.right] = Gap(capacity: run) }
+        return out
     }
 
-    /// A static uniform-size card (used inside the gathered panel).
-    private func card(_ inner: NSView, size: NSSize, topPad: CGFloat) -> NSView {
-        let c = NSView(); styleCard(c, inner, size, topPad: topPad); return c
-    }
+    /// Rows for a gathered block of `n` cards: one flat row up to three, then the squarest
+    /// split. A block only gathers when it has to sit over the capture, so it should cover
+    /// as little of the image as its card count allows.
+    private func rowSplit(_ n: Int) -> [Int] { n <= 3 ? [n] : [n / 2, n - n / 2] }
 
-    /// Gather all clusters into one draggable group of equal-size cards (used when
-    /// the selection is too small or too large to scatter cleanly). The group has
-    /// no background slab of its own — the cards stand on their own gradient fill.
-    private func makePanel(_ rows: [[NSView]]) -> NSView {
+    /// Each card's offset inside a gathered block, plus the block's size. The block is an
+    /// arrangement, not a container — the caller positions the cards themselves, so every
+    /// one stays a free-standing, independently draggable view.
+    private func gatherOffsets(_ cards: [NSView], rows: [Int]) -> (offsets: [NSPoint], size: NSSize) {
         let pad: CGFloat = 7, hgap: CGFloat = 6, vgap: CGFloat = 6
-        let innerPad: CGFloat = 5
-        let all = rows.flatMap { $0 }
-        let cardW = (all.map { $0.frame.width }.max() ?? 0) + innerPad * 2
-        let cardH = (all.map { $0.frame.height }.max() ?? 0) + innerPad * 2
-        let cardSize = NSSize(width: cardW, height: cardH)
-        let cardRows = rows.map { $0.map { card($0, size: cardSize, topPad: innerPad) } }
-        let rowW = cardRows.map { row in
+        var grid: [[NSView]] = [], i = 0
+        for n in rows where i < cards.count {
+            grid.append(Array(cards[i..<min(i + n, cards.count)])); i += n
+        }
+        let rowW = grid.map { row in
             row.reduce(0) { $0 + $1.frame.width } + hgap * CGFloat(row.count - 1)
         }
-        let rowH = cardRows.map { row in row.map { $0.frame.height }.max() ?? 0 }
-        let panelW = (rowW.max() ?? 0) + pad * 2
-        let panelH = rowH.reduce(0, +) + vgap * CGFloat(cardRows.count - 1) + pad * 2
+        let rowH = grid.map { row in row.map { $0.frame.height }.max() ?? 0 }
+        let w = (rowW.max() ?? 0) + pad * 2
+        let h = rowH.reduce(0, +) + vgap * CGFloat(grid.count - 1) + pad * 2
 
-        let panel = DraggablePanel(frame: NSRect(x: 0, y: 0, width: panelW, height: panelH))
-        panel.wantsLayer = true
-        panel.layer?.masksToBounds = false
-
+        var offsets: [NSPoint] = []
         var yTop = pad
-        for (i, row) in cardRows.enumerated() {
-            let h = rowH[i]
-            var x = (panelW - rowW[i]) / 2
+        for (r, row) in grid.enumerated() {
+            var x = (w - rowW[r]) / 2
             for v in row {
-                let y = panelH - yTop - h + (h - v.frame.height) / 2
-                v.setFrameOrigin(NSPoint(x: x, y: y))
-                panel.addSubview(v)
+                offsets.append(NSPoint(x: x, y: h - yTop - rowH[r] + (rowH[r] - v.frame.height) / 2))
                 x += v.frame.width + hgap
             }
-            yTop += h + vgap
+            yTop += rowH[r] + vgap
         }
-        return panel
+        return (offsets, NSSize(width: w, height: h))
     }
 
-    /// Place the gathered panel on whichever side of the selection has the most
-    /// free space (below / above / left / right), rather than always below.
-    private func positionPanel(_ p: NSView, sel: NSRect, cs: CGSize, _ content: NSView) {
-        let g: CGFloat = 16, m: CGFloat = 8
-        let w = p.frame.width, h = p.frame.height
-        let cx = min(max(m, sel.midX - w / 2), cs.width - w - m)
-        let cy = min(max(m, sel.midY - h / 2), cs.height - h - m)
-
-        let candidates: [(CGPoint, CGFloat)] = [
-            (CGPoint(x: cx, y: sel.minY - g - h),   sel.minY - g - h - m),
-            (CGPoint(x: cx, y: sel.maxY + g),       cs.height - (sel.maxY + g + h) - m),
-            (CGPoint(x: sel.minX - g - w, y: cy),   sel.minX - g - w - m),
-            (CGPoint(x: sel.maxX + g, y: cy),       cs.width - (sel.maxX + g + w) - m),
-        ]
-        let best = candidates.max { $0.1 < $1.1 }!
-        // A selection spanning the whole screen (Screen mode) leaves no side
-        // with real room — every candidate is a negative-margin worst-fit clamped to
-        // an edge. Center the panel instead of pinning it to whichever edge lost least.
-        if best.1 < 0 {
-            p.setFrameOrigin(NSPoint(x: (cs.width - w) / 2, y: (cs.height - h) / 2))
-            content.addSubview(p)
-            return
-        }
-        let fx = min(max(m, best.0.x), cs.width - w - m)
-        let fy = min(max(m, best.0.y), cs.height - h - m)
-        p.setFrameOrigin(NSPoint(x: fx, y: fy))
-        content.addSubview(p)
+    /// Where a gathered block goes when no gap outside the selection can take it: bottom-
+    /// centre *of the capture*, hugging the image's lower edge. Dead centre — the old
+    /// behaviour for a whole-screen selection — covered exactly the part of the image you
+    /// want to see, and the bottom edge is where every annotation tool puts its toolbar.
+    /// Sitting inside the selection also means it cannot collide with cards already placed
+    /// in the gaps outside it.
+    private func overCaptureOrigin(_ size: NSSize, sel: NSRect, cs: CGSize) -> NSPoint {
+        let m: CGFloat = 8, inset: CGFloat = 16
+        return NSPoint(x: min(max(m, sel.midX - size.width / 2), max(m, cs.width - size.width - m)),
+                       y: min(max(m, sel.minY + inset), max(m, cs.height - size.height - m)))
     }
 
     /// Stack clusters in a column beside the selection, centered vertically,
@@ -634,21 +755,18 @@ final class EditorWindowController: NSObject {
         let gridH = CGFloat(rows - 1) * rowVStep + side
         let totalH = capH + capToGrid + gridH
 
-        let cap = groupLabel(name)
-        cap.alignment = .center
-        let contentW = max(gridW, ceil(cap.intrinsicContentSize.width) + 10)
+        let header = ClusterHeader(name)
+        header.onEnter = { [weak self] h in self?.showTip(L("Drag to move this panel"), over: h) }
+        header.onExit = { [weak self] in self?.hideTip() }
+        header.onPress = { [weak self] in self?.hideTip() }
+        let contentW = max(gridW, header.contentWidth + 6)
 
         let container = NSView(frame: NSRect(x: 0, y: 0, width: contentW, height: totalH))
         container.wantsLayer = true
 
-        cap.frame = NSRect(x: 0, y: totalH - capH, width: contentW, height: capH)
-        container.addSubview(cap)
-
-        let divider = NSView(frame: NSRect(x: contentW * 0.14, y: totalH - capH - 6,
-                                           width: contentW * 0.72, height: 1))
-        divider.wantsLayer = true
-        divider.layer?.backgroundColor = Theme.divider.cgColor
-        container.addSubview(divider)
+        header.frame = NSRect(x: 0, y: totalH - ClusterHeader.height,
+                              width: contentW, height: ClusterHeader.height)
+        container.addSubview(header)
 
         for (i, b) in buttons.enumerated() {
             let row = i / perRow, col = i % perRow
@@ -682,20 +800,6 @@ final class EditorWindowController: NSObject {
         }
     }
 
-    private func groupLabel(_ title: String) -> NSTextField {
-        let l = NSTextField(labelWithString: "")
-        Theme.styleEyebrow(l, title)
-        let para = NSMutableParagraphStyle(); para.alignment = .center
-        let s = NSMutableAttributedString(attributedString: l.attributedStringValue)
-        s.addAttribute(.paragraphStyle, value: para, range: NSRange(location: 0, length: s.length))
-        l.attributedStringValue = s
-        l.alignment = .center
-        let sh = NSShadow(); sh.shadowColor = NSColor(white: 0, alpha: 0.6)
-        sh.shadowBlurRadius = 2; sh.shadowOffset = NSSize(width: 0, height: -1)
-        l.shadow = sh
-        return l
-    }
-
     private func wireHover(_ b: ToolButton) {
         b.onEnter = { [weak self] btn in self?.showTip(btn) }
         b.onExit = { [weak self] in self?.hideTip() }
@@ -715,18 +819,24 @@ final class EditorWindowController: NSObject {
         return v
     }()
 
-    private func showTip(_ button: ToolButton) {
-        guard let tip = button.tip, let content = window.contentView else { return }
+    private func showTip(_ button: ToolButton) { showTip(button.tip, over: button) }
+
+    /// Tips sit above their source; a card pinned near the top of the screen has no
+    /// room there, so flip below rather than draw the tip off-screen.
+    private func showTip(_ tip: String?, over view: NSView) {
+        guard let tip, let content = window.contentView else { return }
         tipText.stringValue = tip
         tipText.sizeToFit()
         let ts = tipText.frame.size
         let padX: CGFloat = 9, padY: CGFloat = 5
         let w = ts.width + padX * 2, h = ts.height + padY * 2
-        let bf = content.convert(button.bounds, from: button)
+        let bf = content.convert(view.bounds, from: view)
         var x = bf.midX - w / 2
         x = max(6, min(x, content.bounds.width - w - 6))
+        let above = bf.maxY + 6
+        let y = above + h <= content.bounds.height - 6 ? above : bf.minY - 6 - h
         content.addSubview(tipBox, positioned: .above, relativeTo: nil)
-        tipBox.frame = NSRect(x: x, y: bf.maxY + 6, width: w, height: h)
+        tipBox.frame = NSRect(x: x, y: max(6, y), width: w, height: h)
         tipText.frame = NSRect(x: padX, y: padY, width: ts.width, height: ts.height)
         tipBox.isHidden = false
     }
@@ -951,7 +1061,7 @@ final class EditorWindowController: NSObject {
                                        width: ts.width + pad * 2, height: ts.height + pad))
         box.wantsLayer = true
         box.layer?.backgroundColor = Theme.accentPurple.withAlphaComponent(0.95).cgColor
-        box.layer?.cornerRadius = 8
+        box.layer?.cornerRadius = Theme.radiusSmall
         label.frame = NSRect(x: pad, y: pad / 2, width: ts.width, height: ts.height)
         box.addSubview(label)
         content.addSubview(box)
@@ -1397,7 +1507,7 @@ final class EditorWindowController: NSObject {
         let bar = NSView(frame: NSRect(x: x, y: y, width: barW, height: barH))
         bar.wantsLayer = true
         if let layer = bar.layer {
-            layer.cornerRadius = 8
+            layer.cornerRadius = Theme.radiusSmall
             layer.borderColor = Theme.lavender.withAlphaComponent(0.9).cgColor
             layer.borderWidth = 1
             layer.shadowColor = NSColor.black.cgColor
@@ -1405,7 +1515,7 @@ final class EditorWindowController: NSObject {
             layer.shadowRadius = 16
             layer.shadowOffset = CGSize(width: 0, height: -5)
         }
-        Theme.applyPanelGradient(to: bar, cornerRadius: 8)
+        Theme.applyPanelGradient(to: bar, cornerRadius: Theme.radiusSmall)
         content.addSubview(bar)
 
         let ok = ToolButton(style: .tool("checkmark"), radius: r, target: self, action: #selector(applyCropPressed))

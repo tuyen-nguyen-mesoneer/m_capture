@@ -135,7 +135,7 @@ final class BrandAlert: NSObject {
         let v = NSView(frame: NSRect(x: 0, y: 0, width: size, height: size))
         v.wantsLayer = true
         guard let layer = v.layer else { return v }
-        layer.cornerRadius = size / 2
+        layer.cornerRadius = Theme.radiusSmall
         layer.backgroundColor = Theme.accent.withAlphaComponent(0.18).cgColor
         layer.borderWidth = 1
         layer.borderColor = Theme.accent.withAlphaComponent(0.4).cgColor

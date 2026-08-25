@@ -272,7 +272,7 @@ final class TrimSlider: NSView {
         guard let ctx = NSGraphicsContext.current?.cgContext else { return }
         let r = track
         ctx.setFillColor(NSColor(white: 1, alpha: 0.10).cgColor)
-        NSBezierPath(roundedRect: r, xRadius: 4, yRadius: 4).fill()
+        NSBezierPath(roundedRect: r, xRadius: Theme.radiusSmall, yRadius: Theme.radiusSmall).fill()
 
         let kept = CGRect(x: x(for: inTime), y: r.minY,
                           width: x(for: outTime) - x(for: inTime), height: r.height)
@@ -286,7 +286,7 @@ final class TrimSlider: NSView {
         for hx in [x(for: inTime), x(for: outTime)] {
             let grip = CGRect(x: hx - 3, y: r.minY - 4, width: 6, height: r.height + 8)
             ctx.setFillColor(NSColor.white.cgColor)
-            NSBezierPath(roundedRect: grip, xRadius: 3, yRadius: 3).fill()
+            NSBezierPath(roundedRect: grip, xRadius: Theme.radiusSmall, yRadius: Theme.radiusSmall).fill()
         }
 
         // Playhead: thin accent line, only inside the track.

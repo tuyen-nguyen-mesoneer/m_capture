@@ -83,9 +83,7 @@ final class SettingsWindowController: NSObject {
         pathLabel = valueLabel("")
         pathLabel.lineBreakMode = .byTruncatingMiddle
         pathLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        let choose = PointerButton(title: L("Choose…"), target: self, action: #selector(chooseLocation))
-        choose.bezelStyle = .rounded
-        choose.bezelColor = Theme.accentPurple
+        let choose = BrandPushButton(title: L("Choose…"), target: self, action: #selector(chooseLocation))
 
         prefixField = textField(#selector(prefixChanged))
 
@@ -692,7 +690,7 @@ final class SettingsWindowController: NSObject {
         let pill = NSView(frame: NSRect(origin: .zero, size: size))
         pill.wantsLayer = true
         pill.layer?.backgroundColor = Theme.accentPurple.withAlphaComponent(0.95).cgColor
-        pill.layer?.cornerRadius = 8
+        pill.layer?.cornerRadius = Theme.radiusSmall
         label.frame = NSRect(x: pad, y: pad / 2, width: ts.width, height: ts.height)
         pill.addSubview(label)
 
@@ -930,10 +928,7 @@ final class SettingsWindowController: NSObject {
 
     /// A brand bezel button for the About card's actions, sized like Choose….
     private func actionButton(_ title: String, _ action: Selector) -> NSButton {
-        let b = PointerButton(title: title, target: self, action: action)
-        b.bezelStyle = .rounded
-        b.bezelColor = Theme.accentPurple
-        return b
+        return BrandPushButton(title: title, target: self, action: action)
     }
 
     @objc private func openUsageGuide() { (NSApp.delegate as? AppDelegate)?.openUsageGuide() }
@@ -1090,7 +1085,7 @@ final class SettingsSidebarItem: NSView {
     init(title: String, symbol: String) {
         super.init(frame: .zero)
         wantsLayer = true
-        layer?.cornerRadius = 6
+        layer?.cornerRadius = Theme.radiusSmall
         let cfg = NSImage.SymbolConfiguration(pointSize: 13, weight: .semibold)
         iconView.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)?
             .withSymbolConfiguration(cfg)
@@ -1144,6 +1139,67 @@ final class SettingsSidebarItem: NSView {
 /// cursor on hover, matching the app's custom controls.
 private final class PointerButton: NSButton {
     override func resetCursorRects() { addCursorRect(bounds, cursor: .pointingHand) }
+}
+
+/// The Settings panel's push buttons — Choose…, and the About card's Usage Guide / Report
+/// a Bug. It draws its own square accent fill rather than taking `bezelStyle = .rounded`,
+/// because AppKit rounds a native bezel for us and there is no radius to set to 0; a
+/// rounded pill was the last curved chrome in the panel. Mirrors the custom button
+/// `BrandAlert` already draws.
+///
+/// Deliberately *not* a `PointerButton` subclass: `PointerButton` also backs the panel's
+/// checkboxes (`NSButton(checkboxWithTitle:)`), and a fill painted in its `draw` lands
+/// behind the checkbox label as a purple slab.
+private final class BrandPushButton: NSButton {
+    private var hovering = false { didSet { if hovering != oldValue { needsDisplay = true } } }
+
+    init(title: String, target: AnyObject?, action: Selector) {
+        super.init(frame: .zero)
+        isBordered = false
+        wantsLayer = true
+        bezelStyle = .regularSquare
+        setButtonType(.momentaryChange)
+        focusRingType = .none
+        alignment = .center
+        self.target = target
+        self.action = action
+        attributedTitle = NSAttributedString(string: title, attributes: [
+            .font: Theme.font(13, .medium), .foregroundColor: Theme.textPrimary,
+        ])
+    }
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        trackingAreas.forEach(removeTrackingArea)
+        addTrackingArea(NSTrackingArea(rect: bounds,
+                                       options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+                                       owner: self))
+    }
+    override func mouseEntered(with event: NSEvent) { hovering = true }
+    override func mouseExited(with event: NSEvent) { hovering = false }
+    override func resetCursorRects() { addCursorRect(bounds, cursor: .pointingHand) }
+
+    override var intrinsicContentSize: NSSize {
+        var s = super.intrinsicContentSize
+        s.width += 22   // the native bezel's own padding, which we no longer get
+        s.height = 24   // `Layout.rowHeight` — private to the controller; every form
+                        // control is 24 pt and the row rhythm depends on it
+        return s
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let fill = hovering
+            ? Theme.accentPurple.blended(withFraction: 0.18, of: .white) ?? Theme.accentPurple
+            : Theme.accentPurple
+        fill.setFill()
+        NSBezierPath(rect: bounds).fill()
+        Theme.border.setStroke()
+        let border = NSBezierPath(rect: bounds.insetBy(dx: 0.5, dy: 0.5))
+        border.lineWidth = 1
+        border.stroke()
+        super.draw(dirtyRect)
+    }
 }
 
 /// A small lavender ⓘ that marks a row as having help and reveals a brand tooltip
@@ -1269,7 +1325,7 @@ private final class DrawColorRow: NSView {
     }
 
     private func drawChip(in r: NSRect, fill: NSColor, selected: Bool) {
-        let path = NSBezierPath(roundedRect: r, xRadius: 4, yRadius: 4)
+        let path = NSBezierPath(roundedRect: r, xRadius: Theme.radiusSmall, yRadius: Theme.radiusSmall)
         fill.setFill(); path.fill()
         // Every chip gets a hairline so white reads against the dark panel.
         (selected ? Theme.lavender : Theme.border).setStroke()

@@ -210,10 +210,17 @@ final class ScreenshotController {
         ScreenshotController.forcePointerReset()
     }
 
-    /// Reset the pointer to the pointing hand — matching the Window/Screen pick modes'
-    /// cursor — immediately: the overlay's crosshair otherwise lingers (nothing moves
-    /// the mouse in the brief pre-capture delay) and gets baked into the shot when
-    /// `showsCursor` is on.
+    /// Put the pointer back to the plain arrow immediately: the overlay's capture cursor
+    /// otherwise lingers (nothing moves the mouse in the brief pre-capture delay) and gets
+    /// baked into the shot when `showsCursor` is on.
+    ///
+    /// This used to install `.pointingHand` "matching the Window/Screen pick modes' cursor",
+    /// which stopped being true once those modes moved to the brand camera / video glyph — so
+    /// after a window or screen capture the camera stayed on screen until the pointer next
+    /// moved, sometimes for seconds. `.arrow` is also simply the right thing to bake into a
+    /// screenshot. The explicit `.set()` matters as much as the window: the reset window only
+    /// wins while it is up, and when it closes the *app's* current cursor is whatever was last
+    /// `.set()` — the camera — so without clearing that the old pointer comes straight back.
     ///
     /// `.set()`, hide/unhide, and `CGWarpMouseCursorPosition` all failed to force a
     /// redraw here (confirmed: only an actual click cleared it) — those either need a
@@ -222,9 +229,34 @@ final class ScreenshotController {
     /// rect over the whole screen — the exact mechanism that successfully drew the
     /// crosshair in the first place — so the window server has to re-evaluate and draw
     /// the new cursor, then removes it a beat later once that's taken effect.
-    static func forcePointerReset() {
+    /// Wait until no mouse button is held, then do the reset on a later run-loop turn.
+    ///
+    /// This is why the reset kept failing for Window and Screen while Region was fine.
+    /// **Screen mode commits on `mouseDown`** (`SelectionView.mouseDown`), so every reset ran
+    /// with the button still held — and while a button is down the window server treats
+    /// pointer motion as a drag and suppresses cursor re-evaluation outright, so the warp,
+    /// the `.set()` and the reset window's rect were all discarded. By the time the user let
+    /// go, every attempt had already been made. Window commits on `mouseUp` but reset
+    /// *synchronously inside that event's dispatch*, before AppKit re-evaluates cursor rects.
+    /// Region commits on `mouseUp` at the end of a real drag, with fresh motion already in
+    /// the pipeline — which is exactly why it alone worked.
+    static func forcePointerReset(attempt: Int = 0) {
+        // ~1 s of retries; if a button is somehow held past that, stop rather than spin.
+        guard attempt < 33 else { return }
+        guard NSEvent.pressedMouseButtons == 0 else {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.03) {
+                forcePointerReset(attempt: attempt + 1)
+            }
+            return
+        }
+        // Never inline: let the event that triggered this finish dispatching first.
+        DispatchQueue.main.async { performPointerReset() }
+    }
+
+    private static func performPointerReset() {
         let screen = NSScreen.screens.first { $0.frame.contains(NSEvent.mouseLocation) }
             ?? NSScreen.main ?? NSScreen.screens[0]
+        redrawPointer(on: screen)
         let win = CursorResetWindow(contentRect: screen.frame, styleMask: .borderless,
                                     backing: .buffered, defer: false)
         win.isOpaque = false
@@ -241,7 +273,15 @@ final class ScreenshotController {
         let v = CursorResetView(frame: NSRect(origin: .zero, size: screen.frame.size))
         win.contentView = v
         win.makeKeyAndOrderFront(nil)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+        // 0.05 s was not enough of a window for the server to re-evaluate; re-assert while
+        // the reset window is still up, then once more as it goes away — closing it hands
+        // cursor duty back to whatever is underneath, which may not ask for an update until
+        // the pointer moves.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
+            ScreenshotController.redrawPointer(on: screen)
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+            ScreenshotController.redrawPointer(on: screen)
             // `close()`, not just `orderOut` — see `dismiss()`'s note on the same
             // window-server race; this window briefly holds key status too, which
             // makes an incomplete hide here the worst case (a full-screen, currently
@@ -557,6 +597,54 @@ final class ScreenshotController {
     }
 }
 
+extension ScreenshotController {
+    /// Set the arrow *and* make the window server actually re-composite it.
+    ///
+    /// `NSCursor.set()` only updates the app's current-cursor state. The server keeps drawing
+    /// the image it last composited until **pointer motion** makes it re-evaluate — which is
+    /// exactly why the stale camera cleared the instant the mouse was nudged. Cursor rects,
+    /// `.set()`, `hide`/`unhide` and a front window with its own rect all change *claims*;
+    /// none of them supply the motion, so none of them fixed it.
+    ///
+    /// `CGWarpMouseCursorPosition` does, and needs no Accessibility grant (that is required
+    /// for *synthesizing events* via `CGEvent.post`, not for repositioning the pointer). The
+    /// warp is one point and back on the next tick: two distinct positions, so the move can't
+    /// be coalesced away, and a 1 pt round trip is imperceptible. Net position is unchanged.
+    /// Guards against a second reset hiding the pointer again before the first unhides it.
+    /// `NSCursor.hide()`/`unhide()` are reference-counted: two hides need two unhides, and an
+    /// unmatched hide leaves the Mac with no pointer at all.
+    private static var pointerHidden = false
+
+    static func redrawPointer(on screen: NSScreen) {
+        // Take the pointer off screen for a single tick. Setting a cursor only changes the
+        // *claim*; the server keeps compositing the old image until it re-evaluates. With
+        // nothing drawn there is no stale image to leave behind, and `unhide` composites
+        // whatever the claim is by then — the arrow.
+        if !pointerHidden {
+            pointerHidden = true
+            NSCursor.hide()
+        }
+        NSCursor.arrow.set()
+
+        // Belt and braces: a 1 pt round trip supplies real pointer motion, the one thing that
+        // reliably makes the server re-evaluate. Direction keeps it inside the current
+        // display, so it can never walk onto another screen.
+        let here = WindowList.cgPoint(fromAppKitMouse: NSEvent.mouseLocation)
+        let bounds = screen.displayID.map(CGDisplayBounds) ?? .zero
+        let dx: CGFloat = here.x + 1 < bounds.maxX ? 1 : -1
+        CGWarpMouseCursorPosition(CGPoint(x: here.x + dx, y: here.y))
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.03) {
+            CGWarpMouseCursorPosition(here)
+            NSCursor.arrow.set()
+            if pointerHidden {
+                pointerHidden = false
+                NSCursor.unhide()
+            }
+        }
+    }
+}
+
 /// Borderless window used only to briefly reclaim cursor ownership after a capture
 /// overlay is dismissed — see `ScreenshotController.forcePointerReset`.
 private final class CursorResetWindow: NSWindow {
@@ -566,7 +654,7 @@ private final class CursorResetWindow: NSWindow {
 /// Full-screen view whose only job is to claim the pointing-hand cursor via a
 /// standard AppKit cursor rect.
 private final class CursorResetView: NSView {
-    override func resetCursorRects() { addCursorRect(bounds, cursor: .pointingHand) }
+    override func resetCursorRects() { addCursorRect(bounds, cursor: .arrow) }
 }
 
 extension NSScreen {
