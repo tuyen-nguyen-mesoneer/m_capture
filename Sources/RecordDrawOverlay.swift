@@ -217,9 +217,10 @@ private final class DrawOverlayView: NSView {
         let made: NSCursor
         switch tool {
         case .pencil:
-            made = BrandCursor.make(symbol: "pencil.tip", tipHotspot: true) ?? .crosshair
+            made = BrandCursor.makeOutlined(symbol: "pencil.tip", tipHotspot: true,
+                                            pointSize: BrandCursor.toolSize) ?? .crosshair
         case .rectangle, .circle, .line, .arrow:
-            made = BrandCursor.make(symbol: "plus") ?? .crosshair
+            made = BrandCursor.makeOutlined(symbol: "plus", pointSize: BrandCursor.toolSize) ?? .crosshair
         }
         cursorCache[tool] = made
         return made
