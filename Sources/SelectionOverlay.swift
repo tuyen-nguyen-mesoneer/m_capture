@@ -304,7 +304,7 @@ final class SelectionView: NSView {
     /// that is the one shape that says *drag out a region*. A `viewfinder` glyph matched the
     /// others' style but said "aim", losing the only instruction Region mode gives — and with
     /// no action line in the guidance card, this cursor is that instruction.
-    private static let crosshairCursor = BrandCursor.makeCrosshair(side: 28, gap: 5, core: 3)
+    private static let crosshairCursor = BrandCursor.makeOutlined(symbol: "plus") ?? .crosshair
     private static let cameraCursor = BrandCursor.makeOutlined(symbol: "camera.fill") ?? .pointingHand
     private static let videoCursor = BrandCursor.makeOutlined(symbol: "video.fill") ?? .pointingHand
 

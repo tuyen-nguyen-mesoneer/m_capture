@@ -28,7 +28,7 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
 
 - **Screenshot** (⌃⇧S): every display is frozen the instant the hotkey fires → the
   selection overlay dims those stills → drag a region (or **Space** → whole-screen mode →
-  click) → an in-place annotation editor opens over the dimmed screen. Selecting on a
+  click) → the annotation editor opens over the dimmed screen, the capture centred in it. Selecting on a
   frozen frame is what makes tooltips, hover menus and popovers capturable at all: the
   overlay has to activate the app to get its keyboard, and activating dismisses them.
 - **Record** (⌃⇧R): drag a region → record it in-process via ScreenCaptureKit
@@ -121,25 +121,42 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
   anything fired from a background context — nested `runModal` from callbacks can
   wedge the run loop. Panel level sits above the capture overlays.
 - `BrandToast.swift` — brief auto-fading toast pill (copied / trashed confirmations).
-- `BrandCursor.swift` — mesoneer-styled pointer cursors built from SF Symbols, in two
-  styles for two jobs. `make` — brand-purple glyph + soft white halo, **no chip** — is the
-  editor's per-tool cursor, where a pencil or crop tip has to stay visible over the pixel it
-  is about to touch. `makeOutlined` — a **white glyph ringed with a brand-purple keyline** —
-  and `makeCrosshair` (the same treatment, drawn rather than symbol-derived) give the capture
-  overlay one pointer style across all three modes, at matched weight. Region **must stay a
-  crosshair** — it is the one shape that reads as "drag out a region", and with no action line
-  in the guidance card the cursor is that instruction; a `viewfinder` glyph matched the style
-  but said "aim" and lost it. Drawn rather than symbol-derived because Region is also the one
-  mode where a pixel matters: the arms leave a **gap at the centre** so the hotspot sits on
-  nothing, which no SF Symbol offers. On the camera/video cursor: a dark purple glyph with a 2.5 pt halo all but
-  vanished against the dimmed screenshot behind it, and with no action line in the guidance
-  card that cursor is the only thing saying whether a click shoots or records. Inverting it
-  covers both extremes with no slab following the pointer: the white body reads on the dim,
-  the keyline reads on bright content. The keyline is a ring of offset copies because it must
-  follow the *glyph's* silhouette — a stroked rect would outline the box. When tinting a
+- `BrandCursor.swift` — mesoneer-styled pointer cursors, **one style and one builder**
+  (`makeOutlined`): a white glyph ringed with a brand-purple keyline. Capture overlay, editor
+  tools and the live-drawing overlay all use it, so the pointer never changes character between
+  picking a region and marking one up. It won because it is the only style that survives both
+  backdrops: the editor used to carry a brand-purple glyph with a soft white halo (`make`, now
+  gone), which reads over a bright capture and all but vanishes over the dim around it — dark on
+  dark with 2.5 pt of blur to save it. Inverting it covers both extremes with no slab following
+  the pointer: the **white body reads on the dim, the keyline reads on bright content** the white
+  body would disappear into. The keyline is a ring of offset copies because it must follow the
+  *glyph's* silhouette — a stroked rect would outline the box, not the camera. When tinting a
   glyph, do it in its **own transparent image**: `.sourceAtop` over anything already drawn
-  composites against those pixels and floods the whole glyph box solid.
-- `Theme.swift` — brand palette + fonts; the single styling source.
+  composites against those pixels and floods the whole glyph box solid. Only **size** differs by
+  role — `modeSize` (19) for a cursor that names a mode, `toolSize` (16) for one that is a tool
+  tip and must stay clear of the pixel it is about to touch.
+  **"Drag out a region" is one glyph, `plus`**, from the capture overlay's Region mode through
+  the editor's Crop to every shape / blur / spotlight drag. Region kept a hand-drawn crosshair
+  for a long time (`makeCrosshair`, removed) whose arms left a **gap at the centre** so the
+  hotspot sat on nothing drawn — the one thing no SF Symbol offers, and the reason it survived.
+  `plus` has ink where its strokes cross, so the exact start pixel now sits *under* the glyph;
+  that was traded deliberately for a single pointer across capture and editing. If aiming
+  precision ever bites, that gap is what to bring back. Region **must stay crosshair-shaped**
+  either way — it is the one shape that reads as "drag out a region", and with no action line in
+  the guidance card the cursor is that instruction; a `viewfinder` glyph matched the style but
+  said "aim" and lost it.
+- `Theme.swift` — brand palette + fonts; the single styling source. **One surface across the
+  app**: `applyPanelGradient` / `stylePanel` for anything filling a window (Settings, History,
+  Trim, alerts, the status-item menu), and `styleFloatingCard` for a small thing floating over a
+  capture (the editor's tool cards, its inline bars) — the same `surfaceBase` + `panelGradient`
+  the menu uses, plus a 1 pt hairline. Deliberate: the floating chrome and the menu the app
+  opens from should be one material. Two ordering details in `styleFloatingCard` that are easy
+  to undo by accident — the opaque `backgroundColor` under the gradient is what a caller's drop
+  shadow derives its shape from (crisper than compositing one out of sublayers), and a layer
+  draws its border *above* its sublayers, which is the only reason the hairline survives the
+  gradient. The known trade is that a panel-scaled 45° sweep is compressed on a 126 pt card, so
+  a card shows a short diagonal wash rather than the full sweep; the fix, if it ever matters, is
+  a gentler `panelGradient`, not a second surface.
 - `Logo.swift` — the "m." logo / menu-bar glyph, drawn in code; `menuBarImage(badged:)`
   composes the update badge into the same template image so it still tints with the menu bar.
 - `ScreenshotController.swift` — selection-overlay windows; grabs the rect
@@ -246,7 +263,7 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
 - `HistoryWindow.swift` — the History panel: newest captures from the save folder as
   thumbnail cards (adaptive grid, video play badges) with Copy / Pin / Trim / Reveal /
   Trash actions; rebuilt from the folder on every open.
-- `EditorWindow.swift` — the in-place annotation editor: tool tiles in five groups
+- `EditorWindow.swift` — the annotation editor: tool tiles in five groups
   (Markup, Shapes, Style, Actions, Background) placed by a **gap model**
   (`measureGaps`): the four strips of screen around the selection are measured in whole
   cards, each cluster takes the best gap that still has room (`preference`), a gutter
@@ -263,6 +280,8 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
   crop, rotate-right, flip, undo/redo, Pin (⌘P), Before/After GIF, Copy (⌘C), Save
   (⌘S), Save As (⇧⌘S), Cancel. Owns tooltips, selection state, the pickers, and the
   live background preview (`BackgroundView`).
+  Cards are `Theme.styleFloatingCard` — the status-item menu's surface plus a hairline; see the
+  `Theme.swift` entry before changing it.
   Every card carries a `ClusterHeader` — a six-dot grip beside the group's eyebrow
   label, over the hairline — because the open-hand cursor was the *only* cue that the
   cards move, and a cursor is invisible until the pointer is already there. The header
@@ -281,13 +300,71 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
   gap runs and the gathered block, so nothing has to stay size-matched between them.
   Two placement invariants are worth re-checking after any change here, because nothing
   enforces them at runtime: **no card overlaps another**, and **no card sits over the
-  capture unless it is a leftover**. A gutter run is centred on the capture and so spills
-  past it when long, which is why `measureGaps` caps the run to the capture's height
-  when — and only when — both strips also hold cards.
+  capture unless it is a leftover**. What holds the first one up is `gutterBand`: a gutter run
+  is centred on the capture and then clamped, so it must be clamped into *the band the
+  horizontal strips leave*, never into the whole screen. Clamping to the screen edge is what
+  used to walk a column through the row above it — visible as one card sitting on another for
+  a small capture in a screen corner (268 of 13689 simulated capture shapes). `measureGaps`
+  sizes the run against that same band and grants no gutter at all when it is too shallow for
+  one card, so capacity and placement cannot disagree; `rowOutside`'s two edges are the band's
+  definition, so **change one and you must change the other**.
+  **The capture is centred on the display, and shrunk if the cards still wouldn't fit
+  around it** (`insetScale`, `magnification`). Centring is what makes the layout
+  tractable: the four margins become two equal gutters and two equal strips, so `insetScale`
+  needs two tests rather than four and the capture's original position drops out of the
+  problem entirely. Scaling covers what centring can't — past roughly 78% of the screen's
+  width no gutter clears a card, so all five cards would gather *on top of* the image, over
+  the very pixels being annotated. `insetScale` runs `measureGaps`' own tests (one side with
+  room is enough: a lone strip seats 10 cards, a lone gutter 5) and only scales when every
+  side comes up short, to `f.width - 2·gutterInset`. About 10% of capture shapes scale;
+  ≈0.78 for whole-screen on a 1440-pt display. Verified by simulating the gap model over
+  1764 capture shapes × 9 screen sizes: nothing gathers, no card overlaps the capture or
+  another card, nothing lands off-screen. A capture at the other extreme is **magnified**
+  instead (`magnification`): centred in a dimmed screen, a 40×30 region is a postage stamp,
+  and below ~36 pt of canvas the eight 18 pt resize knobs overlap each other so it can't even
+  be resized. Its long edge is brought up to `comfortableEdge` in **whole steps** — integer
+  only, because `displayScale` is `scale / captureScale` against a backing scale of
+  `captureScale`, so a whole number lays a whole number of backing pixels on each image pixel
+  and there is nothing to interpolate; a fractional one would resample, which is exactly what
+  shrinking has to pay for. Capped at `maxMagnification` and at half the display, which keeps
+  every margin at a quarter-screen or more so a magnified capture can't push the cards back
+  onto itself. Below that floor `placeResizeHandle` drops to corners only.
+  Both fold into `displayScale`, so relayout / crop / rotate / flip follow for free — and it
+  stays **1 whenever the cards already fit**, because an inexact scale makes CoreGraphics
+  resample the whole canvas on every redraw (see the `init` note; hence
+  `interpolationQuality = .high` in `CanvasView.draw`).
+  Those two only pick the **opening** scale. From then on **the eight resize knobs stretch the
+  picture freely** (`resizeDragged`, `resizeEnded`): each drags only the edge(s) it sits on,
+  holding the opposite one fixed, bounded per side by `minCanvasEdge` / `maxCanvasScreens` and
+  by **nothing else** — no screen clamp, no aspect lock, no centre anchor. Those last two were
+  tried and are wrong here: locking the aspect makes an edge knob change the height too, and
+  anchoring on the centre makes it move the opposite edge, so no knob feels like it belongs to
+  the side it sits on. The cost is that a non-uniform stretch distorts the screenshot; Rotate /
+  Flip / Crop are the actions that stay rigid. Committing writes `canvas.scaleX` / `scaleY`
+  from the dragged frame and relayouts. **It is presentational only** — annotations live in
+  image space and `exportRep` flattens the image, so what gets saved is identical at any
+  stretch. A quarter turn swaps the two scales with the axes, so a stretched box comes back on
+  its side instead of snapping square.
+  This replaced a **display re-grab**: dragging a knob used to re-capture a larger rectangle
+  from the screen (an async ScreenCaptureKit round trip that could fail, and that stitched
+  now-pixels around then-pixels). It could only ever reach the display's own edge, and once the
+  capture was centred that edge was invisible — a shot taken 10 pt from the screen's left grew
+  10 pt left while sitting mid-screen looking like it had 500 pt of room, so the knob read as
+  broken. A stretch has no such limit, and `viewScale` / `shownRegion` / `regionRect` /
+  `contentRect` / `resizeLimit` / `ScreenshotController.recaptureRegion` went with it — as did
+  the rotate/flip incoherence, which only existed because a re-grab assumed the image still
+  matched the screen's orientation.
+  `relayout` **centres** a frame too big to fit rather than pinning it into a corner, which
+  only matters because a hand zoom can now exceed the screen.
 - `CanvasView.swift` — the annotation canvas: `Tool` enum, undo/redo, Gaussian blur,
   crop/rotate/flip transforms (`applyTransform` shifts annotations when the region
-  changes), and live edit state. (The whole-canvas resize is now a display re-grab in
-  `EditorWindow`, not a pixel resample.) Shapes get an eight-handle box resize
+  changes), and live edit state. Scale is **two `var`s, `scaleX` / `scaleY`** — the editor's
+  resize knobs drag each edge independently, so the picture stretches — and whoever writes them
+  owns resizing the view to match. **Coordinate conversions must use both axes**; the scalar
+  `displayScale` (`min` of the two) is for *tolerances* only — hit radii, knob sizes, minimum
+  drag extents, which are circles in view space and so have no axis. `endTextEditing()` exists
+  so the editor can land a live `NSTextView` (positioned in view points) before a scale change
+  strands it. Shapes get an eight-handle box resize
   (`boxHandle`/`resizeBox`: four corners + four edge midpoints for single-axis stretch);
   arrows/lines get three handles (`curveHandle`: start/end endpoints + bend apex).
   A just-drawn shape (`editingShape`) or curve (`editingCurve`) stays editable under its

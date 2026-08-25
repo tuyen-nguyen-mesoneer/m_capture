@@ -87,6 +87,31 @@ enum Theme {
         applyPanelGradient(to: view, cornerRadius: cornerRadius)
     }
 
+    /// Style `view` as a small floating card: **the same surface the status-item menu uses** —
+    /// flat `surfaceBase` under `panelGradient` — plus a hairline edge and square corners. For
+    /// the editor's tool cards and its inline bars, so the chrome floating over a capture reads
+    /// as the same material as the menu the app opens from.
+    ///
+    /// Layered exactly as `BrandMenu` does it, and the order matters twice over: the opaque
+    /// `backgroundColor` is what a caller's drop shadow derives its shape from (crisper than
+    /// compositing one out of sublayers), and a layer draws its border *above* its sublayers,
+    /// so the hairline survives the gradient sitting on top of the fill.
+    ///
+    /// Known trade: `panelGradient` is a 45° three-stop sweep scaled to a whole panel, so on a
+    /// 126 pt card it is compressed to a short diagonal wash rather than the full sweep the
+    /// menu shows. Matching the menu is the point; if a card ever needs to read flatter, the
+    /// answer is a gentler gradient in `panelGradient`, not a different surface here.
+    static func styleFloatingCard(_ view: NSView, cornerRadius: CGFloat = radiusSmall,
+                                  stroke: NSColor = cardStroke) {
+        view.wantsLayer = true
+        guard let layer = view.layer else { return }
+        layer.backgroundColor = surfaceBase.cgColor
+        applyPanelGradient(to: view, cornerRadius: cornerRadius)
+        layer.borderColor = stroke.cgColor
+        layer.borderWidth = 1
+        layer.cornerRadius = cornerRadius
+    }
+
     /// Make a borderless `window` transparent with a drop shadow so a rounded
     /// panel content view shows through. The caller sets `.level`/`.contentView`.
     static func styleOverlayWindow(_ window: NSWindow) {

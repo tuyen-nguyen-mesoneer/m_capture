@@ -14,7 +14,20 @@ enum Tool {
 /// Annotation coordinates are kept in full-resolution image space.
 final class CanvasView: NSView, NSTextViewDelegate {
     private(set) var image: NSImage
-    let displayScale: CGFloat
+    /// Points per image pixel, per axis. `var`s because the editor's resize knobs drag each
+    /// edge independently, which stretches the picture — annotations are stored in image space,
+    /// so this is purely presentational. Whoever writes them owns resizing the view to match
+    /// (`image.size.width * scaleX` by `image.size.height * scaleY`).
+    ///
+    /// **Coordinate conversions must use these two**; the scalar `displayScale` below is for
+    /// tolerances only.
+    var scaleX: CGFloat { didSet { if scaleX != oldValue { needsDisplay = true } } }
+    var scaleY: CGFloat { didSet { if scaleY != oldValue { needsDisplay = true } } }
+
+    /// One scale for the *tolerances* — hit radii, handle sizes, minimum drag extents — which
+    /// are circles in view space and so have no axis. The tighter axis, so a grab target never
+    /// comes out smaller on screen than it reads in image space.
+    var displayScale: CGFloat { min(scaleX, scaleY) }
 
     var tool: Tool = .arrow {
         didSet {
@@ -189,7 +202,8 @@ final class CanvasView: NSView, NSTextViewDelegate {
 
     init(image: NSImage, displayScale: CGFloat) {
         self.image = image
-        self.displayScale = displayScale
+        self.scaleX = displayScale
+        self.scaleY = displayScale
         super.init(frame: NSRect(x: 0, y: 0,
                                  width: image.size.width * displayScale,
                                  height: image.size.height * displayScale))
@@ -220,7 +234,7 @@ final class CanvasView: NSView, NSTextViewDelegate {
     override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
         guard let cg = CanvasView.cgImage(from: sender.draggingPasteboard) else { return false }
         let v = convert(sender.draggingLocation, from: nil)
-        return insertOverlay(cg, at: CGPoint(x: v.x / displayScale, y: v.y / displayScale))
+        return insertOverlay(cg, at: CGPoint(x: v.x / scaleX, y: v.y / scaleY))
     }
 
     /// Read an image off a pasteboard — either image data (clipboard, dragged
@@ -348,14 +362,17 @@ final class CanvasView: NSView, NSTextViewDelegate {
         // Drag-to-define tools — shapes, line/arrow, and the blur / spotlight region
         // drags — all share the precise crosshair: a filled glyph sits as an opaque
         // blob over the exact start point you're aiming at.
+        // Crop belongs here too: it drags out a rectangle like the rest of them, and the
+        // `crop` symbol it used to carry was a dense pair of brackets parked over the exact
+        // corner being aimed at. `plus` is also what the capture overlay's Region mode uses, so
+        // the pointer for "drag out a region" is one glyph from capture through to editing.
         case .line, .arrow, .rect, .roundedRect, .ellipse, .triangle, .diamond,
              .star, .checkmark, .pentagon, .hexagon, .octagon,
-             .blur, .spotlight, .ruler: return "plus"
+             .blur, .spotlight, .ruler, .crop: return "plus"
         case .text:        return "character.textbox"
         case .counter:     return "number.circle.fill"
         case .eyedropper:  return "eyedropper.full"
         case .eraser:      return "eraser.fill"
-        case .crop:        return "crop"
         case .ocr:         return "text.viewfinder"
         case .zoom:        return "plus.magnifyingglass"
         case .emoji:       return "face.smiling.inverse"
@@ -366,12 +383,15 @@ final class CanvasView: NSView, NSTextViewDelegate {
 
     private static var cursorCache: [String: NSCursor] = [:]
 
-    /// A mesoneer-styled tool cursor: the brand-purple glyph with a soft white halo for
-    /// contrast — no background chip. Cached per glyph.
+    /// A mesoneer-styled tool cursor — the same white-glyph-with-a-brand-keyline the capture
+    /// overlay uses, at `toolSize`, so the pointer doesn't change character between picking a
+    /// region and marking it up. Cached per glyph.
     private static func brandCursor(named name: String, tipHotspot: Bool) -> NSCursor {
         let key = "\(name)#\(tipHotspot)"
         if let c = cursorCache[key] { return c }
-        guard let cursor = BrandCursor.make(symbol: name, tipHotspot: tipHotspot) else { return .crosshair }
+        guard let cursor = BrandCursor.makeOutlined(symbol: name, tipHotspot: tipHotspot,
+                                                    pointSize: BrandCursor.toolSize)
+        else { return .crosshair }
         cursorCache[key] = cursor
         return cursor
     }
@@ -501,7 +521,7 @@ final class CanvasView: NSView, NSTextViewDelegate {
 
     private func imagePoint(_ event: NSEvent) -> CGPoint {
         let v = convert(event.locationInWindow, from: nil)
-        return CGPoint(x: v.x / displayScale, y: v.y / displayScale)
+        return CGPoint(x: v.x / scaleX, y: v.y / scaleY)
     }
 
     override func mouseDown(with event: NSEvent) {
@@ -681,8 +701,8 @@ final class CanvasView: NSView, NSTextViewDelegate {
         guard !dirty.isNull else { needsDisplay = true; return }
         let pad = 80 / displayScale
         let img = dirty.insetBy(dx: -pad, dy: -pad)
-        setNeedsDisplay(CGRect(x: img.minX * displayScale, y: img.minY * displayScale,
-                               width: img.width * displayScale, height: img.height * displayScale))
+        setNeedsDisplay(CGRect(x: img.minX * scaleX, y: img.minY * scaleY,
+                               width: img.width * scaleX, height: img.height * scaleY))
     }
 
     override func mouseDragged(with event: NSEvent) {
@@ -1103,6 +1123,10 @@ final class CanvasView: NSView, NSTextViewDelegate {
         tv.frame = NSRect(x: tv.frame.minX, y: top - height, width: width + inset.width * 2, height: height)
     }
 
+    /// Commit any in-progress text box. The editor calls this before rescaling: the live
+    /// `NSTextView` is a subview positioned in view points, so a scale change strands it.
+    func endTextEditing() { _ = commitText() }
+
     @discardableResult
     private func commitText() -> Bool {
         guard let tv = textView else { return false }
@@ -1112,10 +1136,10 @@ final class CanvasView: NSView, NSTextViewDelegate {
         tv.removeFromSuperview()
         window?.makeFirstResponder(self)
         guard !attributed.string.isEmpty else { return false }
-        let origin = CGPoint(x: f.minX / displayScale, y: f.minY / displayScale)
+        let origin = CGPoint(x: f.minX / scaleX, y: f.minY / scaleY)
         let mark = TextAnnotation(attributed: attributed, origin: origin, fontSize: textImageFont,
-                                  maxWidth: f.width / displayScale,
-                                  boxHeight: f.height / displayScale,
+                                  maxWidth: f.width / scaleX,
+                                  boxHeight: f.height / scaleY,
                                   fontName: textFontName, bold: textBold,
                                   alignment: textAlignment, background: textBackground,
                                   backgroundColor: textBackgroundColor)
@@ -1147,8 +1171,8 @@ final class CanvasView: NSView, NSTextViewDelegate {
     /// Image-space bounds of the current text target, for positioning the format popover.
     var textFocusRect: CGRect? {
         if let tv = textView {
-            return CGRect(x: tv.frame.minX / displayScale, y: tv.frame.minY / displayScale,
-                          width: tv.frame.width / displayScale, height: tv.frame.height / displayScale)
+            return CGRect(x: tv.frame.minX / scaleX, y: tv.frame.minY / scaleY,
+                          width: tv.frame.width / scaleX, height: tv.frame.height / scaleY)
         }
         return targetTextMark?.bounds
     }
@@ -1497,7 +1521,12 @@ final class CanvasView: NSView, NSTextViewDelegate {
     override func draw(_ dirtyRect: NSRect) {
         guard let ctx = NSGraphicsContext.current?.cgContext else { return }
         ctx.saveGState()
-        ctx.scaleBy(x: displayScale, y: displayScale)
+        // Neither scale is generally the exact reciprocal that maps image pixels 1:1 onto
+        // backing pixels — the editor shrinks a large capture to fit its tool cards, and the
+        // resize knobs stretch to whatever the hand drags — so CoreGraphics has to resample.
+        // Ask for a good one; at an exact scale there is nothing to interpolate and this is free.
+        ctx.interpolationQuality = .high
+        ctx.scaleBy(x: scaleX, y: scaleY)
         // Clip to the image so a mark that overhangs the edge (e.g. after the region is
         // trimmed) never paints its cut-off part onto the surrounding backdrop.
         ctx.clip(to: CGRect(origin: .zero, size: image.size))
@@ -1580,8 +1609,8 @@ final class CanvasView: NSView, NSTextViewDelegate {
         image = newImage
         rebuildBitmap()
         frame = NSRect(origin: frame.origin,
-                       size: NSSize(width: image.size.width * displayScale,
-                                    height: image.size.height * displayScale))
+                       size: NSSize(width: image.size.width * scaleX,
+                                    height: image.size.height * scaleY))
         (annotations + redoStack).forEach { $0.remap(remap) }
         // A transform (crop especially) can push a mark entirely off the new image.
         // Drop those so they don't linger invisibly off-canvas or resurface on a later

@@ -179,7 +179,17 @@ private final class BackgroundView: NSView {
 /// the drag as a screen-space delta so the controller can move the grabbed edge(s) and
 /// hold the opposite ones.
 private final class ResizeHandle: NSView {
-    enum Edge: CaseIterable { case topLeft, top, topRight, right, bottomRight, bottom, bottomLeft, left }
+    enum Edge: CaseIterable {
+        case topLeft, top, topRight, right, bottomRight, bottom, bottomLeft, left
+        /// Corners resize both axes; the four midpoints stretch one. A canvas too small for
+        /// all eight keeps only these.
+        var isCorner: Bool {
+            switch self {
+            case .topLeft, .topRight, .bottomRight, .bottomLeft: return true
+            default: return false
+            }
+        }
+    }
     let edge: Edge
     var onBegin: (() -> Void)?
     var onDrag: ((CGSize) -> Void)?
@@ -270,10 +280,9 @@ final class EditorWindowController: NSObject {
     /// key equivalent is consumed before it ever becomes a keyDown.)
     private var pasteMonitor: Any?
     private let canvas: CanvasView
-    /// Capture context, kept so the resize handles can re-grab a larger region from the
-    /// same display (excluding this editor window so it sees the real screen behind).
+    /// The display the capture came from — its geometry sizes the opening scale and bounds a
+    /// hand zoom.
     private let captureScreen: NSScreen
-    private var reGrabbing = false
     private var toolButtons: [Tool: ToolButton] = [:]
     private var swatchButtons: [ToolButton] = []
     /// Stroke-width presets, exposed via ONE cycling tile (Thin → Medium → Thick) so the
@@ -354,7 +363,8 @@ final class EditorWindowController: NSObject {
     ///   bilinear-resample the *entire* image on every redraw — invisible on a dense
     ///   Retina panel, visibly soft on a 1x external display.
     init(image: NSImage, selectionRect: CGRect, screen: NSScreen, captureScale: CGFloat = 1) {
-        let scale = captureScale > 0 ? 1 / captureScale : 1
+        let inset = EditorWindowController.onScreenScale(selection: selectionRect, screen: screen)
+        let scale = (captureScale > 0 ? 1 / captureScale : 1) * inset
         canvas = CanvasView(image: image, displayScale: scale)
         captureScreen = screen
         window = KeyableWindow(contentRect: screen.frame, styleMask: .borderless,
@@ -384,9 +394,17 @@ final class EditorWindowController: NSObject {
         dim.layer?.backgroundColor = NSColor(white: 0, alpha: 0.85).cgColor
         content.addSubview(dim)
 
-        let local = NSRect(x: selectionRect.minX - screen.frame.minX,
-                           y: selectionRect.minY - screen.frame.minY,
-                           width: selectionRect.width, height: selectionRect.height)
+        // The capture is centred on the display for editing, not left where it was shot.
+        // Centred, the four margins are symmetric — two equal gutters and two equal strips —
+        // which is what lets the cards scatter around it from any capture shape, and for one
+        // large enough to need scaling the middle is the *only* place that leaves a gutter on
+        // both sides. Its size comes from the canvas, which sized itself from the image and
+        // `displayScale`, so the ring and the gap measurements line up with the pixels
+        // actually on screen. From here on the resize handles are a free zoom, so the canvas
+        // frame is only ever `image.size * canvas.displayScale`.
+        let local = NSRect(x: ((screen.frame.width - canvas.frame.width) / 2).rounded(),
+                           y: ((screen.frame.height - canvas.frame.height) / 2).rounded(),
+                           width: canvas.frame.width, height: canvas.frame.height)
         canvas.setFrameOrigin(local.origin)
         content.addSubview(canvas)
 
@@ -449,9 +467,125 @@ final class EditorWindowController: NSObject {
         window.delegate = self
     }
 
+    // MARK: Card geometry — shared by the gap model and `insetScale`, which has to predict
+    // what the gap model will decide before a single card exists.
+
+    /// Gap between a cluster card and the capture.
+    private static let cardGap: CGFloat = 16
+    /// Margin every card keeps from the screen edge.
+    private static let cardMargin: CGFloat = 8
+    /// How far `buildClusters` shrinks the capture before measuring around it.
+    private static let capturePad: CGFloat = 8
+    /// Slack so `insetScale`'s arithmetic lands clear of the gap model's own comparisons
+    /// rather than exactly on them.
+    private static let cardSlack: CGFloat = 8
+    /// Long edge a capture should reach to be comfortable to annotate. Below it the capture
+    /// is magnified (see `magnification`).
+    private static let comfortableEdge: CGFloat = 320
+    /// Ceiling on that magnification — past this a capture is more pixel blocks than picture.
+    /// Only the *opening* scale is capped; the resize handles zoom without limit.
+    private static let maxMagnification: CGFloat = 4
+    /// Floor on either edge of a hand-dragged canvas, so a knob can't collapse it to nothing.
+    private static let minCanvasEdge: CGFloat = 40
+    /// Ceiling on either edge of a hand-dragged canvas, in screens.
+    private static let maxCanvasScreens: CGFloat = 8
+
+    /// Horizontal room a card column needs beside the capture: its own width, plus the gap
+    /// and margin `measureGaps` adds, plus slack. Both `insetScale` and the resize clamp
+    /// reserve exactly this, so a capture can neither open nor be dragged into a size that
+    /// leaves the cards nowhere to go.
+    private static var gutterInset: CGFloat { cardFootprint.width + cardGap + cardMargin + cardSlack }
+
+    /// The footprint of one cluster card. All five clusters are a 4×3 grid of `radius: 14`
+    /// tiles, so `makeCluster` + `cardFit` give them the same size — and `insetScale` needs
+    /// it before any card is built. Mirrors those two methods' geometry; if it ever drifts
+    /// from them the scale just comes out wrong by a few points and a card gathers over the
+    /// capture, which is where this layout started.
+    private static var cardFootprint: NSSize {
+        let side = ToolButton.size(radius: 14).width, gap: CGFloat = 4, pad: CGFloat = 5
+        let grid = NSSize(width: 3 * (side + gap) + side, height: 2 * (side + gap) + side)
+        return NSSize(width: grid.width + pad * 2, height: 17 + 22 + grid.height + pad * 2)
+    }
+
+    /// How much to shrink the capture on screen so the tool cards have somewhere outside it
+    /// to sit — 1, meaning pixel-exact and left where it was shot, whenever they already do.
+    ///
+    /// A capture big enough to leave `measureGaps` nothing loses the scattered layout
+    /// entirely: no strip outside the image can hold a card, so all five gather *on top of*
+    /// the image — over the very pixels being annotated. That starts well before a
+    /// whole-display capture (around 85% of the screen's width), and at the whole-display
+    /// end the editor is on top of that pixel-identical to the desktop it froze, with only
+    /// those cards to say anything happened. Shrinking until a card column clears both sides
+    /// fixes both: the dim becomes a frame, and the cards scatter around it the way they do
+    /// for a small capture. It applies to any capture mode, because it is measured from the
+    /// rect rather than read off the mode that produced it.
+    ///
+    /// The test is the gap model's own, so nothing is scaled that didn't need it: if any one
+    /// side can take a card, the layout works and the capture stays pixel-exact. That matters
+    /// because an inexact scale costs a full-canvas resample on every redraw (see `init`'s
+    /// note) — a capture that would otherwise be annotated *under* its own toolbars pays it,
+    /// nothing else does.
+    /// The capture's on-screen scale: shrunk when the cards can't fit around it, magnified
+    /// when it is too small to work on, and 1 — pixel-exact — for everything in between.
+    /// Shrinking wins if both apply, since a capture that big is not also small.
+    private static func onScreenScale(selection: CGRect, screen: NSScreen) -> CGFloat {
+        let shrunk = insetScale(selection: selection, screen: screen)
+        return shrunk < 1 ? shrunk : magnification(selection: selection, screen: screen)
+    }
+
+    /// Whole-number magnification for a capture too small to annotate comfortably.
+    ///
+    /// A 40×30 region centred in a dimmed 1440×900 screen is a postage stamp — there is
+    /// nothing to aim a mark at, and below roughly 36 pt of canvas the eight 18 pt resize
+    /// knobs overlap each other, so it can't even be resized. Enlarging costs none of the
+    /// softness that *shrinking* does, provided it is by a whole number: `displayScale` is
+    /// `scale / captureScale` while the backing scale *is* `captureScale`, so an integer
+    /// `scale` lays a whole number of backing pixels on every image pixel and there is
+    /// nothing to interpolate. A fractional one would resample, which is the whole reason
+    /// `insetScale` refuses to shrink anything that doesn't need it.
+    ///
+    /// Brings the long edge up to `comfortableEdge` in whole steps, capped by
+    /// `maxMagnification` and by half the display — that cap keeps every margin at a quarter
+    /// of the screen or more, well past what a card needs, so a magnified capture can never
+    /// push the cards back on top of itself.
+    private static func magnification(selection: CGRect, screen: NSScreen) -> CGFloat {
+        let f = screen.frame
+        let long = max(selection.width, selection.height)
+        guard long > 0, long < comfortableEdge, selection.width > 0, selection.height > 0
+        else { return 1 }
+        let wanted = (comfortableEdge / long).rounded(.up)
+        let fits = min(f.width / 2 / selection.width, f.height / 2 / selection.height).rounded(.down)
+        return max(1, min(wanted, fits, maxMagnification))
+    }
+
+    private static func insetScale(selection: CGRect, screen: NSScreen) -> CGFloat {
+        let f = screen.frame, card = cardFootprint, need = cardGap + cardMargin
+        // `measureGaps`' own tests, against the geometry the capture will actually have: it is
+        // centred, so both gutters are one width and both strips one depth, and four tests
+        // collapse to two. One side with room is enough — a lone strip seats 10 cards and a
+        // lone gutter 5 — so the gather only happens when every side comes up short.
+        let side = (f.width - selection.width) / 2, strip = (f.height - selection.height) / 2
+        let hasRoom = strip + capturePad - need >= card.height
+            || (selection.height - capturePad * 2 >= card.height * 0.7
+                && side + capturePad - need >= card.width)
+        guard !hasRoom else { return 1 }
+
+        // Leave a card's gutter on each side. Width drives it: the two side gutters are the
+        // pair that can seat all five cards between them, and any capture that got here is
+        // too wide for them. The top and bottom strips fall out proportionally and the gap
+        // model uses them when they're deep enough.
+        let room = f.width - gutterInset * 2
+        let scale = room / selection.width
+        // Past this the capture is being sacrificed rather than framed (a display this narrow
+        // has no room for the scattered layout at any scale), so leave it pixel-exact and let
+        // the cards gather as they did before.
+        guard room > 0, scale >= 0.6 else { return 1 }
+        return min(1, scale)
+    }
+
     private func buildClusters(around sel: NSRect, in content: NSView) -> [NSView] {
         let bgPad = currentBackground.isNone ? 0 : Background.padding(maxDim: max(sel.width, sel.height))
-        let sel = sel.insetBy(dx: 8 - bgPad, dy: 8 - bgPad)
+        let sel = sel.insetBy(dx: Self.capturePad - bgPad, dy: Self.capturePad - bgPad)
         func toolButton(_ t: Tool, _ symbol: String, _ tip: String) -> ToolButton {
             let b = ToolButton(style: .tool(symbol), target: self, action: #selector(toolPressed(_:)))
             b.tip = tip; wireHover(b); toolButtons[t] = b; return b
@@ -560,7 +694,7 @@ final class EditorWindowController: NSObject {
         let background = makeCluster(L("Background"), bgTiles, perRow: 4, radius: bgR)
 
         let cs = content.bounds.size
-        let g: CGFloat = 16, m: CGFloat = 8
+        let g = Self.cardGap, m = Self.cardMargin
         let cards = [draw, shapes, color, background, actions].map(cardFit)
         let cardSize = NSSize(width: cards.map { $0.frame.width }.max() ?? 0,
                               height: cards.map { $0.frame.height }.max() ?? 0)
@@ -576,6 +710,8 @@ final class EditorWindowController: NSObject {
             [.bottom, .top,    .right,  .left],  // Action
         ]
         var gaps = measureGaps(sel: sel, cs: cs, card: cardSize, g: g, m: m)
+        let band = gutterBand(sel: sel, cs: cs, card: cardSize, g: g, m: m,
+                              top: gaps[.top] != nil, bottom: gaps[.bottom] != nil)
         var runs: [Side: [NSView]] = [:]
         var leftover: [NSView] = []
         for (card, prefs) in zip(cards, preference) {
@@ -586,8 +722,8 @@ final class EditorWindowController: NSObject {
                 leftover.append(card)
             }
         }
-        if let v = runs[.left]   { stackVertically(v, onLeft: true,  sel: sel, gap: g, cs: cs, content) }
-        if let v = runs[.right]  { stackVertically(v, onLeft: false, sel: sel, gap: g, cs: cs, content) }
+        if let v = runs[.left]   { stackVertically(v, onLeft: true,  sel: sel, gap: g, cs: cs, band: band, content) }
+        if let v = runs[.right]  { stackVertically(v, onLeft: false, sel: sel, gap: g, cs: cs, band: band, content) }
         if let v = runs[.top]    { rowOutside(v, above: true,  sel: sel, gap: g, cs: cs, content) }
         if let v = runs[.bottom] { rowOutside(v, above: false, sel: sel, gap: g, cs: cs, content) }
         if !leftover.isEmpty {
@@ -608,11 +744,10 @@ final class EditorWindowController: NSObject {
                                      y: (size.height - inner.frame.height) / 2))
     }
 
-    /// A draggable, free-floating cluster card. It has to stay legible over any
-    /// wallpaper — a bright capture or a near-black desktop — so it gets a solid
-    /// brand-gradient fill, the brand hairline edge, and a soft drop shadow to lift
-    /// it off the backdrop (the shadow, not the edge, is what carries the contrast).
-    /// Square corners + `Theme.border` match the Settings / About panels.
+    /// A draggable, free-floating cluster card. It has to stay legible over any backdrop — a
+    /// bright capture or a near-black desktop — so it gets the status-item menu's own surface,
+    /// a hairline edge and a soft drop shadow, via `Theme.styleFloatingCard`: the app's floating
+    /// chrome and the menu it opens from are one material.
     private func cardFit(_ inner: NSView) -> NSView {
         let pad: CGFloat = 5, radius: CGFloat = 0
         let size = NSSize(width: inner.frame.width + pad * 2, height: inner.frame.height + pad * 2)
@@ -625,7 +760,7 @@ final class EditorWindowController: NSObject {
         layer.shadowOpacity = 0.55
         layer.shadowRadius = 16
         layer.shadowOffset = CGSize(width: 0, height: -5)
-        Theme.applyPanelGradient(to: c, cornerRadius: radius)
+        Theme.styleFloatingCard(c, cornerRadius: radius)
         placeInner(inner, in: size)
         c.addSubview(inner)
         return c
@@ -650,17 +785,31 @@ final class EditorWindowController: NSObject {
         // A gutter only reads as *flanking* the capture if the capture is tall enough to
         // flank; below that, a tower of cards beside a sliver of image looks wrong.
         guard sel.height >= card.height * 0.7 else { return out }
-        // A gutter run is centred on the capture, so a long one spills past it into the
-        // bands above and below. That only collides when those bands hold cards, so cap
-        // the run to the capture's own height exactly when both strips are in play —
-        // capping it unconditionally pushed a card over the image in the very case that
-        // had the whole screen height free for it.
-        let span = out[.top] != nil && out[.bottom] != nil
-            ? min(sel.height, cs.height - 2 * m) : cs.height - 2 * m
-        let run = max(1, fit(span, card.height))
+        // Whatever the horizontal strips will take is not the gutters' to use. Capping the
+        // run to the capture's own height instead — and only when *both* strips were in play
+        // — left the one-strip case free to reach into that strip's band: a small capture in
+        // a screen corner got a run that `stackVertically` then had to push inside the screen
+        // edge, straight through the row above it. A band too shallow for a single card now
+        // yields no gutter at all, rather than the forced one (`max(1, …)`) that could put a
+        // card taller than the capture beside it.
+        let band = gutterBand(sel: sel, cs: cs, card: card, g: g, m: m,
+                              top: out[.top] != nil, bottom: out[.bottom] != nil)
+        let run = fit(band.hi - band.lo, card.height)
+        guard run > 0 else { return out }
         if sel.minX - g - m >= card.width { out[.left] = Gap(capacity: run) }
         if cs.width - sel.maxX - g - m >= card.width { out[.right] = Gap(capacity: run) }
         return out
+    }
+
+    /// The vertical band a gutter run may occupy: the screen, less whatever the horizontal
+    /// strips will take. `rowOutside` puts a strip hard against the capture, clamped to the
+    /// screen edge — so these bounds are exactly that row's own edges, which is what keeps a
+    /// column and a row from ever sharing a band. Both `measureGaps` (for capacity) and
+    /// `stackVertically` (for placement) read it, so the two cannot disagree.
+    private func gutterBand(sel: NSRect, cs: CGSize, card: NSSize, g: CGFloat, m: CGFloat,
+                            top: Bool, bottom: Bool) -> (lo: CGFloat, hi: CGFloat) {
+        (lo: bottom ? max(m, sel.minY - g - card.height) + card.height : m,
+         hi: top ? min(cs.height - m - card.height, sel.maxY + g) : cs.height - m)
     }
 
     /// Rows for a gathered block of `n` cards: one flat row up to three, then the squarest
@@ -712,14 +861,19 @@ final class EditorWindowController: NSObject {
     /// Stack clusters in a column beside the selection, centered vertically,
     /// keeping the whole column out of the selection rectangle when possible.
     private func stackVertically(_ views: [NSView], onLeft: Bool, sel: NSRect,
-                                 gap: CGFloat, cs: CGSize, _ content: NSView) {
+                                 gap: CGFloat, cs: CGSize, band: (lo: CGFloat, hi: CGFloat),
+                                 _ content: NSView) {
+        let m = Self.cardMargin
         let maxW = views.map { $0.frame.width }.max() ?? 0
         let totalH = views.reduce(0) { $0 + $1.frame.height } + gap * CGFloat(views.count - 1)
         var topY = sel.midY + totalH / 2
-        topY = min(topY, cs.height - 8)
-        if topY - totalH < 8 { topY = totalH + 8 }
-        let x = onLeft ? max(8, sel.minX - gap - maxW)
-                       : min(cs.width - 8 - maxW, sel.maxX + gap)
+        // Clamped into `band`, not the whole screen: pushing a run inside the screen edge is
+        // exactly what used to walk it into a row's band. `measureGaps` sized the run against
+        // this same band, so it always fits.
+        topY = min(topY, band.hi)
+        if topY - totalH < band.lo { topY = band.lo + totalH }
+        let x = onLeft ? max(m, sel.minX - gap - maxW)
+                       : min(cs.width - m - maxW, sel.maxX + gap)
         var y = topY
         for v in views {
             y -= v.frame.height
@@ -732,11 +886,13 @@ final class EditorWindowController: NSObject {
     /// Lay clusters in a single row just outside the selection — `above` it when
     /// the top has more room, otherwise below. Cards top-align across the row.
     private func rowOutside(_ views: [NSView], above: Bool, sel: NSRect, gap: CGFloat, cs: CGSize, _ content: NSView) {
+        let m = Self.cardMargin
         let totalW = views.reduce(0) { $0 + $1.frame.width } + gap * CGFloat(views.count - 1)
         let maxH = views.map { $0.frame.height }.max() ?? 0
-        var x = min(max(8, sel.midX - totalW / 2), cs.width - totalW - 8)
-        let y = above ? min(cs.height - 8 - maxH, sel.maxY + gap)
-                      : max(8, sel.minY - gap - maxH)
+        var x = min(max(m, sel.midX - totalW / 2), cs.width - totalW - m)
+        // `gutterBand` mirrors these two edges exactly — change one, change the other.
+        let y = above ? min(cs.height - m - maxH, sel.maxY + gap)
+                      : max(m, sel.minY - gap - maxH)
         for v in views {
             v.setFrameOrigin(NSPoint(x: x, y: y + (maxH - v.frame.height)))
             content.addSubview(v)
@@ -1157,8 +1313,8 @@ final class EditorWindowController: NSObject {
         opacityCard = card
         opacitySlider?.doubleValue = Double(overlay.opacity)
         if card.superview == nil { content.addSubview(card) }
-        let vx = overlay.rect.midX * canvas.displayScale + canvas.frame.minX
-        let vy = overlay.rect.maxY * canvas.displayScale + canvas.frame.minY
+        let vx = overlay.rect.midX * canvas.scaleX + canvas.frame.minX
+        let vy = overlay.rect.maxY * canvas.scaleY + canvas.frame.minY
         var x = vx - card.frame.width / 2, y = vy + 12
         x = min(max(8, x), content.bounds.width - card.frame.width - 8)
         y = min(max(8, y), content.bounds.height - card.frame.height - 8)
@@ -1168,9 +1324,7 @@ final class EditorWindowController: NSObject {
     private func buildOpacityCard() -> NSView {
         let w: CGFloat = 200, h: CGFloat = 56
         let card = NSView(frame: NSRect(x: 0, y: 0, width: w, height: h))
-        card.wantsLayer = true
-        card.layer?.backgroundColor = Theme.surfaceRaised.withAlphaComponent(0.97).cgColor
-        card.layer?.cornerRadius = 0
+        Theme.styleFloatingCard(card)
         let label = NSTextField(labelWithString: "")
         Theme.styleEyebrow(label, "Opacity")
         label.frame = NSRect(x: 14, y: h - 23, width: w - 28, height: 14)
@@ -1277,11 +1431,14 @@ final class EditorWindowController: NSObject {
         let remap: (CGPoint) -> CGPoint = left
             ? { CGPoint(x: H - $0.y, y: $0.x) }
             : { CGPoint(x: $0.y, y: W - $0.x) }
-        let scale = canvas.displayScale
+        let sx = canvas.scaleX, sy = canvas.scaleY
         let center = CGPoint(x: canvas.frame.midX, y: canvas.frame.midY)
         cancelCrop()
+        // A quarter turn turns the stretch with it: the axes swap, so the scales do too, and
+        // the box the user dragged comes back on its side rather than snapping square.
+        canvas.scaleX = sy; canvas.scaleY = sx
         canvas.applyTransform(newImage: newImg, remap: remap)
-        let newSize = NSSize(width: newImg.size.width * scale, height: newImg.size.height * scale)
+        let newSize = NSSize(width: newImg.size.width * sy, height: newImg.size.height * sx)
         relayout(canvasFrame: NSRect(x: center.x - newSize.width / 2,
                                      y: center.y - newSize.height / 2,
                                      width: newSize.width, height: newSize.height))
@@ -1295,11 +1452,11 @@ final class EditorWindowController: NSObject {
         let remap: (CGPoint) -> CGPoint = horizontal
             ? { CGPoint(x: W - $0.x, y: $0.y) }
             : { CGPoint(x: $0.x, y: H - $0.y) }
-        let scale = canvas.displayScale
+        let sx = canvas.scaleX, sy = canvas.scaleY
         let center = CGPoint(x: canvas.frame.midX, y: canvas.frame.midY)
         cancelCrop()
         canvas.applyTransform(newImage: newImg, remap: remap)
-        let newSize = NSSize(width: newImg.size.width * scale, height: newImg.size.height * scale)
+        let newSize = NSSize(width: newImg.size.width * sx, height: newImg.size.height * sy)
         relayout(canvasFrame: NSRect(x: center.x - newSize.width / 2,
                                      y: center.y - newSize.height / 2,
                                      width: newSize.width, height: newSize.height))
@@ -1311,13 +1468,13 @@ final class EditorWindowController: NSObject {
     private func applyCrop() {
         guard let pc = canvas.pendingCrop, pc.width >= 5, pc.height >= 5,
               let newImg = canvas.croppedImage(rect: pc) else { cancelCrop(); return }
-        let scale = canvas.displayScale
+        let sx = canvas.scaleX, sy = canvas.scaleY
         let oldOrigin = canvas.frame.origin
         canvas.applyTransform(newImage: newImg) { CGPoint(x: $0.x - pc.minX, y: $0.y - pc.minY) }
         hideCropConfirm()
-        relayout(canvasFrame: NSRect(x: oldOrigin.x + pc.minX * scale,
-                                     y: oldOrigin.y + pc.minY * scale,
-                                     width: pc.width * scale, height: pc.height * scale))
+        relayout(canvasFrame: NSRect(x: oldOrigin.x + pc.minX * sx,
+                                     y: oldOrigin.y + pc.minY * sy,
+                                     width: pc.width * sx, height: pc.height * sy))
         selectTool(.pencil)
     }
 
@@ -1333,8 +1490,16 @@ final class EditorWindowController: NSObject {
         guard let content = window.contentView else { return }
         let pad = currentBackground.isNone ? 0 : Background.padding(maxDim: max(canvasFrame.width, canvasFrame.height))
         var fr = canvasFrame
-        fr.origin.x = min(max(8 + pad, fr.origin.x), max(8 + pad, content.bounds.width - fr.width - 8 - pad))
-        fr.origin.y = min(max(8 + pad, fr.origin.y), max(8 + pad, content.bounds.height - fr.height - 8 - pad))
+        // A frame bigger than the screen can't be clamped inside it — centre the overflow
+        // rather than pinning it into one corner, which is what the old `max(8 + pad, …)`
+        // floor did. Reachable now that the resize handles zoom without a limit.
+        let m = 8 + pad
+        let fitsX = content.bounds.width - fr.width - m >= m
+        let fitsY = content.bounds.height - fr.height - m >= m
+        fr.origin.x = fitsX ? min(max(m, fr.origin.x), content.bounds.width - fr.width - m)
+                            : (content.bounds.width - fr.width) / 2
+        fr.origin.y = fitsY ? min(max(m, fr.origin.y), content.bounds.height - fr.height - m)
+                            : (content.bounds.height - fr.height) / 2
         // Keep the canvas origin on the device-pixel grid — a fractional origin resamples
         // the whole canvas and softens it on 1× external displays (the padding clamp above
         // can otherwise reintroduce a sub-pixel offset).
@@ -1371,8 +1536,9 @@ final class EditorWindowController: NSObject {
         }
     }
 
-    /// Put (or move) the eight resize knobs around the canvas — corners resize both
-    /// axes, edge midpoints a single axis.
+    /// Put (or move) the eight resize knobs around the canvas. Each drags only the edge(s) it
+    /// sits on, holding the opposite one fixed — corners both axes, midpoints one (see
+    /// `resizeDragged`).
     private func placeResizeHandle(in content: NSView) {
         let s: CGFloat = 18
         if resizeHandles.isEmpty {
@@ -1384,7 +1550,14 @@ final class EditorWindowController: NSObject {
                 resizeHandles.append(h)
             }
         }
+        // A canvas narrower than two knobs can't seat all eight without them piling up: on a
+        // 30 pt edge, a corner and the midpoint beside it are 15 pt apart with 18 pt targets,
+        // so which one a click lands on is whichever happens to be in front — the capture
+        // reads as un-resizable. Magnification (`magnification`) keeps most small captures
+        // clear of this; below it, corners only, which resize both axes anyway.
+        let crowded = min(canvas.frame.width, canvas.frame.height) < s * 2
         for h in resizeHandles {
+            guard !crowded || h.edge.isCorner else { h.removeFromSuperview(); continue }
             let c = resizeHandleCenter(h.edge, in: canvas.frame)
             h.frame = NSRect(x: c.x - s / 2, y: c.y - s / 2, width: s, height: s)
             content.addSubview(h)
@@ -1415,68 +1588,71 @@ final class EditorWindowController: NSObject {
         resizePreview = p
     }
 
-    /// Move the grabbed edge(s) by the drag delta, holding the opposite edge(s) fixed.
-    /// Clamped to the display bounds so the region can be trimmed inward *or* grown outward
-    /// (up to the screen edge); growth re-grabs the display in `resizeEnded`.
+    /// Drag the grabbed edge(s), holding the opposite edge(s) fixed — each knob moves only
+    /// what it is attached to, so the picture stretches freely.
+    ///
+    /// Deliberately **not** aspect locked and **not** anchored on the centre: locking the
+    /// aspect made an edge knob change the height too, and centre-anchoring made it move the
+    /// opposite edge as well, so no knob felt like it belonged to the side it sat on. The
+    /// picture is a screenshot, so a non-uniform stretch does distort it — that is the cost of
+    /// the freedom, and the Rotate / Flip / Crop actions are the ones that stay rigid.
+    ///
+    /// Bounded only by `minCanvasEdge` and `maxCanvasScreens`, per side, so a drag can neither
+    /// collapse an edge to nothing nor run away past anything drawable. There is no clamp to
+    /// the screen: the pixels were fixed at capture time, so this is a zoom, not a re-grab, and
+    /// a zoom has no natural stop.
     private func resizeDragged(_ d: CGSize) {
-        guard let p = resizePreview, let content = window.contentView,
-              resizeBaseFrame.width > 0, resizeBaseFrame.height > 0 else { return }
-        let b = resizeBaseFrame, edge = activeResizeEdge, minSide: CGFloat = 40
-        let limit = content.bounds
+        guard let p = resizePreview, resizeBaseFrame.width > 0, resizeBaseFrame.height > 0
+        else { return }
+        let b = resizeBaseFrame, edge = activeResizeEdge
+        let lo = Self.minCanvasEdge
+        let hi = max(captureScreen.frame.width, captureScreen.frame.height) * Self.maxCanvasScreens
         var minX = b.minX, maxX = b.maxX, minY = b.minY, maxY = b.maxY
         switch edge {
-        case .topLeft, .left, .bottomLeft:    minX = min(max(b.minX + d.width, limit.minX), maxX - minSide)
-        case .topRight, .right, .bottomRight: maxX = max(min(b.maxX + d.width, limit.maxX), minX + minSide)
-        default: break
+        case .topLeft, .left, .bottomLeft:
+            minX = min(max(b.maxX - hi, b.minX + d.width), maxX - lo)
+        case .topRight, .right, .bottomRight:
+            maxX = max(min(b.minX + hi, b.maxX + d.width), minX + lo)
+        case .top, .bottom: break
         }
         switch edge {
-        case .topLeft, .top, .topRight:          maxY = max(min(b.maxY + d.height, limit.maxY), minY + minSide)
-        case .bottomLeft, .bottom, .bottomRight: minY = min(max(b.minY + d.height, limit.minY), maxY - minSide)
-        default: break
+        case .topLeft, .top, .topRight:
+            maxY = max(min(b.minY + hi, b.maxY + d.height), minY + lo)
+        case .bottomLeft, .bottom, .bottomRight:
+            minY = min(max(b.maxY - hi, b.minY + d.height), maxY - lo)
+        case .left, .right: break
         }
         p.frame = NSRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
         repositionResizeHandles(around: p.frame)
     }
 
-    /// Commit the new region by re-grabbing that rectangle from the display (excluding this
-    /// editor window so it sees the real screen behind) — so the region can be enlarged to
-    /// show more, not just cropped. A drag that didn't move the region is a no-op.
+    /// Commit the stretch: the two scales and a relayout, nothing more. The image is untouched
+    /// and annotations live in image space, so there is nothing to fetch and nothing async —
+    /// the old re-grab needed a ScreenCaptureKit round trip and could fail.
     private func resizeEnded() {
-        guard let p = resizePreview, resizeBaseFrame.width > 0, resizeBaseFrame.height > 0 else { return }
-        let b = resizeBaseFrame, ds = canvas.displayScale, pf = p.frame
+        guard let p = resizePreview, resizeBaseFrame.width > 0, resizeBaseFrame.height > 0
+        else { return }
+        let b = resizeBaseFrame, pf = p.frame
         p.removeFromSuperview(); resizePreview = nil
-        // Unchanged region → nothing to do.
-        if abs(pf.minX - b.minX) < 1, abs(pf.minY - b.minY) < 1,
-           abs(pf.width - b.width) < 1, abs(pf.height - b.height) < 1 { relayout(canvasFrame: b); return }
-        guard pf.width >= 20, pf.height >= 20, let displayID = captureScreen.displayID, !reGrabbing else {
-            relayout(canvasFrame: b); return
-        }
-        // Preview frame (content coords) → display-local sourceRect (top-left origin).
-        let source = CGRect(x: pf.minX, y: captureScreen.frame.height - pf.maxY,
-                            width: pf.width, height: pf.height)
-        // Annotation shift (image pixels): the new image origin (region bottom-left) moved.
-        let dxPix = (b.minX - pf.minX) / ds, dyPix = (b.minY - pf.minY) / ds
-        let exclude = [CGWindowID(window.windowNumber)]
-        reGrabbing = true
-        Task {
-            let result = await ScreenshotController.recaptureRegion(displayID: displayID, sourceRect: source, excluding: exclude)
-            await MainActor.run {
-                self.reGrabbing = false
-                guard let result else { self.relayout(canvasFrame: b); self.flashMessage("Couldn't adjust the region"); return }
-                let newImage = ScreenshotController.nsImage(from: result.cg)
-                self.canvas.applyTransform(newImage: newImage) { CGPoint(x: $0.x + dxPix, y: $0.y + dyPix) }
-                self.relayout(canvasFrame: NSRect(x: pf.minX.rounded(), y: pf.minY.rounded(),
-                                                  width: pf.width.rounded(), height: pf.height.rounded()))
-            }
-        }
+        let imgW = canvas.image.size.width, imgH = canvas.image.size.height
+        // A drag that didn't change anything, or an image with no size, is a no-op.
+        guard imgW > 0, imgH > 0, abs(pf.width - b.width) >= 1 || abs(pf.height - b.height) >= 1
+        else { relayout(canvasFrame: b); return }
+        canvas.endTextEditing()
+        cancelCrop()
+        // Taken from the frame the user actually dragged, so the canvas is exactly
+        // `image.size × (scaleX, scaleY)` and the image can't land a fraction off its own view.
+        canvas.scaleX = pf.width / imgW
+        canvas.scaleY = pf.height / imgH
+        relayout(canvasFrame: pf)
     }
 
     private func showCropConfirm() {
         guard let pc = canvas.pendingCrop, let content = window.contentView else { return }
         hideCropConfirm()
-        let scale = canvas.displayScale, f = canvas.frame
-        let cr = NSRect(x: f.minX + pc.minX * scale, y: f.minY + pc.minY * scale,
-                        width: pc.width * scale, height: pc.height * scale)
+        let sx = canvas.scaleX, sy = canvas.scaleY, f = canvas.frame
+        let cr = NSRect(x: f.minX + pc.minX * sx, y: f.minY + pc.minY * sy,
+                        width: pc.width * sx, height: pc.height * sy)
 
         // Slide any tool panel out of the crop region first: on a whole-screen capture
         // (Screen mode) the panel is centered right over the image, so a centered crop
@@ -1508,14 +1684,14 @@ final class EditorWindowController: NSObject {
         bar.wantsLayer = true
         if let layer = bar.layer {
             layer.cornerRadius = Theme.radiusSmall
-            layer.borderColor = Theme.lavender.withAlphaComponent(0.9).cgColor
-            layer.borderWidth = 1
             layer.shadowColor = NSColor.black.cgColor
             layer.shadowOpacity = 0.55
             layer.shadowRadius = 16
             layer.shadowOffset = CGSize(width: 0, height: -5)
         }
-        Theme.applyPanelGradient(to: bar, cornerRadius: Theme.radiusSmall)
+        // Lavender edge rather than the usual hairline: this bar is a confirm, and the edge is
+        // what says so.
+        Theme.styleFloatingCard(bar, stroke: Theme.lavender.withAlphaComponent(0.9))
         content.addSubview(bar)
 
         let ok = ToolButton(style: .tool("checkmark"), radius: r, target: self, action: #selector(applyCropPressed))
@@ -1665,10 +1841,10 @@ final class EditorWindowController: NSObject {
         let token = canvas.textFocusToken
         if token != lastTextFocusToken { lastTextFocusToken = token; textFormatBarUserMoved = false }
         guard !textFormatBarUserMoved else { return }
-        let scale = canvas.displayScale, f = canvas.frame
+        let sx = canvas.scaleX, sy = canvas.scaleY, f = canvas.frame
         let target = canvas.textFocusRect ?? CGRect(origin: .zero, size: canvas.image.size)
-        let r = NSRect(x: f.minX + target.minX * scale, y: f.minY + target.minY * scale,
-                       width: target.width * scale, height: target.height * scale)
+        let r = NSRect(x: f.minX + target.minX * sx, y: f.minY + target.minY * sy,
+                       width: target.width * sx, height: target.height * sy)
         let barW = bar.frame.width, barH = bar.frame.height
         let gap: CGFloat = 10
         let x = min(max(8, r.midX - barW / 2), content.bounds.width - barW - 8)

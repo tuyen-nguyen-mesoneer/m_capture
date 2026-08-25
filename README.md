@@ -49,7 +49,7 @@ on-device, with no subscriptions, cloud services, or accounts.
 - **Measure & compose** — an on-screen **ruler** (drag at any angle, hold `⇧` to snap horizontal/vertical), image overlays, and an **eyedropper** for color matching.
 - **Style** — a preset color palette with a custom hue/brightness picker, plus a stroke-width control (thin / medium / thick).
 - **Select & edit** — every placed mark stays editable: with the **Select** tool (`V`) — or right after you draw it — drag it to reposition, resize shapes from **any of eight handles** (four corners plus four edges, so you can stretch one side), reshape arrows and lines by their **endpoints or bend handle**, or press **⌫** to delete.
-- **Transform** — crop, rotate, flip, and adjust the capture region from eight handles (trim inward, or grow outward to re-grab more of the screen), all baked into the export.
+- **Transform** — crop, rotate and flip, all baked into the export. Resize the picture itself from **eight handles**, each edge on its own, to work at whatever size suits you — that part is the view only; the saved file keeps its full resolution.
 
 **🚀 Share**
 - **History** — a panel with your newest captures and recordings as thumbnail cards: copy, pin, trim (videos), reveal in Finder, or trash them without leaving the app. Opens automatically after every save.
