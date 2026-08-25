@@ -28,12 +28,20 @@ enum Theme {
 
     static let border          = rgb(0x3a, 0x2f, 0x5e)
     static let divider         = NSColor(white: 1, alpha: 0.18)
+    /// Drop shadow behind text drawn over an unknown backdrop (the editor's tool
+    /// cards sit on whatever the user captured).
+    static let textShadow      = NSColor(white: 0, alpha: 0.6)
     static let cardStroke      = NSColor(white: 1, alpha: 0.22)
     static let hoverFill        = NSColor(white: 1, alpha: 0.10)
     static let focusRing        = lavender
 
-    static let radiusSmall: CGFloat = 6
-    static let radiusMedium: CGFloat = 12
+    /// The brand is square-cornered: every panel, chip, badge, banner, hover highlight
+    /// and tile draws at 0. Kept as named tokens rather than bare zeros so the shape is
+    /// one decision in one place, and so it can't be confused with the radii that are
+    /// *content* rather than chrome — `Background`'s user-configurable image corner and
+    /// the editor's rounded-rectangle annotation tool both stay rounded.
+    static let radiusSmall: CGFloat = 0
+    static let radiusMedium: CGFloat = 0
 
     static let logoTileTop    = rgb(0x41, 0x28, 0x80)
     static let logoTileBottom = rgb(0x2a, 0x20, 0x48)

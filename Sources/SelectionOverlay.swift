@@ -125,9 +125,17 @@ final class OverlayWindow: NSWindow {
         makeFirstResponder(selectionView)
         for delay in [0.0, 0.05, 0.2] {
             DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
-                guard let self, self.isVisible, !self.isKeyWindow else { return }
-                self.makeKeyAndOrderFront(nil)
-                self.makeFirstResponder(self.selectionView)
+                guard let self, self.isVisible else { return }
+                if !self.isKeyWindow {
+                    self.makeKeyAndOrderFront(nil)
+                    self.makeFirstResponder(self.selectionView)
+                }
+                // Re-assert the cursor on every retry, not just when key status is still
+                // missing: cursor rects are honoured only while the app is *active*, and
+                // `NSApp.activate` is asynchronous, so the overlay can already be key with
+                // its rects not yet evaluated. That gap is why the plain arrow sometimes
+                // survived until the pointer first moved.
+                self.selectionView.applyModeCursor()
             }
         }
     }
@@ -138,6 +146,17 @@ final class OverlayWindow: NSWindow {
     override func becomeKey() {
         super.becomeKey()
         selectionView.applyModeCursor()
+    }
+
+    /// Give up the cursor claim on the way out. `SelectionView.resetCursorRects` is what
+    /// makes the capture cursor *stick* — and that cuts both ways: a rect the window server
+    /// still remembers keeps re-asserting the camera after the overlay is gone, so the
+    /// pointer stayed a camera until it next moved. A rect has to be released, not merely
+    /// out-`set()`. Hooked on `orderOut` because that is the moment every teardown path
+    /// shares (`close()` follows a tick later, too late to matter visually).
+    override func orderOut(_ sender: Any?) {
+        selectionView.relinquishCursor()
+        super.orderOut(sender)
     }
 }
 
@@ -165,6 +184,11 @@ final class SelectionView: NSView {
     /// pointer is over empty desktop. Drives the highlight; the capture commits when
     /// the mouse is released over it (see `mouseUp`).
     private var hoveredWindow: PickableWindow?
+
+    /// Where the guidance card was last drawn, padded for its drop shadow. `mouseDown`
+    /// hides the card, but `invalidateSelection` only dirties the selection rect — without
+    /// this the card would be left behind as a ghost until a drag happened to sweep over it.
+    private var bannerFrame: CGRect = .null
 
     private var startPoint: CGPoint?
     private var currentPoint: CGPoint?
@@ -209,6 +233,7 @@ final class SelectionView: NSView {
         startPoint = nil; currentPoint = nil
         if captureMode == .window { refreshHoveredWindow() } else { hoveredWindow = nil }
         if window?.isKeyWindow == true { modeCursor.set() }
+        window?.invalidateCursorRects(for: self)   // the rect names a mode-specific cursor
         needsDisplay = true
     }
 
@@ -227,23 +252,71 @@ final class SelectionView: NSView {
         return modes
     }
 
-    /// Region drag uses the crosshair. Window/screen picking uses the camera glyph for
-    /// screenshots, and a plain pointing hand for recording — the video glyph over a
-    /// hover-highlighted window/screen read as clutter, so "click to pick" is clearer.
+    /// All three modes share one style — white body, brand-purple keyline, matched weight — so
+    /// the pointer reads as this app's in every mode. Region gets a crosshair rather than a
+    /// glyph: it is the shape that means "drag a region", and its arms leave a gap at the
+    /// centre so the exact point being aimed at stays visible. Window and Screen get the camera — or the video
+    /// glyph while recording, which is what tells the two flows apart. With no action line in
+    /// the card any more, the cursor is what says what to do, so the record flow can't sit on
+    /// a borrowed `.pointingHand` (it did, despite the docs on `recording:` promising a video
+    /// cursor).
     private var modeCursor: NSCursor {
-        if captureMode == .region { return .crosshair }
-        return recording ? .pointingHand : Self.cameraCursor
+        if captureMode == .region { return Self.crosshairCursor }
+        return recording ? Self.videoCursor : Self.cameraCursor
     }
-    override func cursorUpdate(with event: NSEvent) { modeCursor.set() }
+    override func cursorUpdate(with event: NSEvent) {
+        guard !cursorReleased else { return }
+        modeCursor.set()
+    }
 
-    /// Camera cursor for the screenshot window/screen pick, mesoneer-styled (shared
-    /// `BrandCursor`). The record flow uses a plain pointing hand instead.
-    private static let cameraCursor = BrandCursor.make(symbol: "camera.fill") ?? .pointingHand
+    /// The overlay *owns* the pointer while it is up, so it declares a cursor rect over its
+    /// whole bounds instead of only pushing `.set()` at a few moments. A one-shot `.set()`
+    /// races window activation: the window server re-evaluates cursor state as the overlay
+    /// becomes key, and with nothing *claiming* the region it falls back to the arrow — which
+    /// is why the capture cursor intermittently never appeared until the pointer moved. The
+    /// `.cursorUpdate` tracking area doesn't cover that either: it fires on enter/exit, and a
+    /// pointer already inside the overlay when it appears never enters. A rect is declarative
+    /// and gets re-applied on every activation, so it can't be raced.
+    override func resetCursorRects() {
+        guard !cursorReleased else { return }
+        addCursorRect(bounds, cursor: modeCursor)
+    }
 
-    /// Re-assert the mode cursor. The `viewDidMoveToWindow` set can be discarded
-    /// by the system before the window is key/active, so the owning window calls
-    /// this on `becomeKey` to guarantee the camera cursor from the first frame.
-    func applyModeCursor() { modeCursor.set() }
+    /// Set once the overlay is on its way out, so a late cursor-rect pass — AppKit re-runs
+    /// them on activation changes, which the teardown itself triggers — can't re-claim the
+    /// pointer after we handed it back.
+    private var cursorReleased = false
+
+    /// Drop the cursor claim and hand the pointer back to the plain arrow.
+    func relinquishCursor() {
+        guard !cursorReleased else { return }
+        cursorReleased = true
+        discardCursorRects()
+        window?.invalidateCursorRects(for: self)
+        NSCursor.arrow.set()
+    }
+
+    /// Camera for the screenshot window/screen pick, video for the record flow — both as
+    /// white glyphs with a brand keyline (`makeOutlined`), not the editor's halo style: this cursor is
+    /// the only thing distinguishing the two flows at the pointer, so it has to be legible
+    /// over a dimmed screenshot of anything.
+    /// A crosshair, at the weight of the filled glyphs beside it. It has to be a crosshair:
+    /// that is the one shape that says *drag out a region*. A `viewfinder` glyph matched the
+    /// others' style but said "aim", losing the only instruction Region mode gives — and with
+    /// no action line in the guidance card, this cursor is that instruction.
+    private static let crosshairCursor = BrandCursor.makeCrosshair(side: 28, gap: 5, core: 3)
+    private static let cameraCursor = BrandCursor.makeOutlined(symbol: "camera.fill") ?? .pointingHand
+    private static let videoCursor = BrandCursor.makeOutlined(symbol: "video.fill") ?? .pointingHand
+
+    /// Re-assert the mode cursor. The `viewDidMoveToWindow` set can be discarded by the
+    /// system before the window is key/active, so the owning window calls this on `becomeKey`
+    /// to show the capture cursor from the first frame. Belt and braces alongside
+    /// `resetCursorRects`: the rect is what makes it stick, this is what makes it immediate.
+    func applyModeCursor() {
+        guard !cursorReleased else { return }
+        modeCursor.set()
+        window?.invalidateCursorRects(for: self)
+    }
 
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
@@ -285,6 +358,7 @@ final class SelectionView: NSView {
             let old = selectionRect
             startPoint = p; currentPoint = p
             invalidateSelection(old, selectionRect)
+            clearPreDragChrome()
         }
     }
     override func mouseDragged(with event: NSEvent) {
@@ -340,6 +414,16 @@ final class SelectionView: NSView {
     /// on a large external display that alone can blow the frame budget, queue up
     /// pointer events, and read as a freeze while selecting. The outset covers the
     /// selection outline plus the size label drawn beside the region.
+    /// Erase everything that only belongs *before* a drag: the guidance card and the dashed
+    /// last-region ghost. Both stop drawing the moment `startPoint` is set, but
+    /// `invalidateSelection` dirties only the selection rect, so neither area would be
+    /// repainted — each would sit there as a stale image until a drag happened to sweep
+    /// across it. Their own frames have to be invalidated explicitly.
+    private func clearPreDragChrome() {
+        if !bannerFrame.isNull { setNeedsDisplay(bannerFrame) }
+        if let prev = previousRect { setNeedsDisplay(prev.insetBy(dx: -2, dy: -2)) }
+    }
+
     private func invalidateSelection(_ old: CGRect?, _ new: CGRect?) {
         var dirty = CGRect.null
         if let o = old { dirty = dirty.union(o) }
@@ -398,7 +482,9 @@ final class SelectionView: NSView {
         case .screen: drawScreenMode(ctx)
         }
 
-        drawModeBanner()
+        // Guidance is for *before* the gesture: once a drag is under way the size readout
+        // has taken over and the card only covers what is being selected.
+        if startPoint == nil { drawModeBanner() }
     }
 
     /// Show `r` bright against the dim. Over a frozen backdrop that's just the still
@@ -443,7 +529,7 @@ final class SelectionView: NSView {
 
     /// One consistent chip background: raised surface, hairline border, radius 5.
     private func fillChip(_ box: CGRect) {
-        let path = NSBezierPath(roundedRect: box, xRadius: 5, yRadius: 5)
+        let path = NSBezierPath(roundedRect: box, xRadius: Theme.radiusSmall, yRadius: Theme.radiusSmall)
         Theme.surfaceRaised.withAlphaComponent(0.95).setFill(); path.fill()
         Theme.border.setStroke(); path.lineWidth = 1; path.stroke()
     }
@@ -517,58 +603,173 @@ final class SelectionView: NSView {
         }
     }
 
-    /// The centred mode banner: a lavender-tinted glyph, the mode name in bold white,
-    /// a hairline divider, then a muted "Space to cycle" hint — on a glowing
-    /// brand-gradient rounded rect. The one piece of chrome that's always on screen,
-    /// so it gets the most polish of any overlay chip.
-    private func drawModeBanner() {
-        let modeName: String
-        switch captureMode {
-        case .region: modeName = L("Region")
-        case .window: modeName = L("Window")
-        case .screen: modeName = L("Screen")
+    /// One shortcut hint, split around its key name so the key can be drawn as a keycap
+    /// wherever the localization puts it. Splitting the rendered sentence on whitespace
+    /// would not survive translation — English wraps the key ("Press %@ to switch") while
+    /// German leads with it ("%@ wechselt") — so the `%@` in the template is the seam.
+    private struct KeyHint {
+        let before: String
+        let key: String
+        let after: String
+    }
+
+    private func keyHint(_ template: String, key: String) -> KeyHint {
+        let parts = L(template).components(separatedBy: "%@")
+        return KeyHint(before: parts.first ?? "", key: L(key),
+                       after: parts.count > 1 ? parts[1] : "")
+    }
+
+    private func name(for mode: CaptureMode) -> String {
+        switch mode {
+        case .region: return L("Region")
+        case .window: return L("Window")
+        case .screen: return L("Screen")
         }
-        // Only advertise shortcuts that apply right now: Space when there's more
-        // than one mode to cycle, Return when a previous region can be re-captured.
-        var hints: [String] = []
-        if availableModes.count > 1 { hints.append(L("Space to cycle")) }
-        if captureMode == .region, previousRect != nil { hints.append(L("⏎ last region")) }
-        let showsHint = !hints.isEmpty
-        let nameAttrs: [NSAttributedString.Key: Any] = [
-            .font: Theme.font(19, .bold), .foregroundColor: Theme.textPrimary,
+    }
+
+    /// The centred guidance card, stacked in three rows: the mode picker as a **segmented
+    /// control**, the action beneath it in bright ink, the shortcuts muted below that. The
+    /// one piece of chrome that's always on screen, so it gets the most polish of any overlay
+    /// chip, and the only place that can answer "what do I do now?".
+    ///
+    /// Stacked, not a single line: as one horizontal strip it ran ~828 pt — over half a
+    /// 1440 pt screen — and put the picker, the action and the hints at the same weight, so
+    /// nothing led. A row each gives them an order to be read in and quarters the width.
+    ///
+    /// The modes are bordered segments carrying their own glyphs, rather than a run of words
+    /// with one highlighted: as plain text they read like a caption *about* the card, not a
+    /// control you operate. They come off `availableModes`, not a fixed three, so a flow that
+    /// forbids window or screen picking shows one segment and drops the Space hint instead of
+    /// advertising a mode that Space cannot reach.
+    private func drawModeBanner() {
+        var shortcuts: [KeyHint] = []
+        if availableModes.count > 1 {
+            shortcuts.append(keyHint("Press %@ to switch mode", key: "Space"))
+        }
+        if captureMode == .region, previousRect != nil {
+            shortcuts.append(keyHint("Press %@ for last region", key: "Return"))
+        }
+
+        let modes = availableModes
+        let modeFont = Theme.font(14, .semibold)
+        let activeAttrs: [NSAttributedString.Key: Any] = [
+            .font: modeFont, .foregroundColor: Theme.textPrimary,
+        ]
+        let idleAttrs: [NSAttributedString.Key: Any] = [
+            .font: modeFont, .foregroundColor: Theme.textSecondary.withAlphaComponent(0.6),
         ]
         let hintAttrs: [NSAttributedString.Key: Any] = [
-            .font: Theme.font(13, .medium), .foregroundColor: Theme.textSecondary,
+            .font: Theme.font(12, .medium), .foregroundColor: Theme.textSecondary,
         ]
-        let hintText = hints.joined(separator: "  ·  ")
-        let nameSize = modeName.size(withAttributes: nameAttrs)
-        let hintSize = showsHint ? hintText.size(withAttributes: hintAttrs) : .zero
 
-        let iconSize: CGFloat = 18
-        let iconGap: CGFloat = 10
-        let dividerGap: CGFloat = 14
-        let padH: CGFloat = 22, padV: CGFloat = 15
+        let segH: CGFloat = 26, segPadH: CGFloat = 10, segIcon: CGFloat = 13, segIconGap: CGFloat = 6
+        func segWidth(_ mode: CaptureMode) -> CGFloat {
+            let attrs = mode == captureMode ? activeAttrs : idleAttrs
+            return segPadH * 2 + segIcon + segIconGap + name(for: mode).size(withAttributes: attrs).width
+        }
+        // +1 pt per seam for the hairline between segments.
+        let modesW = modes.reduce(0) { $0 + segWidth($1) } + CGFloat(max(0, modes.count - 1))
 
-        var bw = iconSize + iconGap + nameSize.width + padH * 2
-        if showsHint { bw += dividerGap + 1 + dividerGap + hintSize.width }
-        let bh = max(iconSize, nameSize.height, hintSize.height) + padV
-        let box = CGRect(x: bounds.midX - bw / 2, y: bounds.midY - bh / 2, width: bw, height: bh)
+        // The key names are drawn as keycaps — a faint fill inside a hairline border — so
+        // they read as keys to press rather than as more of the sentence around them.
+        let keyAttrs: [NSAttributedString.Key: Any] = [
+            .font: Theme.font(12, .semibold), .foregroundColor: Theme.ink,
+        ]
+        let capPadH: CGFloat = 5, capH: CGFloat = 17
+        let separator = "  ·  "
+        func capWidth(_ key: String) -> CGFloat {
+            ceil(key.size(withAttributes: keyAttrs).width) + capPadH * 2
+        }
+        func hintWidth(_ h: KeyHint) -> CGFloat {
+            h.before.size(withAttributes: hintAttrs).width + capWidth(h.key)
+                + h.after.size(withAttributes: hintAttrs).width
+        }
+        let sepW = separator.size(withAttributes: hintAttrs).width
+        let hintsW = shortcuts.reduce(0) { $0 + hintWidth($1) }
+            + sepW * CGFloat(max(0, shortcuts.count - 1))
+
+        let hintRowH = shortcuts.isEmpty ? 0 : capH
+
+        let padH: CGFloat = 20, padV: CGFloat = 16
+        let pickerGap: CGFloat = 14
+
+        let bw = max(modesW, hintsW) + padH * 2
+        var bh = padV * 2 + segH
+        if !shortcuts.isEmpty { bh += pickerGap + hintRowH }
+        // Stacked, the widest run — German, Region mode — is the picker itself at ~330 pt, so
+        // the card fits any Mac display un-clamped; `max` only guards the left edge. Clamping
+        // the *width* would crop the card while the text kept drawing past it.
+        let box = CGRect(x: max(8, bounds.midX - bw / 2), y: bounds.midY - bh / 2,
+                         width: bw, height: bh)
 
         drawBannerBackground(box)
+        bannerFrame = box.insetBy(dx: -30, dy: -30)   // covers the shadow blur too
 
-        var x = box.minX + padH
-        if let icon = tintedSymbol(symbolName(for: captureMode), pointSize: iconSize * 0.78, color: Theme.lavender) {
-            icon.draw(in: CGRect(x: x, y: box.midY - iconSize / 2, width: iconSize, height: iconSize))
+        // Row 1 — the mode picker, centred in the card.
+        let track = NSRect(x: box.midX - modesW / 2, y: box.maxY - padV - segH,
+                           width: modesW, height: segH)
+        Theme.hoverFill.setFill()
+        NSBezierPath(rect: track).fill()
+        var sx = track.minX
+        for (i, mode) in modes.enumerated() {
+            let active = mode == captureMode
+            let seg = NSRect(x: sx, y: track.minY, width: segWidth(mode), height: segH)
+            if active {
+                Theme.accentPurple.setFill()
+                NSBezierPath(rect: seg).fill()
+            }
+            let tint = active ? Theme.textPrimary : Theme.textSecondary.withAlphaComponent(0.6)
+            if let icon = tintedSymbol(symbolName(for: mode), pointSize: segIcon * 0.85, color: tint) {
+                icon.draw(in: CGRect(x: seg.minX + segPadH, y: seg.midY - segIcon / 2,
+                                     width: segIcon, height: segIcon))
+            }
+            let attrs = active ? activeAttrs : idleAttrs
+            let label = name(for: mode)
+            let ts = label.size(withAttributes: attrs)
+            label.draw(at: NSPoint(x: seg.minX + segPadH + segIcon + segIconGap,
+                                   y: seg.midY - ts.height / 2), withAttributes: attrs)
+            sx = seg.maxX
+            if i < modes.count - 1 {
+                Theme.divider.setFill()
+                NSRect(x: sx, y: track.minY, width: 1, height: segH).fill()
+                sx += 1
+            }
         }
-        x += iconSize + iconGap
-        modeName.draw(at: CGPoint(x: x, y: box.midY - nameSize.height / 2), withAttributes: nameAttrs)
-        x += nameSize.width
-        if showsHint {
-            x += dividerGap
-            Theme.divider.setFill()
-            NSRect(x: x, y: box.midY - 9, width: 1, height: 18).fill()
-            x += 1 + dividerGap
-            hintText.draw(at: CGPoint(x: x, y: box.midY - hintSize.height / 2), withAttributes: hintAttrs)
+        Theme.cardStroke.setStroke()
+        let outline = NSBezierPath(rect: track.insetBy(dx: 0.5, dy: 0.5))
+        outline.lineWidth = 1
+        outline.stroke()
+
+        // Row 2 — the keys that apply right now, each key in its own cap. There is no
+        // action line: the cursor carries the gesture (crosshair = drag, camera/video over a
+        // highlighted target = click), so spelling it out was a third way of saying it.
+        guard !shortcuts.isEmpty else { return }
+        let rowMidY = track.minY - pickerGap - hintRowH / 2
+        func drawRun(_ text: String, _ x: inout CGFloat) {
+            guard !text.isEmpty else { return }
+            let size = text.size(withAttributes: hintAttrs)
+            text.draw(at: NSPoint(x: x.rounded(), y: (rowMidY - size.height / 2).rounded()),
+                      withAttributes: hintAttrs)
+            x += size.width
+        }
+        var x = (box.midX - hintsW / 2).rounded()
+        for (i, hint) in shortcuts.enumerated() {
+            if i > 0 { drawRun(separator, &x) }
+            drawRun(hint.before, &x)
+            let cap = NSRect(x: x.rounded(), y: (rowMidY - capH / 2).rounded(),
+                             width: capWidth(hint.key), height: capH)
+            Theme.hoverFill.setFill()
+            NSBezierPath(rect: cap).fill()
+            Theme.cardStroke.setStroke()
+            let edge = NSBezierPath(rect: cap.insetBy(dx: 0.5, dy: 0.5))
+            edge.lineWidth = 1
+            edge.stroke()
+            let ks = hint.key.size(withAttributes: keyAttrs)
+            hint.key.draw(at: NSPoint(x: (cap.midX - ks.width / 2).rounded(),
+                                      y: (rowMidY - ks.height / 2).rounded()),
+                          withAttributes: keyAttrs)
+            x = cap.maxX
+            drawRun(hint.after, &x)
         }
     }
 

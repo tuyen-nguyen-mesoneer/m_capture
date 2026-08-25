@@ -96,7 +96,16 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
   *only* when pinned windows would be closed by it. `--update-debug` forgets the stamps and
   checks now. Requires the repo's releases to be readable by the user.
 - `BrandMenu.swift` — custom mesoneer-styled menu (NSMenu isn't themeable); used for
-  the status-item menu and the pin window's right-click.
+  the status-item menu and the pin window's right-click. A row's shortcut glyphs take the
+  title's own colour (white when enabled) rather than `Theme.textMuted`, which had made the
+  one part of a row a user is meant to memorize the dimmest thing on it. `toggle(from:)` closes an open
+  menu and refuses to reopen within `reopenGuard` (0.25 s), so a second click on the
+  menu-bar icon dismisses it — but **only because there is one long-lived instance**.
+  The status menu's rows read live state and are rebuilt on every click, so rebuild them
+  with `update(entries:)` (via `AppDelegate.setMenu`), never by assigning a new
+  `BrandMenu`: a fresh instance resets `window` and `lastClose`, the click monitor closes
+  the old menu, and the click then opens a new one — the icon appears unable to dismiss
+  its own menu, and each rebuild strands the open window and its monitors.
 - `BrandAlert.swift` — mesoneer-styled alert (the brand counterpart to `NSAlert`) in
   the native layout: icon badge left, left-aligned text, buttons bottom-right with the
   primary always rightmost (enforced regardless of call-site order). Width comes from the
@@ -112,9 +121,24 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
   anything fired from a background context — nested `runModal` from callbacks can
   wedge the run loop. Panel level sits above the capture overlays.
 - `BrandToast.swift` — brief auto-fading toast pill (copied / trashed confirmations).
-- `BrandCursor.swift` — mesoneer-styled pointer cursors built from SF Symbols (brand-
-  purple glyph + soft white halo, no background chip); shared by the capture overlay's
-  camera/video cursors and the editor's per-tool cursors.
+- `BrandCursor.swift` — mesoneer-styled pointer cursors built from SF Symbols, in two
+  styles for two jobs. `make` — brand-purple glyph + soft white halo, **no chip** — is the
+  editor's per-tool cursor, where a pencil or crop tip has to stay visible over the pixel it
+  is about to touch. `makeOutlined` — a **white glyph ringed with a brand-purple keyline** —
+  and `makeCrosshair` (the same treatment, drawn rather than symbol-derived) give the capture
+  overlay one pointer style across all three modes, at matched weight. Region **must stay a
+  crosshair** — it is the one shape that reads as "drag out a region", and with no action line
+  in the guidance card the cursor is that instruction; a `viewfinder` glyph matched the style
+  but said "aim" and lost it. Drawn rather than symbol-derived because Region is also the one
+  mode where a pixel matters: the arms leave a **gap at the centre** so the hotspot sits on
+  nothing, which no SF Symbol offers. On the camera/video cursor: a dark purple glyph with a 2.5 pt halo all but
+  vanished against the dimmed screenshot behind it, and with no action line in the guidance
+  card that cursor is the only thing saying whether a click shoots or records. Inverting it
+  covers both extremes with no slab following the pointer: the white body reads on the dim,
+  the keyline reads on bright content. The keyline is a ring of offset copies because it must
+  follow the *glyph's* silhouette — a stroked rect would outline the box. When tinting a
+  glyph, do it in its **own transparent image**: `.sourceAtop` over anything already drawn
+  composites against those pixels and floods the whole glyph box solid.
 - `Theme.swift` — brand palette + fonts; the single styling source.
 - `Logo.swift` — the "m." logo / menu-bar glyph, drawn in code; `menuBarImage(badged:)`
   composes the update badge into the same template image so it still tints with the menu bar.
@@ -136,8 +160,37 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
 - `SelectionOverlay.swift` — the drag-to-select overlay, dimming either a frozen still
   of the display (screenshots, via the `frozen:` backdrop) or the live desktop (the
   record flow and the freeze-failed fallback); **Space** cycles
-  Region → Window → Screen mode; draws the cutout, size readout, mode hint, and a
-  lavender hover tint over the Window/Screen capture target. An `OverlayCoordinator`
+  Region → Window → Screen mode; draws the cutout, size readout, mode banner, and a
+  lavender hover tint over the Window/Screen capture target.
+  The centred guidance card (`drawModeBanner`) is the only chrome on screen before the
+  gesture. Two stacked rows: **every mode in `availableModes` as a segmented control** (each
+  segment carrying its own glyph, active one filled), then the muted shortcuts that apply
+  right now. Stacked, not one horizontal strip — as a strip it ran ~828 pt, over half a
+  1440 pt screen, with everything at the same weight so nothing led.
+  **There is deliberately no "Drag to select" line**: the *cursor* carries the gesture —
+  crosshair for Region, brand camera (or video, while recording) for Window/Screen over a
+  lavender-highlighted target — so a text line was a third way of saying what the segment and
+  the pointer already say. That only works while the cursors are honest; `modeCursor` used to
+  hand the record flow a bare `.pointingHand` while its own docs promised a video cursor.
+  The picker used to name only the current mode and say "Space to cycle", which asks the
+  reader to already know there is something to cycle through; naming them as plain words then
+  read as a caption *about* the card rather than a control, hence the segments. Building them off
+  `availableModes` (not a fixed three) keeps a window/screen-forbidden flow honest: it shows
+  a single segment and drops the hint row, rather than advertising a mode Space cannot reach.
+  **Shortcuts are parallel phrases and adding one means matching the shape**: every hint is a
+  **`%@` template** ("Press %@ to switch") whose key name is drawn as a **keycap** — a faint
+  fill in a hairline border — so it reads as a key to press, not as more of the sentence.
+  The `%@` is the seam `KeyHint` splits on: splitting the rendered phrase on whitespace would
+  not survive translation, since English wraps the key while German *leads* with it
+  ("%@ wechselt" → an empty `before`). A new hint must keep exactly one `%@`, and must read
+  correctly alone — either hint can appear without the other.
+  Pre-drag chrome — the guidance card and the dashed **last-region ghost** — stops drawing
+  once `startPoint` is set, because guidance is for *before* the gesture and the size readout
+  takes over during it. Both need `clearPreDragChrome()` on mouse-down: `invalidateSelection`
+  dirties only the selection rect, so neither the card's (shadow-padded) frame nor
+  `previousRect` would ever be repainted, and each sat there as a stale image until a drag
+  happened to sweep across it. **Anything else drawn only before the drag has to be added
+  there too**, or it will ghost the same way. An `OverlayCoordinator`
   is shared across every display's overlay so mode-cycling and capture work on any
   connected screen, not just the one under the initial cursor. Window mode
   hover-highlights the window under the pointer (via `WindowList`) and captures it on
@@ -194,12 +247,43 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
   thumbnail cards (adaptive grid, video play badges) with Copy / Pin / Trim / Reveal /
   Trash actions; rebuilt from the folder on every open.
 - `EditorWindow.swift` — the in-place annotation editor: tool tiles in five groups
-  (Markup, Shapes, Style, Actions, Background) as scattered cards or one draggable
-  panel. Style holds the color palette, custom-color picker, and a cycling stroke-width
+  (Markup, Shapes, Style, Actions, Background) placed by a **gap model**
+  (`measureGaps`): the four strips of screen around the selection are measured in whole
+  cards, each cluster takes the best gap that still has room (`preference`), a gutter
+  stacks its run (`stackVertically`) while a strip lays it out in a row (`rowOutside`),
+  and only clusters that *nothing* can hold get gathered (`gatherOffsets` + `rowSplit`)
+  at the capture's bottom edge (`overCaptureOrigin`). This replaced an all-or-nothing
+  `canScatter` test that sent **all five** clusters into one block over the image if a
+  single gutter came up short — which happened for any capture within ~166 pt of a side
+  edge, or under ~107 pt tall, or without ~185 pt clear above *and* below. Across a
+  ten-shape matrix that test gathered everything in eight cases; the gap model gathers
+  only for a whole-screen selection, where nothing outside the capture exists to use.
+  Adding a cluster means adding a `preference` row. Style holds the color palette, custom-color picker, and a cycling stroke-width
   tile. Actions owns the Select tool (move/resize/delete a placed mark; **V**),
   crop, rotate-right, flip, undo/redo, Pin (⌘P), Before/After GIF, Copy (⌘C), Save
   (⌘S), Save As (⇧⌘S), Cancel. Owns tooltips, selection state, the pickers, and the
   live background preview (`BackgroundView`).
+  Every card carries a `ClusterHeader` — a six-dot grip beside the group's eyebrow
+  label, over the hairline — because the open-hand cursor was the *only* cue that the
+  cards move, and a cursor is invisible until the pointer is already there. The header
+  draws its own text rather than hosting an `NSTextField`: a control eats the
+  mouse-down, which is why dragging by the caption never worked at all. It hides its
+  own tip on press — the pointer never leaves the header it is dragging by, so the tip
+  would otherwise park beside the moving card. The grip sizes into the padding a
+  centered label already had (`contentWidth + 6`), not on top of it, so no card widens
+  — German's "HINTERGRUND" is the one that has no slack to give; measure before
+  rewording a group name.
+  **A gathered block is an arrangement, not a container**: free-standing
+  `DraggablePanel`s placed at a shared origin, not cards parented to one panel. It only
+  *looked* like a slab — the cards have gaps between them — so a grab that hauled them
+  all along read as a bug. Every card moves alone, in every layout; there is
+  deliberately no move-them-all gesture. One card factory (`cardFit`) serves both the
+  gap runs and the gathered block, so nothing has to stay size-matched between them.
+  Two placement invariants are worth re-checking after any change here, because nothing
+  enforces them at runtime: **no card overlaps another**, and **no card sits over the
+  capture unless it is a leftover**. A gutter run is centred on the capture and so spills
+  past it when long, which is why `measureGaps` caps the run to the capture's height
+  when — and only when — both strips also hold cards.
 - `CanvasView.swift` — the annotation canvas: `Tool` enum, undo/redo, Gaussian blur,
   crop/rotate/flip transforms (`applyTransform` shifts annotations when the region
   changes), and live edit state. (The whole-canvas resize is now a display re-grab in
@@ -291,6 +375,14 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
 
 ## Gotchas
 
+- **The app has a window-level ladder; don't flatten it.** Full-screen capture surfaces
+  sit at `.screenSaver` (the editor) or `.screenSaver + 1` (the selection overlay), and
+  everything meant to appear *over* the editor is written relative to that: the color /
+  emoji / counter pickers and `BrandToast` at `+1`, `BrandAlert` at `+2`. `.normal` is
+  wrong for any of them — the Dock (level 20) and the menu bar (24) then draw over the
+  editor and **clip its tool cards**, and any other app's window can cover the whole
+  thing. The editor was silently dropped to `.normal` once in a commit about something
+  else; the "above the screen-saver-level editor" comments left behind are the tell.
 - **Screen Recording permission is required, and the grant resets on rebuild.**
   `build.sh` ad-hoc signs (`codesign -s -`), so a rebuild can read as a new identity
   and reset the grant — re-approve under *System Settings → Privacy & Security →
@@ -329,6 +421,36 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
   uniquified on collision. ⌘C flattens and writes to the pasteboard.
 - Global hotkeys use Carbon `RegisterEventHotKey` (`HotKey.swift`) — no Accessibility
   permission needed.
+- **The capture cursor is a cursor *rect*, and a rect must be released.** `SelectionView`
+  claims one over its whole bounds (`resetCursorRects`), because a one-shot `NSCursor.set()`
+  races window activation and the plain arrow would survive until the pointer first moved —
+  and a `.cursorUpdate` tracking area doesn't help, since a pointer already inside the
+  overlay when it appears never *enters* it. Rects are only honoured while the app is
+  **active** and `NSApp.activate` is asynchronous, so `claimKeyboard` re-asserts across its
+  retries, not just when key status is missing. The flip side: a rect the window server still
+  remembers keeps re-asserting after the overlay is gone, which left a camera pointer on
+  screen until the next mouse move — so `OverlayWindow.orderOut` calls `relinquishCursor()`,
+  which discards the rect, latches `cursorReleased` (a late rect pass would otherwise
+  re-claim) and hands back the arrow. **Out-`set()`ing a rect does not work; release it.**
+  Releasing it still isn't enough on its own, and this is the part that cost several wrong
+  fixes: `NSCursor.set()`, cursor rects, `hide`/`unhide`, and a front window owning its own
+  rect all change the cursor **claim**. The window server keeps drawing the image it last
+  composited until *pointer motion* makes it re-evaluate — which is why the stale camera
+  cleared the instant the mouse was nudged and not before. Asserting on `NSCursor.current`
+  proves nothing here; it was already the arrow the whole time.
+  `ScreenshotController.redrawPointer(on:)` therefore supplies the motion:
+  `CGWarpMouseCursorPosition` one point and back on the next tick — two distinct positions so
+  it can't be coalesced, net position unchanged, imperceptible. It needs **no** Accessibility
+  grant (that gates *synthesizing events* with `CGEvent.post`, not repositioning the pointer;
+  a comment here used to claim otherwise). The nudge picks its direction to stay inside the
+  current display so it can never walk the pointer onto another screen.
+  **And none of it works while a mouse button is held**: the server treats motion during a
+  held button as a drag and suppresses cursor re-evaluation entirely. `SelectionView.mouseDown`
+  commits **Screen** mode on the *press*, so every reset there ran mid-click and was discarded
+  — while Region, which commits on `mouseUp` at the end of a real drag, worked fine and made
+  the bug look mode-specific. `forcePointerReset` therefore waits for `NSEvent.pressedMouseButtons
+  == 0` (bounded retries) and then defers to a later run-loop turn, so it never runs inside the
+  dispatch of the event that triggered it.
 - **Overlay click-through on transparent holes.** The selection overlay is a
   non-opaque window, and a non-opaque `NSWindow` passes mouse clicks straight
   *through* any fully-transparent (alpha 0) pixels to the app underneath — keyboard
@@ -343,7 +465,20 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
 
 - **No external dependencies** — system frameworks only (AppKit / CoreImage / Carbon
   / Vision / ImageIO / ScreenCaptureKit). Write original code; match the surrounding Swift.
-- **All styling goes through `Theme.swift`** — never hardcode colors or fonts.
+- **All styling goes through `Theme.swift`** — never hardcode colors or fonts, and take
+  corner radii from `Theme.radiusSmall` / `radiusMedium` rather than a literal. **Both are
+  `0`**: the brand is square-cornered everywhere — panels, chips, badges, pills, banners,
+  tool tiles, colour swatches, hover highlights, the sidebar selection, the version badge.
+  A literal radius is the bug, not the value; route it through the token so the shape stays
+  one decision. Three things are deliberately *not* chrome and keep their curve: the
+  `Background` preset's user-configurable image corner, the editor's rounded-rectangle
+  annotation tool, and shapes that are circles by function (the recording dot). Push buttons
+  can't take a radius at all — a native `bezelStyle = .rounded` is rounded by AppKit — so
+  Settings' Choose… and the About card's actions are a custom-drawn `BrandPushButton`.
+  It is deliberately **not** a `PointerButton` subclass: `PointerButton` also backs the
+  panel's `NSButton(checkboxWithTitle:)` checkboxes, and a fill painted in its `draw`
+  lands behind the checkbox label as a purple slab. Those checkboxes are the one control
+  AppKit still rounds for us.
 - **Every screen follows the mesoneer brand style** — all user-facing windows,
   dialogs, popovers and menus use the brand panel chrome (`Theme` gradient, square
   corners, a soft drop shadow, and **no border**, plus the `m.` logo and brand-styled

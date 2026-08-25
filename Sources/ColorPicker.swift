@@ -56,7 +56,7 @@ final class ColorPickerPanel: NSObject {
 
         preview = NSView(frame: NSRect(x: pad, y: pad, width: previewH, height: previewH))
         preview.wantsLayer = true
-        preview.layer?.cornerRadius = 7
+        preview.layer?.cornerRadius = Theme.radiusSmall
         preview.layer?.borderWidth = 1
         preview.layer?.borderColor = NSColor(white: 1, alpha: 0.25).cgColor
         container.addSubview(preview)
@@ -143,7 +143,7 @@ private final class SVSquareView: NSView {
 
     override func draw(_ dirtyRect: NSRect) {
         guard let ctx = NSGraphicsContext.current?.cgContext else { return }
-        let path = NSBezierPath(roundedRect: bounds, xRadius: 8, yRadius: 8)
+        let path = NSBezierPath(roundedRect: bounds, xRadius: Theme.radiusSmall, yRadius: Theme.radiusSmall)
         path.addClip()
 
         ctx.setFillColor(NSColor(deviceHue: hue, saturation: 1, brightness: 1, alpha: 1).cgColor)
@@ -190,7 +190,7 @@ private final class HueStripView: NSView {
 
     override func draw(_ dirtyRect: NSRect) {
         guard let ctx = NSGraphicsContext.current?.cgContext else { return }
-        NSBezierPath(roundedRect: bounds, xRadius: 8, yRadius: 8).addClip()
+        NSBezierPath(roundedRect: bounds, xRadius: Theme.radiusSmall, yRadius: Theme.radiusSmall).addClip()
         let cs = CGColorSpaceCreateDeviceRGB()
         let stops = stride(from: 0.0, through: 1.0, by: 1.0 / 6).map {
             NSColor(deviceHue: CGFloat($0), saturation: 1, brightness: 1, alpha: 1).cgColor
@@ -202,7 +202,7 @@ private final class HueStripView: NSView {
         }
         let x = bounds.minX + hue * bounds.width
         let cursor = NSBezierPath(roundedRect: NSRect(x: x - 3, y: -1, width: 6, height: bounds.height + 2),
-                                  xRadius: 3, yRadius: 3)
+                                  xRadius: Theme.radiusSmall, yRadius: Theme.radiusSmall)
         cursor.lineWidth = 2
         NSColor.white.setStroke(); cursor.stroke()
     }

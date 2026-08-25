@@ -980,7 +980,7 @@ final class CanvasView: NSView, NSTextViewDelegate {
         tv.colorForNewText = { [weak self] in self?.style.color ?? color }
         tv.delegate = self
         tv.wantsLayer = true
-        tv.layer?.cornerRadius = 4
+        tv.layer?.cornerRadius = Theme.radiusSmall
         styleTextViewBackground(tv)
         return tv
     }

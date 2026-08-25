@@ -195,7 +195,7 @@ private final class HistoryCell: NSView {
         widthAnchor.constraint(equalToConstant: size.width).isActive = true
         heightAnchor.constraint(equalToConstant: size.height).isActive = true
         wantsLayer = true
-        layer?.cornerRadius = 6
+        layer?.cornerRadius = Theme.radiusSmall
         layer?.backgroundColor = Theme.surfaceRaised.cgColor
         layer?.borderWidth = 1
         layer?.borderColor = Theme.border.cgColor
@@ -207,7 +207,7 @@ private final class HistoryCell: NSView {
         let thumbBox = NSView(frame: NSRect(x: inset, y: 34, width: size.width - inset * 2, height: thumbH))
         thumbBox.wantsLayer = true
         thumbBox.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.3).cgColor
-        thumbBox.layer?.cornerRadius = 4
+        thumbBox.layer?.cornerRadius = Theme.radiusSmall
         thumbBox.layer?.masksToBounds = true
         addSubview(thumbBox)
         thumb.frame = thumbBox.bounds
@@ -289,7 +289,7 @@ private final class HistoryCell: NSView {
         actions.isHidden = true
         actions.wantsLayer = true
         actions.layer?.backgroundColor = Theme.surfaceBase.withAlphaComponent(0.85).cgColor
-        actions.layer?.cornerRadius = 5
+        actions.layer?.cornerRadius = Theme.radiusSmall
         actions.edgeInsets = NSEdgeInsets(top: 3, left: 5, bottom: 3, right: 5)
         actions.translatesAutoresizingMaskIntoConstraints = false
         addSubview(actions)
@@ -426,7 +426,7 @@ private final class HistoryIconButton: NSView {
     override func draw(_ dirtyRect: NSRect) {
         if hovering {
             Theme.hoverFill.setFill()
-            NSBezierPath(roundedRect: bounds, xRadius: 4, yRadius: 4).fill()
+            NSBezierPath(roundedRect: bounds, xRadius: Theme.radiusSmall, yRadius: Theme.radiusSmall).fill()
         }
         let cfg = NSImage.SymbolConfiguration(pointSize: 11, weight: .semibold)
         guard let img = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)?

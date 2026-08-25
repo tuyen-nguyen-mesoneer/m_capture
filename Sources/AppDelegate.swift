@@ -146,7 +146,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let editorOpen = EditorWindowController.hasOpenWindows
         let rec = VideoRecordController.shared
         var entries: [MenuEntry] = [
-            .header("m_capture", url: "https://github.com/tuyen-nguyen-mesoneer/m_capture",
+            // The product page, not the repo: the menu header is the app's front door for
+            // everyone, and most of them are not here to read source.
+            .header("m_capture", url: "https://tinyurl.com/m-capture",
                     version: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String),
             .separator,
         ]
@@ -195,7 +197,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             entries.append(.separator)
             entries.append(.item(title: L("Quit"), symbol: "power", shortcut: nil) { [weak self] in self?.quit() })
-            menu = BrandMenu(entries: entries)
+            setMenu(entries)
             return
         }
         // Whatever the updater is waiting on. The alert announcing it can be missed (it
@@ -230,7 +232,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .item(title: L("Check for Updates"), symbol: "arrow.down.circle", shortcut: nil) { Updater.checkManually() },
             .item(title: L("Quit"), symbol: "power", shortcut: nil) { [weak self] in self?.quit() },
         ])
-        menu = BrandMenu(entries: entries)
+        setMenu(entries)
+    }
+
+    /// One `BrandMenu` for the life of the app — see `BrandMenu.update(entries:)` for
+    /// why rebuilding it as a new instance broke click-to-dismiss.
+    private func setMenu(_ entries: [MenuEntry]) {
+        if let menu { menu.update(entries: entries) } else { menu = BrandMenu(entries: entries) }
     }
 
     /// (Re)register the global hotkeys from Settings. Dropping the old `HotKey`

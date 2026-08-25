@@ -328,10 +328,10 @@ final class VideoRecordController {
         overlays.forEach { $0.orderOut(nil) }
         overlays.removeAll()
         DispatchQueue.main.async { stale.forEach { $0.close() } }
-        // Reset the pointer to the pointing hand — matching the Window/Screen pick
-        // modes' cursor — so the overlay's crosshair isn't left showing (and isn't
-        // baked into the first recorded frames). See `ScreenshotController.forcePointerReset`
-        // for why this sets/hides/unhides twice (immediately, then again a beat later).
+        // Put the pointer back to the plain arrow so the overlay's capture cursor isn't left
+        // showing (and isn't baked into the first recorded frames). See
+        // `ScreenshotController.forcePointerReset` for why this both `.set()`s and briefly
+        // puts up a window with a cursor rect.
         ScreenshotController.forcePointerReset()
     }
 
@@ -873,7 +873,7 @@ final class RecordCountdownWindow {
         let content = NSView(frame: NSRect(origin: .zero, size: frame.size))
         content.wantsLayer = true
         content.layer?.backgroundColor = Theme.surfaceBase.withAlphaComponent(0.85).cgColor
-        content.layer?.cornerRadius = side / 2
+        content.layer?.cornerRadius = Theme.radiusSmall
         label.font = Theme.font(64, .bold)
         label.textColor = Theme.textPrimary
         label.alignment = .center

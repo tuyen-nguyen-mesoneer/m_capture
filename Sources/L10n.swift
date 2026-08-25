@@ -184,8 +184,10 @@ enum L10n {
         "Region": "Bereich",
         "Window": "Fenster",
         "Screen": "Bildschirm",
-        "Space to cycle": "Leertaste wechselt",
-        "⏎ last region": "⏎ letzter Bereich",
+        "Press %@ to switch mode": "%@ wechselt den Modus",
+        "Space": "Leertaste",
+        "Return": "Return",
+        "Press %@ for last region": "%@ zum letzten Bereich",
 
         // ── Settings window ──────────────────────────────────────────────
         "General": "Allgemein",
@@ -366,6 +368,7 @@ enum L10n {
         "Move — drag an object to reposition, drag its corner to resize, ⌫ to delete  (V)":
             "Verschieben — Objekt ziehen, an der Ecke skalieren, ⌫ löscht  (V)",
         "Crop — drag a region, then ↵ or ✓": "Zuschneiden — Bereich aufziehen, dann ↵ oder ✓",
+        "Drag to move this panel": "Ziehen, um dieses Feld zu verschieben",
         "Rotate right 90°": "90° nach rechts drehen",
         "Flip horizontal": "Horizontal spiegeln",
         "Undo  (⌘Z)": "Widerrufen  (⌘Z)",
@@ -532,8 +535,10 @@ enum L10n {
         "Region": "Vùng chọn",
         "Window": "Cửa sổ",
         "Screen": "Màn hình",
-        "Space to cycle": "Space để đổi chế độ",
-        "⏎ last region": "⏎ vùng chọn trước",
+        "Press %@ to switch mode": "Nhấn %@ để đổi chế độ",
+        "Space": "Space",
+        "Return": "Return",
+        "Press %@ for last region": "Nhấn %@ cho vùng chọn trước",
 
         // ── Settings window ──────────────────────────────────────────────
         "General": "Chung",
@@ -714,6 +719,7 @@ enum L10n {
         "Move — drag an object to reposition, drag its corner to resize, ⌫ to delete  (V)":
             "Di chuyển — kéo để dời, kéo góc để đổi cỡ, ⌫ để xoá  (V)",
         "Crop — drag a region, then ↵ or ✓": "Cắt — kéo chọn vùng, rồi ↵ hoặc ✓",
+        "Drag to move this panel": "Kéo để di chuyển bảng này",
         "Rotate right 90°": "Xoay phải 90°",
         "Flip horizontal": "Lật ngang",
         "Undo  (⌘Z)": "Hoàn tác  (⌘Z)",

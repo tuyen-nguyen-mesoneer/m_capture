@@ -17,7 +17,7 @@ private final class MenuWindow: NSWindow {
 /// A custom, mesoneer-styled drop-down shown under the status item (since NSMenu
 /// can't be themed). Dark surface, rounded, purple hover rows.
 final class BrandMenu: NSObject {
-    private let entries: [MenuEntry]
+    private var entries: [MenuEntry]
     private var window: MenuWindow?
     private var lastClose = Date.distantPast
     private var globalClickMonitor: Any?
@@ -31,6 +31,14 @@ final class BrandMenu: NSObject {
     private let reopenGuard: TimeInterval = 0.25
 
     init(entries: [MenuEntry]) { self.entries = entries }
+
+    /// Swap in freshly-built rows without replacing the menu object. The status menu is
+    /// rebuilt on every click because its rows read live state, and rebuilding it as a
+    /// *new instance* reset both `window` and `lastClose` — so clicking the menu-bar icon
+    /// a second time closed the menu (via the click monitor) and immediately opened a
+    /// fresh one, making the icon look unable to dismiss its own menu. It also stranded
+    /// the open window, along with its observer and monitors, on every rebuild.
+    func update(entries: [MenuEntry]) { self.entries = entries }
 
     func toggle(from button: NSStatusBarButton) {
         if window != nil { close(); return }
@@ -185,7 +193,7 @@ private final class HeaderView: NSView {
                                              width: badgeW, height: badgeH))
             badge.wantsLayer = true
             badge.layer?.backgroundColor = Theme.accentPurple.cgColor
-            badge.layer?.cornerRadius = badgeH / 2
+            badge.layer?.cornerRadius = Theme.radiusSmall
             badge.layer?.borderWidth = 1
             badge.layer?.borderColor = Theme.border.cgColor
             versionLabel.frame = NSRect(x: padX, y: (badgeH - versionLabel.frame.height) / 2,
@@ -228,7 +236,7 @@ private final class MenuRowView: NSView {
         self.onClick = onClick
         super.init(frame: NSRect(x: 0, y: 0, width: width, height: height))
         wantsLayer = true
-        layer?.cornerRadius = 7
+        layer?.cornerRadius = Theme.radiusSmall
 
         let textColor = enabled ? Theme.textPrimary : Theme.textMuted
         var textX: CGFloat = 12
@@ -250,7 +258,10 @@ private final class MenuRowView: NSView {
 
         if let shortcut {
             let key = NSTextField(labelWithString: shortcut)
-            key.font = Theme.font(12, .semibold); key.textColor = Theme.textMuted
+            // Same colour as the title (white when enabled, dimmed when not). It used to be
+            // `Theme.textMuted` regardless — the dimmest thing on the row, which is backwards
+            // for the one part a user is meant to read and memorize.
+            key.font = Theme.font(12, .semibold); key.textColor = textColor
             key.alignment = .right
             key.alphaValue = enabled ? 1 : 0.5
             key.frame = NSRect(x: width - 58, y: (height - 16) / 2, width: 46, height: 16)

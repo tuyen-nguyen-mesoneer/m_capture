@@ -26,7 +26,7 @@ enum BrandToast {
         let pill = NSView(frame: NSRect(origin: .zero, size: size))
         pill.wantsLayer = true
         pill.layer?.backgroundColor = Theme.accentPurple.withAlphaComponent(0.95).cgColor
-        pill.layer?.cornerRadius = 8
+        pill.layer?.cornerRadius = Theme.radiusSmall
         label.frame = NSRect(x: pad, y: pad / 2, width: ceil(ts.width), height: ceil(ts.height))
         pill.addSubview(label)
 

@@ -123,7 +123,7 @@ final class CounterFormatPicker: NSObject {
             let y = contentTop - CGFloat(i + 1) * rowH - CGFloat(i) * rowGap
             let rowView = NSView(frame: NSRect(x: pad, y: y, width: w, height: rowH))
             rowView.wantsLayer = true
-            rowView.layer?.cornerRadius = 6
+            rowView.layer?.cornerRadius = Theme.radiusSmall
             rowView.layer?.backgroundColor = (i == focusIndex) ? Theme.hoverFill.cgColor : NSColor.clear.cgColor
             rowViews.append(rowView)
 
