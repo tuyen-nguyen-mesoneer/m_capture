@@ -153,6 +153,37 @@ final class BrandAlert: NSObject {
         return v
     }
 
+    /// Centre the panel on the display the user is actually looking at.
+    ///
+    /// `NSWindow.center()` always centres on `NSScreen.main` — the display with the menu bar —
+    /// regardless of where the window is or which one raised it. So an alert always landed on
+    /// the built-in panel, wherever the editor or the recording actually was. Confirming a
+    /// discard over a capture on a second display put the prompt on the *first* one: nothing
+    /// appeared over the picture, and `runModal` held the app meanwhile, so the editor read as
+    /// frozen rather than as waiting for an answer somewhere off-screen. The window level was
+    /// never the problem — `.screenSaver + 2` was already above everything.
+    ///
+    /// Must be called *before* `makeKeyAndOrderFront`, while the window that raised the alert
+    /// is still key: that window is the right anchor because every caller is answering for one.
+    /// The pointer's screen covers an alert raised while nothing is key (a background save
+    /// failure, an update offer), and `main` is the last resort.
+    private func centerOnActiveScreen() {
+        let anchor = NSApp.keyWindow?.screen
+            ?? NSApp.mainWindow?.screen
+            ?? NSScreen.screens.first { $0.frame.contains(NSEvent.mouseLocation) }
+            ?? NSScreen.main
+        guard let f = anchor?.visibleFrame else { panel.center(); return }
+        // Placement is `center()`'s own, measured rather than guessed: it centres horizontally
+        // in the visible frame and leaves a *quarter* of the vertical slack above, so the panel
+        // sits a little high — where the eye already is. Reproducing it keeps every brand alert
+        // sitting exactly where alerts have always sat; only the screen changes.
+        // (Moving the panel onto the target display and then calling `center()` does not work —
+        // `center()` resolves to `NSScreen.main`, not to the panel's own screen.)
+        let size = panel.frame.size
+        panel.setFrameOrigin(NSPoint(x: f.minX + ((f.width - size.width) / 2).rounded(.down),
+                                     y: f.minY + ((f.height - size.height) * 3 / 4).rounded(.down)))
+    }
+
     /// Show the panel modally and return the index of the button the user chose.
     /// Reserve this for user-initiated flows that genuinely can't continue without
     /// an answer; anything fired from a background context (updater, async save
@@ -160,7 +191,7 @@ final class BrandAlert: NSObject {
     /// freezes whatever run loop it lands on.
     @discardableResult
     func runModal() -> Int {
-        panel.center()
+        centerOnActiveScreen()
         panel.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
         NSApp.runModal(for: panel)
@@ -176,7 +207,7 @@ final class BrandAlert: NSObject {
     func present(completion: ((Int) -> Void)? = nil) {
         presentCompletion = completion
         Self.presented.append(self)
-        panel.center()
+        centerOnActiveScreen()
         panel.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
@@ -252,6 +283,23 @@ private final class AlertPanel: NSWindow {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { true }
     override func cancelOperation(_ sender: Any?) { onCancel?() }
+
+    /// Floor the level at `.screenSaver + 2` — the alert's whole reason for being up there is
+    /// to clear the editor and the capture overlays.
+    ///
+    /// **`NSApp.runModal(for:)` reassigns the window's level to `.modalPanel` (8) when the
+    /// session begins**, so setting the level at init was silently undone on every modal
+    /// alert: the panel dropped ~1000 levels, landed *behind* the `.screenSaver` editor, and
+    /// stayed modal — an invisible window swallowing every click, which reads as the app
+    /// freezing with a dialog stuck behind the picture. Clamping the setter fixes it for good
+    /// rather than racing AppKit to re-assert the level afterwards, and it cannot be undone by
+    /// a future caller either. The `present` path never hit this, which is why only the
+    /// `runModal` confirms (discard capture, discard recording) misbehaved.
+    static let minLevel = NSWindow.Level(rawValue: NSWindow.Level.screenSaver.rawValue + 2)
+    override var level: NSWindow.Level {
+        get { super.level }
+        set { super.level = newValue.rawValue < Self.minLevel.rawValue ? Self.minLevel : newValue }
+    }
 }
 
 /// A brand-styled pill button: `primary` is a solid `accentPurple` fill (white

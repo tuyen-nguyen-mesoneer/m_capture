@@ -110,6 +110,22 @@ final class CanvasView: NSView, NSTextViewDelegate {
         guard let b = bitmap, image.size.width > 0 else { return 1 }
         return CGFloat(b.pixelsWide) / image.size.width
     }
+    /// True when the canvas draws the capture enlarged by a whole number of *backing*
+    /// pixels per image pixel — the one case where interpolation only costs sharpness.
+    /// `scaleX`/`scaleY` are point scales, so the window's backing factor is what turns
+    /// them into pixels; a stretched (non-integral or anisotropic) canvas fails this and
+    /// keeps the resampler.
+    private var magnifiesWholePixels: Bool {
+        let ppp = pixelsPerPoint
+        guard ppp > 0 else { return false }
+        let backing = window?.backingScaleFactor ?? 1
+        let px = scaleX * backing / ppp, py = scaleY * backing / ppp
+        // Both axes must be whole, but only one need be enlarging: an edge knob dragged to an
+        // exact 2× across leaves the other axis at 1:1, and nearest-neighbour is still exact
+        // — and still crisper — in both directions.
+        guard px >= 1, py >= 1, max(px, py) >= 2 else { return false }
+        return abs(px - px.rounded()) < 0.001 && abs(py - py.rounded()) < 0.001
+    }
     /// The endpoint handle under `p` (start or end), or nil.
     private func measureHandle(_ m: MeasureAnnotation, at p: CGPoint) -> MeasureHandle? {
         let hr = 12 / displayScale
@@ -1521,16 +1537,25 @@ final class CanvasView: NSView, NSTextViewDelegate {
     override func draw(_ dirtyRect: NSRect) {
         guard let ctx = NSGraphicsContext.current?.cgContext else { return }
         ctx.saveGState()
-        // Neither scale is generally the exact reciprocal that maps image pixels 1:1 onto
-        // backing pixels — the editor shrinks a large capture to fit its tool cards, and the
-        // resize knobs stretch to whatever the hand drags — so CoreGraphics has to resample.
-        // Ask for a good one; at an exact scale there is nothing to interpolate and this is free.
         ctx.interpolationQuality = .high
         ctx.scaleBy(x: scaleX, y: scaleY)
         // Clip to the image so a mark that overhangs the edge (e.g. after the region is
         // trimmed) never paints its cut-off part onto the surrounding backdrop.
         ctx.clip(to: CGRect(origin: .zero, size: image.size))
+        // A magnified capture lands a whole number of backing pixels on every image pixel,
+        // but CoreGraphics resamples that anyway unless told not to: an exact 2x of a
+        // black/white edge comes back with six grey levels, not two. Nearest-neighbour keeps
+        // such a capture as crisp as the pixels it was cut from.
+        // It shows up worst on a large low-density external display, and for two compounding
+        // reasons. `magnification`'s `fits` cap scales with the screen's *point* size, so a
+        // capture that stays 1:1 on a 1440x900 panel is enlarged 2x on a 1920x1080 one; and
+        // a 1x panel spreads each blurred image pixel over ~2.4x the physical area a Retina
+        // panel would, so the same softening that hides at 227 ppi is plain at 96.
+        // Every other scale (a shrunk capture, a hand-stretched one) is a genuine resample
+        // and keeps `.high`, as do the annotations drawn over the top.
+        ctx.interpolationQuality = magnifiesWholePixels ? .none : .high
         image.draw(in: CGRect(origin: .zero, size: image.size))
+        ctx.interpolationQuality = .high
         for a in annotations { a.draw(in: ctx) }
         live?.draw(in: ctx)
         if let pc = pendingCrop { drawCropOverlay(pc, in: ctx) }

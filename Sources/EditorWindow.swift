@@ -363,7 +363,8 @@ final class EditorWindowController: NSObject {
     ///   bilinear-resample the *entire* image on every redraw — invisible on a dense
     ///   Retina panel, visibly soft on a 1x external display.
     init(image: NSImage, selectionRect: CGRect, screen: NSScreen, captureScale: CGFloat = 1) {
-        let inset = EditorWindowController.onScreenScale(selection: selectionRect, screen: screen)
+        let inset = EditorWindowController.onScreenScale(selection: selectionRect, screen: screen,
+                                                        captureScale: captureScale)
         let scale = (captureScale > 0 ? 1 / captureScale : 1) * inset
         canvas = CanvasView(image: image, displayScale: scale)
         captureScreen = screen
@@ -482,9 +483,18 @@ final class EditorWindowController: NSObject {
     /// Long edge a capture should reach to be comfortable to annotate. Below it the capture
     /// is magnified (see `magnification`).
     private static let comfortableEdge: CGFloat = 320
+    /// Long edge below which a capture is too small to work on at all — the point where
+    /// replicating pixels to enlarge it beats leaving it sharp but untouchable. Between this
+    /// and `comfortableEdge` a capture is only enlarged as far as its own pixel density
+    /// allows for free (see `magnification`).
+    private static let workableEdge: CGFloat = 120
     /// Ceiling on that magnification — past this a capture is more pixel blocks than picture.
     /// Only the *opening* scale is capped; the resize handles zoom without limit.
     private static let maxMagnification: CGFloat = 4
+    /// How close a dragged scale must come to a whole number to be committed as exactly that.
+    /// Kept small — the stretch is meant to be free, and this only absorbs drift a hand cannot
+    /// avoid (see `snapScale`).
+    private static let scaleSnap: CGFloat = 0.04
     /// Floor on either edge of a hand-dragged canvas, so a knob can't collapse it to nothing.
     private static let minCanvasEdge: CGFloat = 40
     /// Ceiling on either edge of a hand-dragged canvas, in screens.
@@ -528,34 +538,51 @@ final class EditorWindowController: NSObject {
     /// The capture's on-screen scale: shrunk when the cards can't fit around it, magnified
     /// when it is too small to work on, and 1 — pixel-exact — for everything in between.
     /// Shrinking wins if both apply, since a capture that big is not also small.
-    private static func onScreenScale(selection: CGRect, screen: NSScreen) -> CGFloat {
+    private static func onScreenScale(selection: CGRect, screen: NSScreen,
+                                      captureScale: CGFloat) -> CGFloat {
         let shrunk = insetScale(selection: selection, screen: screen)
-        return shrunk < 1 ? shrunk : magnification(selection: selection, screen: screen)
+        return shrunk < 1 ? shrunk
+            : magnification(selection: selection, screen: screen, captureScale: captureScale)
     }
 
     /// Whole-number magnification for a capture too small to annotate comfortably.
     ///
     /// A 40×30 region centred in a dimmed 1440×900 screen is a postage stamp — there is
     /// nothing to aim a mark at, and below roughly 36 pt of canvas the eight 18 pt resize
-    /// knobs overlap each other, so it can't even be resized. Enlarging costs none of the
-    /// softness that *shrinking* does, provided it is by a whole number: `displayScale` is
-    /// `scale / captureScale` while the backing scale *is* `captureScale`, so an integer
-    /// `scale` lays a whole number of backing pixels on every image pixel and there is
-    /// nothing to interpolate. A fractional one would resample, which is the whole reason
-    /// `insetScale` refuses to shrink anything that doesn't need it.
+    /// knobs overlap each other, so it can't even be resized.
     ///
-    /// Brings the long edge up to `comfortableEdge` in whole steps, capped by
-    /// `maxMagnification` and by half the display — that cap keeps every margin at a quarter
-    /// of the screen or more, well past what a card needs, so a magnified capture can never
-    /// push the cards back on top of itself.
-    private static func magnification(selection: CGRect, screen: NSScreen) -> CGFloat {
+    /// **Enlarging is only affordable up to the capture's own pixel density.** The canvas
+    /// shows `1 / displayScale` captured pixels per point of screen, and `displayScale` is
+    /// `magnification / captureScale` — so holding the magnification at or under
+    /// `captureScale` keeps that at one captured pixel per point or better, the same density
+    /// as ordinary 1× screen content. Past it the picture is coarser than the screen's own
+    /// point grid: each captured pixel is spread over a block of points, which adds no detail
+    /// and reads as soft whether the block is smoothed or left hard-edged.
+    ///
+    /// That threshold is what made this display-dependent, and it is worth spelling out
+    /// because the symptom looks like a capture bug and isn't. `captureScale` *is* the
+    /// display's density, so a 1× external panel has no headroom at all while a Retina one
+    /// has 2×. A 265 pt capture was enlarged 2× on both, but that left the Retina canvas at
+    /// one captured pixel per point (~113 per inch) and the 1× external at half that (~46
+    /// per inch) — the same nominal zoom, two and a half times the perceived blur. `fits`
+    /// allowed it on the external precisely because that screen is *bigger* in points.
+    ///
+    /// So only a capture under `workableEdge` — genuinely too small to aim a mark at — pays
+    /// for replication, up to `maxMagnification`; anything larger is enlarged only as far as
+    /// its own density gives away for nothing. Both are further capped by half the display,
+    /// which keeps every margin at a quarter of the screen or more, well past what a card
+    /// needs, so a magnified capture can never push the cards back on top of itself.
+    private static func magnification(selection: CGRect, screen: NSScreen,
+                                      captureScale: CGFloat) -> CGFloat {
         let f = screen.frame
         let long = max(selection.width, selection.height)
         guard long > 0, long < comfortableEdge, selection.width > 0, selection.height > 0
         else { return 1 }
         let wanted = (comfortableEdge / long).rounded(.up)
         let fits = min(f.width / 2 / selection.width, f.height / 2 / selection.height).rounded(.down)
-        return max(1, min(wanted, fits, maxMagnification))
+        let free = max(1, captureScale)
+        let ceiling = long < workableEdge ? maxMagnification : free
+        return max(1, min(wanted, fits, ceiling))
     }
 
     private static func insetScale(selection: CGRect, screen: NSScreen) -> CGFloat {
@@ -1640,11 +1667,39 @@ final class EditorWindowController: NSObject {
         else { relayout(canvasFrame: b); return }
         canvas.endTextEditing()
         cancelCrop()
-        // Taken from the frame the user actually dragged, so the canvas is exactly
+        // Quantise what the hand dragged before committing it. `relayout` already rounds the
+        // canvas *origin* onto the device-pixel grid because a fractional one resamples the
+        // whole canvas; the size needs the same treatment and never got it, so every stretch
+        // softened the very picture the user enlarged to look at.
+        let backing = max(1, window.backingScaleFactor)
+        canvas.scaleX = Self.snapScale(pf.width / imgW, imageEdge: imgW, backing: backing)
+        canvas.scaleY = Self.snapScale(pf.height / imgH, imageEdge: imgH, backing: backing)
+        // Size the frame from the committed scales, so the canvas stays exactly
         // `image.size × (scaleX, scaleY)` and the image can't land a fraction off its own view.
-        canvas.scaleX = pf.width / imgW
-        canvas.scaleY = pf.height / imgH
-        relayout(canvasFrame: pf)
+        var committed = pf
+        committed.size = CGSize(width: imgW * canvas.scaleX, height: imgH * canvas.scaleY)
+        relayout(canvasFrame: committed)
+    }
+
+    /// Quantise a dragged scale so the stretched canvas lands on whole device pixels.
+    ///
+    /// A drag arrives in fractional points — a trackpad reports sub-pixel deltas — so a stretch
+    /// that looks like exactly 2× commits as 1.9987×. Both axes are then fractional, the image's
+    /// edges fall between device pixels, and CoreGraphics resamples the entire canvas on every
+    /// redraw. That is pure loss: the user dragged the picture *bigger* to see it better and got
+    /// a softer one, worst on a 1× display where there is no spare density to hide it.
+    ///
+    /// Near a whole step the scale snaps to it, which also lets `CanvasView.draw` take its
+    /// nearest-neighbour path so an integer zoom of a screenshot keeps its glyph edges hard.
+    /// Anywhere else the scale is kept but nudged onto the pixel grid — the sharpest an
+    /// arbitrary ratio can be — leaving the free stretch free.
+    private static func snapScale(_ s: CGFloat, imageEdge: CGFloat, backing: CGFloat) -> CGFloat {
+        guard s > 0, imageEdge > 0, backing > 0 else { return s }
+        let whole = s.rounded()
+        if whole >= 1, abs(s - whole) <= scaleSnap { return whole }
+        let px = (imageEdge * s * backing).rounded()
+        guard px >= 1 else { return s }
+        return px / (imageEdge * backing)
     }
 
     private func showCropConfirm() {
