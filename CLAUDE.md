@@ -119,7 +119,19 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
   `intrinsicContentSize` — the latter is 3-4 pt short and clips the last glyph. `runModal()` for
   user-initiated confirms; `present(completion:)` (non-modal, self-retaining) for
   anything fired from a background context — nested `runModal` from callbacks can
-  wedge the run loop. Panel level sits above the capture overlays.
+  wedge the run loop. Panel level sits above the capture overlays — floored in `AlertPanel`'s
+  own setter, because `runModal` overwrites it (see the window-ladder gotcha).
+  **It also picks its own screen** (`centerOnActiveScreen`): `NSWindow.center()` always centres
+  on `NSScreen.main` — the menu-bar display — no matter which window raised the alert, so a
+  discard confirm for a capture on a second display opened on the *first* one. Nothing appeared
+  over the picture and `runModal` held the app meanwhile, which reads as the editor freezing,
+  not as a prompt waiting off-screen; the `.screenSaver + 2` level was never the problem. The
+  anchor is the key window (every caller is answering for one), then the pointer's screen, then
+  `main`, so it must run **before** `makeKeyAndOrderFront` while that window is still key. The
+  placement arithmetic is `center()`'s own, measured not guessed — centred horizontally in the
+  `visibleFrame`, a quarter of the vertical slack above — so alerts sit where they always have
+  and only the display changes. `HistoryWindow` / `SettingsWindow` / `TrimWindow` still call
+  bare `center()` and so still always open on the built-in panel.
 - `BrandToast.swift` — brief auto-fading toast pill (copied / trashed confirmations).
 - `BrandCursor.swift` — mesoneer-styled pointer cursors, **one style and one builder**
   (`makeOutlined`): a white glyph ringed with a brand-purple keyline. Capture overlay, editor
@@ -323,10 +335,23 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
   instead (`magnification`): centred in a dimmed screen, a 40×30 region is a postage stamp,
   and below ~36 pt of canvas the eight 18 pt resize knobs overlap each other so it can't even
   be resized. Its long edge is brought up to `comfortableEdge` in **whole steps** — integer
-  only, because `displayScale` is `scale / captureScale` against a backing scale of
-  `captureScale`, so a whole number lays a whole number of backing pixels on each image pixel
-  and there is nothing to interpolate; a fractional one would resample, which is exactly what
-  shrinking has to pay for. Capped at `maxMagnification` and at half the display, which keeps
+  only, so `CanvasView.draw` can lay whole blocks with `interpolationQuality = .none`;
+  CoreGraphics bicubic-resamples even an exact 2x otherwise (a black/white edge comes back
+  with six grey levels), and a fractional scale is a real resample, which is exactly what
+  shrinking has to pay for.
+  **How far it may enlarge is capped by the capture's own density, and that is the fix for a
+  real "second display is blurry" report.** The canvas shows `1 / displayScale` captured
+  pixels per point, and `displayScale` is `magnification / captureScale`, so a magnification
+  at or under `captureScale` keeps one captured pixel per point or better; past it the picture
+  is coarser than the screen's own point grid and looks soft no matter how it is drawn.
+  `captureScale` *is* the display's density, so a Retina panel has 2x of headroom and a 1x
+  external has none — and `fits` scales with the screen's *point* size, so the bigger 1x
+  panel was granted magnification the smaller Retina one refused. A 265 pt capture opened
+  enlarged 2x on both: ~113 captured pixels per inch on the Retina, ~46 on the 1x external.
+  Hence `workableEdge` — only a capture genuinely too small to aim a mark at pays for
+  replication (up to `maxMagnification`); anything larger gets only what its density gives.
+  Halved the 1x display's magnifying shapes from 195 to 25 in a 5184-shape sweep, with the
+  Retina path unchanged. Also capped at half the display, which keeps
   every margin at a quarter-screen or more so a magnified capture can't push the cards back
   onto itself. Below that floor `placeResizeHandle` drops to corners only.
   Both fold into `displayScale`, so relayout / crop / rotate / flip follow for free — and it
@@ -341,7 +366,15 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
   anchoring on the centre makes it move the opposite edge, so no knob feels like it belongs to
   the side it sits on. The cost is that a non-uniform stretch distorts the screenshot; Rotate /
   Flip / Crop are the actions that stay rigid. Committing writes `canvas.scaleX` / `scaleY`
-  from the dragged frame and relayouts. **It is presentational only** — annotations live in
+  through **`snapScale`**, then sizes the frame from those scales rather than from the raw drag.
+  That quantising is not cosmetic: a trackpad reports fractional deltas, so a stretch that looks
+  like exactly 2x used to commit as 1.9987x, putting the image's edges between device pixels and
+  resampling the whole canvas on every redraw — the user dragged the picture bigger to see it
+  better and got a softer one. `relayout` had long rounded the canvas *origin* for precisely
+  this reason; the size simply never got the same treatment. Near a whole step the scale snaps
+  to it (which also earns `CanvasView.draw`'s nearest-neighbour path, so an integer zoom of a
+  screenshot keeps hard glyph edges); anywhere else it is nudged onto the pixel grid, so the
+  stretch stays free. **It is presentational only** — annotations live in
   image space and `exportRep` flattens the image, so what gets saved is identical at any
   stretch. A quarter turn swaps the two scales with the axes, so a stretched box comes back on
   its side instead of snapping square.
@@ -460,6 +493,15 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
   editor and **clip its tool cards**, and any other app's window can cover the whole
   thing. The editor was silently dropped to `.normal` once in a commit about something
   else; the "above the screen-saver-level editor" comments left behind are the tell.
+  **Setting a level is not the same as keeping one: `NSApp.runModal(for:)` reassigns the
+  window's level to `.modalPanel` (8) when the session begins.** Every modal `BrandAlert`
+  therefore fell ~1000 levels at the moment it went up, landing behind the `.screenSaver`
+  editor while still holding the modal session — an invisible window eating every click, which
+  reads as the app freezing with a dialog stuck behind the capture. `AlertPanel` now clamps its
+  `level` setter (`minLevel`) so AppKit cannot lower it; don't replace that with a re-assert
+  after `runModal`, which races the session start. Verify a level with `kCGWindowLayer` from
+  `CGWindowListCopyWindowInfo`, not by reading back `window.level` — the code constant said
+  1002 the whole time the window server had it at 8.
 - **Screen Recording permission is required, and the grant resets on rebuild.**
   `build.sh` ad-hoc signs (`codesign -s -`), so a rebuild can read as a new identity
   and reset the grant — re-approve under *System Settings → Privacy & Security →

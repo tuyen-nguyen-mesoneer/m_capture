@@ -323,10 +323,11 @@ final class Settings {
     }
 
     /// Show the "Discard capture?" confirmation when closing the editor without
-    /// saving (default on). Unset reads as on; once the user toggles it, their
-    /// choice is respected.
+    /// saving (default **off**). Cancel is a deliberate press on a labelled button, so the
+    /// prompt asks about something the user just chose to do; `d.bool` already returns false
+    /// when unset, so no `object(forKey:)` probe is needed to distinguish the two.
     var confirmDiscard: Bool {
-        get { d.object(forKey: Key.confirmDiscard) == nil ? true : d.bool(forKey: Key.confirmDiscard) }
+        get { d.bool(forKey: Key.confirmDiscard) }
         set { d.set(newValue, forKey: Key.confirmDiscard) }
     }
 
