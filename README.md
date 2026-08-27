@@ -79,8 +79,8 @@ m_capture`). The cask installs into `~/Applications`, clears the download quaran
 you, and leaves the app to update itself — so `brew upgrade` won't fight the built-in
 updater (see [Updates & feedback](#updates--feedback)).
 
-Launch **m_capture** and grant **Screen Recording** permission when prompted (see
-[Permissions](#permissions)).
+Launch **m_capture** from `~/Applications` — the menu-bar **m.** icon appears — and grant
+**Screen Recording** permission when prompted (see [Permissions](#permissions)).
 
 ### From the DMG
 
