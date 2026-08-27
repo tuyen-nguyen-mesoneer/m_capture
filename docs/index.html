@@ -148,15 +148,16 @@
   .light .eyebrow{color:#6e6781}
   .light .sec-head p{color:#5b556a}
   /* install steps: dark text + purple number badges; the command block stays dark */
-  .light .istep p,.light .install-brew p{color:#5b556a}
+  .light .istep p{color:#5b556a}
   .light .istep .n{background:linear-gradient(145deg,rgba(67,42,132,.12),rgba(67,42,132,.03));border-color:rgba(67,42,132,.22);color:#432a84}
   /* the pale panel needs its own hover: the dark side's lavender → #fff would
      land white text on a #eceaf3 background, i.e. an invisible link */
-  .light .istep a,.light .install-brew a{color:#432a84}
-  .light .istep a:hover,.light .install-brew a:hover{color:#1b1430}
+  .light .istep a{color:#432a84}
+  .light .istep a:hover{color:#1b1430}
   .light .istep strong{color:#1b1430}
-  .light .istep p code,.light .install-brew p code{color:#432a84;background:rgba(67,42,132,.08);border-color:rgba(67,42,132,.18)}
-  .light .install-brew{border-bottom-color:rgba(67,42,132,.14)}
+  .light .istep p code{color:#432a84;background:rgba(67,42,132,.08);border-color:rgba(67,42,132,.18)}
+  .light .istep .route{color:#1b1430}
+  .light .route-alt{border-top-color:rgba(67,42,132,.14)}
   .sec-head{text-align:center;max-width:660px;margin:0 auto 58px}
   .sec-head h2{font-size:clamp(30px,4.4vw,46px);line-height:1.2;margin-bottom:16px}
   .sec-head p{color:var(--ink-dim);font-size:18px}
@@ -237,19 +238,20 @@
     background:linear-gradient(145deg,rgba(213,186,255,.16),rgba(213,186,255,.04));
     border:1px solid rgba(213,186,255,.32);
   }
-  .istep h3,.install-brew h3{font-size:17px;margin-bottom:9px;letter-spacing:-.01em}
-  .istep p,.install-brew p{color:var(--ink-dim);font-size:15px;line-height:1.62}
+  .istep h3{font-size:17px;margin-bottom:9px;letter-spacing:-.01em}
+  .istep p{color:var(--ink-dim);font-size:15px;line-height:1.62}
   .istep p+p{margin-top:12px}
-  .istep a,.install-brew a{color:var(--lavender);transition:color .15s} .istep a:hover,.install-brew a:hover{color:#fff}
+  .istep a{color:var(--lavender);transition:color .15s} .istep a:hover{color:#fff}
   .istep strong{color:var(--ink);font-weight:600}
-  .istep p code,.install-brew p code{
+  .istep p code{
     font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.88em;color:var(--lavender);
     background:rgba(213,186,255,.1);border:1px solid rgba(213,186,255,.22);border-radius:2px;padding:1px 6px;white-space:nowrap;
   }
-  /* the Homebrew one-liner leads: one command replaces all three numbered steps,
-     which stay for anyone without Homebrew */
-  .install-brew{max-width:760px;margin:0 auto 38px;padding-bottom:32px;border-bottom:1px solid var(--hairline)}
-  .install-brew .or{margin-top:24px}
+  /* installing is one step with two routes: each route gets a label, and a rule
+     divides them, so a reader who ran the brew command can see the rest of the step
+     is the alternative rather than a continuation of it */
+  .istep .route{font-weight:700;color:var(--ink)}
+  .route-alt{margin-top:24px;padding-top:22px;border-top:1px solid var(--hairline)}
   .cmd{display:flex;align-items:center;gap:12px;margin-top:14px;background:#0d0a18;border:1px solid var(--hairline);padding:11px 12px 11px 16px}
   .cmd code{
     flex:1;min-width:0;overflow-x:auto;white-space:nowrap;
@@ -513,38 +515,37 @@
       <span class="eyebrow" data-i18n="install.eyebrow">Get started</span>
       <h2 data-i18n="install.h2">Installing m_capture</h2>
     </div>
-    <div class="install-brew">
-      <h3 data-i18n="install.brew.h">Install with Homebrew</h3>
-      <p data-i18n="install.brew.p">One command with <a href="https://brew.sh/" target="_blank" rel="noopener">Homebrew</a> — it installs into <code>~/Applications</code>, clears the download quarantine, and leaves updates to the app's built-in updater.</p>
-      <div class="cmd">
-        <code>brew install --cask tuyen-nguyen-mesoneer/tap/m_capture</code>
-        <button type="button" data-copy data-i18n="install.copy">Copy</button>
-        <span data-copied data-i18n="install.copied" hidden>Copied</span>
-      </div>
-      <p class="or" data-i18n="install.brew.or">No Homebrew? Install it manually in three steps:</p>
-    </div>
-
     <div class="install-steps">
 
       <div class="istep">
         <div class="n">1</div>
         <div>
-          <h3 data-i18n="install.1.h">Download the DMG</h3>
-          <p data-i18n="install.1.p">Download the latest <strong>m_capture.dmg</strong> from <a href="https://github.com/tuyen-nguyen-mesoneer/m_capture/releases" target="_blank" rel="noopener">Releases</a> and open it.</p>
+          <h3 data-i18n="install.1.h">Install it</h3>
+          <p class="route" data-i18n="install.1.brew">With <a href="https://brew.sh/" target="_blank" rel="noopener">Homebrew</a> — one command:</p>
+          <div class="cmd">
+            <code>brew install --cask tuyen-nguyen-mesoneer/tap/m_capture</code>
+            <button type="button" data-copy data-i18n="install.copy">Copy</button>
+            <span data-copied data-i18n="install.copied" hidden>Copied</span>
+          </div>
+          <p data-i18n="install.1.brewp">It installs into <code>~/Applications</code>, clears the download quarantine, and leaves updates to the app's built-in updater.</p>
+
+          <div class="route-alt">
+            <p class="route" data-i18n="install.1.alt">Without Homebrew:</p>
+            <p data-i18n="install.1.altp">Download the latest <strong>m_capture.dmg</strong> from <a href="https://github.com/tuyen-nguyen-mesoneer/m_capture/releases" target="_blank" rel="noopener">Releases</a> and open it, then drag <strong>m_capture</strong> into <code>~/Applications</code> — your <strong>home</strong> folder, not system-wide <code>/Applications</code>. It isn't notarized, so clear the quarantine in <strong>Terminal</strong>:</p>
+            <div class="cmd">
+              <code>cd ~/Applications &amp;&amp; xattr -dr com.apple.quarantine m_capture.app</code>
+              <button type="button" data-copy data-i18n="install.copy">Copy</button>
+              <span data-copied data-i18n="install.copied" hidden>Copied</span>
+            </div>
+          </div>
         </div>
       </div>
 
       <div class="istep">
         <div class="n">2</div>
         <div>
-          <h3 data-i18n="install.2.h">Move it to ~/Applications</h3>
-          <p data-i18n="install.2.p">Drag <strong>m_capture</strong> into <code>~/Applications</code> — your <strong>home</strong> folder, not system-wide <code>/Applications</code>. It isn't notarized, so open <strong>Terminal</strong> and run:</p>
-          <div class="cmd">
-            <code>cd ~/Applications &amp;&amp; xattr -dr com.apple.quarantine m_capture.app</code>
-            <button type="button" data-copy data-i18n="install.copy">Copy</button>
-            <span data-copied data-i18n="install.copied" hidden>Copied</span>
-          </div>
-          <p data-i18n="install.2.p2">Then double-click <strong>m_capture</strong> to launch it.</p>
+          <h3 data-i18n="install.2.h">Launch it</h3>
+          <p data-i18n="install.2.p">Open <code>~/Applications</code> and double-click <strong>m_capture</strong> — the menu-bar <strong>m.</strong> icon appears.</p>
         </div>
       </div>
 
@@ -552,7 +553,7 @@
         <div class="n">3</div>
         <div>
           <h3 data-i18n="install.3.h">Grant Screen Recording</h3>
-          <p data-i18n="install.3.p">On first capture, macOS asks for <strong>Screen Recording</strong> permission. Approve <strong>m_capture</strong> under <strong>System Settings → Privacy &amp; Security → Screen Recording</strong> and relaunch.</p>
+          <p data-i18n="install.3.p">On your first capture, macOS asks for <strong>Screen Recording</strong> permission. Approve <strong>m_capture</strong> under <strong>System Settings → Privacy &amp; Security → Screen Recording</strong> and relaunch.</p>
         </div>
       </div>
 
@@ -1249,18 +1250,17 @@
       "how.3.p": 'The in-place editor opens directly over your capture. Press <kbd>⌘C</kbd> to copy or <kbd>⌘S</kbd> to save.',
       "install.eyebrow": "Get started",
       "install.h2": "Installing m_capture",
-      "install.brew.h": "Install with Homebrew",
-      "install.brew.p": "One command with <a href='https://brew.sh/' target='_blank' rel='noopener'>Homebrew</a> — it installs into <code>~/Applications</code>, clears the download quarantine, and leaves updates to the app's built-in updater.",
-      "install.brew.or": "No Homebrew? Install it manually in three steps:",
-      "install.1.h": "Download the DMG",
-      "install.1.p": "Download the latest <strong>m_capture.dmg</strong> from <a href='https://github.com/tuyen-nguyen-mesoneer/m_capture/releases' target='_blank' rel='noopener'>Releases</a> and open it.",
-      "install.2.h": "Move it to ~/Applications",
-      "install.2.p": "Drag <strong>m_capture</strong> into <code>~/Applications</code> — your <strong>home</strong> folder, not system-wide <code>/Applications</code>. It isn't notarized, so open <strong>Terminal</strong> and run:",
-      "install.2.p2": "Then double-click <strong>m_capture</strong> to launch it.",
+      "install.1.h": "Install it",
+      "install.1.brew": "With <a href='https://brew.sh/' target='_blank' rel='noopener'>Homebrew</a> — one command:",
+      "install.1.brewp": "It installs into <code>~/Applications</code>, clears the download quarantine, and leaves updates to the app's built-in updater.",
+      "install.1.alt": "Without Homebrew:",
+      "install.1.altp": "Download the latest <strong>m_capture.dmg</strong> from <a href='https://github.com/tuyen-nguyen-mesoneer/m_capture/releases' target='_blank' rel='noopener'>Releases</a> and open it, then drag <strong>m_capture</strong> into <code>~/Applications</code> — your <strong>home</strong> folder, not system-wide <code>/Applications</code>. It isn't notarized, so clear the quarantine in <strong>Terminal</strong>:",
       "install.copy": "Copy",
       "install.copied": "Copied",
+      "install.2.h": "Launch it",
+      "install.2.p": "Open <code>~/Applications</code> and double-click <strong>m_capture</strong> — the menu-bar <strong>m.</strong> icon appears.",
       "install.3.h": "Grant Screen Recording",
-      "install.3.p": "On first capture, macOS asks for <strong>Screen Recording</strong> permission. Approve <strong>m_capture</strong> under <strong>System Settings → Privacy & Security → Screen Recording</strong> and relaunch.",
+      "install.3.p": "On your first capture, macOS asks for <strong>Screen Recording</strong> permission. Approve <strong>m_capture</strong> under <strong>System Settings → Privacy & Security → Screen Recording</strong> and relaunch.",
       "rel.eyebrow": "Changelog",
       "rel.h2": "Release notes",
       "rel.changelog": "See full changelog",
@@ -1424,18 +1424,17 @@
       "how.3.p": 'Der Editor öffnet sich direkt über Ihrer Aufnahme. Drücken Sie <kbd>⌘C</kbd> zum Kopieren oder <kbd>⌘S</kbd> zum Speichern.',
       "install.eyebrow": "Erste Schritte",
       "install.h2": "m_capture installieren",
-      "install.brew.h": "Mit Homebrew installieren",
-      "install.brew.p": "Ein Befehl mit <a href='https://brew.sh/' target='_blank' rel='noopener'>Homebrew</a> — installiert nach <code>~/Applications</code>, entfernt die Download-Quarantäne und überlässt Aktualisierungen dem integrierten Updater.",
-      "install.brew.or": "Kein Homebrew? Installieren Sie manuell in drei Schritten:",
-      "install.1.h": "DMG herunterladen",
-      "install.1.p": "Laden Sie die neueste <strong>m_capture.dmg</strong> von <a href='https://github.com/tuyen-nguyen-mesoneer/m_capture/releases' target='_blank' rel='noopener'>Releases</a> herunter und öffnen Sie sie.",
-      "install.2.h": "Nach ~/Applications verschieben",
-      "install.2.p": "Ziehen Sie <strong>m_capture</strong> nach <code>~/Applications</code> — Ihren <strong>Benutzerordner</strong>, nicht systemweit <code>/Applications</code>. Sie ist nicht notarisiert — im <strong>Terminal</strong> ausführen:",
-      "install.2.p2": "Doppelklicken Sie anschließend auf <strong>m_capture</strong>, um sie zu starten.",
+      "install.1.h": "Installieren",
+      "install.1.brew": "Mit <a href='https://brew.sh/' target='_blank' rel='noopener'>Homebrew</a> — ein Befehl:",
+      "install.1.brewp": "Installiert nach <code>~/Applications</code>, entfernt die Download-Quarantäne und überlässt Aktualisierungen dem integrierten Updater.",
+      "install.1.alt": "Ohne Homebrew:",
+      "install.1.altp": "Laden Sie die neueste <strong>m_capture.dmg</strong> von <a href='https://github.com/tuyen-nguyen-mesoneer/m_capture/releases' target='_blank' rel='noopener'>Releases</a> herunter und öffnen Sie sie, ziehen Sie dann <strong>m_capture</strong> nach <code>~/Applications</code> — Ihren <strong>Benutzerordner</strong>, nicht systemweit <code>/Applications</code>. Sie ist nicht notarisiert, entfernen Sie daher die Quarantäne im <strong>Terminal</strong>:",
       "install.copy": "Kopieren",
       "install.copied": "Kopiert",
+      "install.2.h": "Starten",
+      "install.2.p": "Öffnen Sie <code>~/Applications</code> und doppelklicken Sie auf <strong>m_capture</strong> — das Menüleistensymbol <strong>m.</strong> erscheint.",
       "install.3.h": "Bildschirmaufnahme erlauben",
-      "install.3.p": "Bei der ersten Aufnahme fragt macOS nach der Berechtigung zur <strong>Bildschirmaufnahme</strong>. Erteilen Sie diese unter <strong>Systemeinstellungen → Datenschutz & Sicherheit → Bildschirmaufnahme</strong> und starten Sie die App neu.",
+      "install.3.p": "Bei der ersten Aufnahme fragt macOS nach der Berechtigung zur <strong>Bildschirmaufnahme</strong>. Genehmigen Sie <strong>m_capture</strong> unter <strong>Systemeinstellungen → Datenschutz & Sicherheit → Bildschirmaufnahme</strong> und starten Sie die App neu.",
       "rel.eyebrow": "Änderungen",
       "rel.h2": "Versionshinweise",
       "rel.changelog": "Vollständiges Changelog ansehen",
