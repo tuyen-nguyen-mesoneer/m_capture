@@ -152,8 +152,8 @@
   .light .istep .n{background:linear-gradient(145deg,rgba(67,42,132,.12),rgba(67,42,132,.03));border-color:rgba(67,42,132,.22);color:#432a84}
   /* the pale panel needs its own hover: the dark side's lavender → #fff would
      land white text on a #eceaf3 background, i.e. an invisible link */
-  .light .istep a{color:#432a84}
-  .light .istep a:hover{color:#1b1430}
+  .light .istep a,.light .install-brew a{color:#432a84}
+  .light .istep a:hover,.light .install-brew a:hover{color:#1b1430}
   .light .istep strong{color:#1b1430}
   .light .istep p code,.light .install-brew p code{color:#432a84;background:rgba(67,42,132,.08);border-color:rgba(67,42,132,.18)}
   .light .install-brew{border-bottom-color:rgba(67,42,132,.14)}
@@ -240,7 +240,7 @@
   .istep h3,.install-brew h3{font-size:17px;margin-bottom:9px;letter-spacing:-.01em}
   .istep p,.install-brew p{color:var(--ink-dim);font-size:15px;line-height:1.62}
   .istep p+p{margin-top:12px}
-  .istep a{color:var(--lavender);transition:color .15s} .istep a:hover{color:#fff}
+  .istep a,.install-brew a{color:var(--lavender);transition:color .15s} .istep a:hover,.install-brew a:hover{color:#fff}
   .istep strong{color:var(--ink);font-weight:600}
   .istep p code,.install-brew p code{
     font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.88em;color:var(--lavender);
@@ -258,9 +258,10 @@
   .cmd button{
     flex:none;cursor:pointer;font:inherit;font-size:12.5px;font-weight:600;letter-spacing:.01em;
     color:var(--lavender);background:rgba(213,186,255,.1);border:1px solid rgba(213,186,255,.3);border-radius:0;padding:6px 13px;
-    transition:background .15s,color .15s;
+    min-width:82px;text-align:center;transition:background .15s,color .15s;
   }
   .cmd button:hover{background:rgba(213,186,255,.2);color:#fff}
+  .cmd button.ok{background:rgba(213,186,255,.26);color:#fff;border-color:rgba(213,186,255,.5)}
   .cmd+p{margin-top:14px}
   @media(max-width:560px){.istep{grid-template-columns:38px minmax(0,1fr);gap:14px}.istep .n{width:38px;height:38px;font-size:16px}}
 
@@ -514,10 +515,11 @@
     </div>
     <div class="install-brew">
       <h3 data-i18n="install.brew.h">Install with Homebrew</h3>
-      <p data-i18n="install.brew.p">One command — it installs into <code>~/Applications</code>, clears the download quarantine, and leaves updates to the app's built-in updater.</p>
+      <p data-i18n="install.brew.p">One command with <a href="https://brew.sh/">Homebrew</a> — it installs into <code>~/Applications</code>, clears the download quarantine, and leaves updates to the app's built-in updater.</p>
       <div class="cmd">
         <code>brew install --cask tuyen-nguyen-mesoneer/tap/m_capture</code>
         <button type="button" data-copy data-i18n="install.copy">Copy</button>
+        <span data-copied data-i18n="install.copied" hidden>Copied</span>
       </div>
       <p class="or" data-i18n="install.brew.or">No Homebrew? Install it manually in three steps:</p>
     </div>
@@ -528,7 +530,7 @@
         <div class="n">1</div>
         <div>
           <h3 data-i18n="install.1.h">Download the DMG</h3>
-          <p data-i18n="install.1.p">Download the latest <a href="https://github.com/tuyen-nguyen-mesoneer/m_capture/releases/latest/download/m_capture.dmg">m_capture.dmg</a> from <a href="https://github.com/tuyen-nguyen-mesoneer/m_capture/releases">Releases</a> and open it.</p>
+          <p data-i18n="install.1.p">Download the latest <strong>m_capture.dmg</strong> from <a href="https://github.com/tuyen-nguyen-mesoneer/m_capture/releases">Releases</a> and open it.</p>
         </div>
       </div>
 
@@ -540,6 +542,7 @@
           <div class="cmd">
             <code>cd ~/Applications &amp;&amp; xattr -dr com.apple.quarantine m_capture.app</code>
             <button type="button" data-copy data-i18n="install.copy">Copy</button>
+            <span data-copied data-i18n="install.copied" hidden>Copied</span>
           </div>
           <p data-i18n="install.2.p2">Then double-click <strong>m_capture</strong> to launch it.</p>
         </div>
@@ -549,7 +552,7 @@
         <div class="n">3</div>
         <div>
           <h3 data-i18n="install.3.h">Grant Screen Recording</h3>
-          <p data-i18n="install.3.p">On first capture, macOS asks for <strong>Screen Recording</strong> permission. Approve m_capture under <strong>System Settings → Privacy &amp; Security → Screen Recording</strong> and relaunch.</p>
+          <p data-i18n="install.3.p">On first capture, macOS asks for <strong>Screen Recording</strong> permission. Approve <strong>m_capture</strong> under <strong>System Settings → Privacy &amp; Security → Screen Recording</strong> and relaunch.</p>
         </div>
       </div>
 
@@ -1247,16 +1250,17 @@
       "install.eyebrow": "Get started",
       "install.h2": "Installing m_capture",
       "install.brew.h": "Install with Homebrew",
-      "install.brew.p": "One command — it installs into <code>~/Applications</code>, clears the download quarantine, and leaves updates to the app's built-in updater.",
+      "install.brew.p": "One command with <a href='https://brew.sh/'>Homebrew</a> — it installs into <code>~/Applications</code>, clears the download quarantine, and leaves updates to the app's built-in updater.",
       "install.brew.or": "No Homebrew? Install it manually in three steps:",
       "install.1.h": "Download the DMG",
-      "install.1.p": "Download the latest <a href='https://github.com/tuyen-nguyen-mesoneer/m_capture/releases/latest/download/m_capture.dmg'>m_capture.dmg</a> from <a href='https://github.com/tuyen-nguyen-mesoneer/m_capture/releases'>Releases</a> and open it.",
+      "install.1.p": "Download the latest <strong>m_capture.dmg</strong> from <a href='https://github.com/tuyen-nguyen-mesoneer/m_capture/releases'>Releases</a> and open it.",
       "install.2.h": "Move it to ~/Applications",
       "install.2.p": "Drag <strong>m_capture</strong> into <code>~/Applications</code> — your <strong>home</strong> folder, not system-wide <code>/Applications</code>. It isn't notarized, so open <strong>Terminal</strong> and run:",
       "install.2.p2": "Then double-click <strong>m_capture</strong> to launch it.",
       "install.copy": "Copy",
+      "install.copied": "Copied",
       "install.3.h": "Grant Screen Recording",
-      "install.3.p": "On first capture, macOS asks for <strong>Screen Recording</strong> permission. Approve m_capture under <strong>System Settings → Privacy & Security → Screen Recording</strong> and relaunch.",
+      "install.3.p": "On first capture, macOS asks for <strong>Screen Recording</strong> permission. Approve <strong>m_capture</strong> under <strong>System Settings → Privacy & Security → Screen Recording</strong> and relaunch.",
       "rel.eyebrow": "Changelog",
       "rel.h2": "Release notes",
       "rel.changelog": "See full changelog",
@@ -1421,14 +1425,15 @@
       "install.eyebrow": "Erste Schritte",
       "install.h2": "m_capture installieren",
       "install.brew.h": "Mit Homebrew installieren",
-      "install.brew.p": "Ein Befehl — installiert nach <code>~/Applications</code>, entfernt die Download-Quarantäne und überlässt Aktualisierungen dem integrierten Updater.",
+      "install.brew.p": "Ein Befehl mit <a href='https://brew.sh/'>Homebrew</a> — installiert nach <code>~/Applications</code>, entfernt die Download-Quarantäne und überlässt Aktualisierungen dem integrierten Updater.",
       "install.brew.or": "Kein Homebrew? Installieren Sie manuell in drei Schritten:",
       "install.1.h": "DMG herunterladen",
-      "install.1.p": "Laden Sie die neueste <a href='https://github.com/tuyen-nguyen-mesoneer/m_capture/releases/latest/download/m_capture.dmg'>m_capture.dmg</a> von <a href='https://github.com/tuyen-nguyen-mesoneer/m_capture/releases'>Releases</a> herunter und öffnen Sie sie.",
+      "install.1.p": "Laden Sie die neueste <strong>m_capture.dmg</strong> von <a href='https://github.com/tuyen-nguyen-mesoneer/m_capture/releases'>Releases</a> herunter und öffnen Sie sie.",
       "install.2.h": "Nach ~/Applications verschieben",
       "install.2.p": "Ziehen Sie <strong>m_capture</strong> nach <code>~/Applications</code> — Ihren <strong>Benutzerordner</strong>, nicht systemweit <code>/Applications</code>. Sie ist nicht notarisiert — im <strong>Terminal</strong> ausführen:",
       "install.2.p2": "Doppelklicken Sie anschließend auf <strong>m_capture</strong>, um sie zu starten.",
       "install.copy": "Kopieren",
+      "install.copied": "Kopiert",
       "install.3.h": "Bildschirmaufnahme erlauben",
       "install.3.p": "Bei der ersten Aufnahme fragt macOS nach der Berechtigung zur <strong>Bildschirmaufnahme</strong>. Erteilen Sie diese unter <strong>Systemeinstellungen → Datenschutz & Sicherheit → Bildschirmaufnahme</strong> und starten Sie die App neu.",
       "rel.eyebrow": "Änderungen",
@@ -1606,12 +1611,22 @@
 // Copy the install command to the clipboard; falls back to selecting it.
 (function(){
   document.querySelectorAll('[data-copy]').forEach(function(b){
+    // Both strings are read at click time, not cached once: a language switch rewrites
+    // the button's label, and a label cached on the first click came back in the old
+    // language after the next copy.
+    var timer = null, label = '';
     b.addEventListener('click', function(){
       var code = b.parentElement.querySelector('code');
       if(!code) return;
-      var label = b.getAttribute('data-label') || b.textContent;
-      b.setAttribute('data-label', label);
-      function flash(){ b.textContent = '✓'; setTimeout(function(){ b.textContent = b.getAttribute('data-label'); }, 1400); }
+      var ok = b.parentElement.querySelector('[data-copied]');
+      function flash(){
+        if(timer) clearTimeout(timer); else label = b.textContent;
+        b.textContent = (ok && ok.textContent) || '\u2713';
+        b.classList.add('ok');
+        timer = setTimeout(function(){
+          b.textContent = label; b.classList.remove('ok'); timer = null;
+        }, 1600);
+      }
       function select(){
         var r = document.createRange(); r.selectNodeContents(code);
         var s = window.getSelection(); s.removeAllRanges(); s.addRange(r);

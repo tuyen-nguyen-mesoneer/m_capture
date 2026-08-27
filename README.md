@@ -66,6 +66,8 @@ on-device, with no subscriptions, cloud services, or accounts.
 
 ### With Homebrew
 
+Requires [Homebrew](https://brew.sh/).
+
 ```sh
 brew tap tuyen-nguyen-mesoneer/tap
 brew trust tuyen-nguyen-mesoneer/tap   # optional — silences Homebrew's third-party-tap notice
