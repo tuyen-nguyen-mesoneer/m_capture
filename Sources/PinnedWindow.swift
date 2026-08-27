@@ -65,6 +65,8 @@ final class PinnedWindowController: NSObject, NSWindowDelegate {
             let ok = Settings.shared.encode(rep).map { (try? $0.write(to: url)) != nil } ?? false
             DispatchQueue.main.async {
                 if !ok {
+                    // The write never happened, so let the name go (see `Settings.fileURL`).
+                    Settings.shared.releaseClaim(url)
                     BrandAlert(title: L("Unable to save the image"),
                                message: L("Saving failed. Check your save folder in Settings → Output."),
                                titles: ["OK"], primary: 0, cancel: 0,

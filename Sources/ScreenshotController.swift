@@ -204,6 +204,10 @@ final class ScreenshotController {
         // this can run from that very window's own mouseUp) to unconditionally tear
         // down its window-server surface rather than trust the soft hide.
         let stale = overlays
+        // Drop the shared coordinator's event monitor here rather than leaving it to
+        // `deinit` — see `OverlayCoordinator.init` for why waiting leaked one monitor
+        // per capture.
+        stale.first?.coordinator.stopMonitoring()
         overlays.forEach { $0.orderOut(nil) }
         overlays.removeAll()
         DispatchQueue.main.async { stale.forEach { $0.close() } }
@@ -240,20 +244,27 @@ final class ScreenshotController {
     /// *synchronously inside that event's dispatch*, before AppKit re-evaluates cursor rects.
     /// Region commits on `mouseUp` at the end of a real drag, with fresh motion already in
     /// the pipeline — which is exactly why it alone worked.
-    static func forcePointerReset(attempt: Int = 0) {
+    ///
+    /// - Parameter completion: Run once the reset has taken effect (or been given up on).
+    ///   For a caller that also hands activation back to another app, the yield has to wait
+    ///   for this: cursor rects are only honoured while *we* are active, and the reset window
+    ///   below briefly takes key status, which would otherwise snatch focus back from the app
+    ///   we just yielded to. Fires on the main queue, exactly once, on every exit path — a
+    ///   caller that gates its teardown on it must never be left waiting.
+    static func forcePointerReset(attempt: Int = 0, completion: (() -> Void)? = nil) {
         // ~1 s of retries; if a button is somehow held past that, stop rather than spin.
-        guard attempt < 33 else { return }
+        guard attempt < 33 else { completion?(); return }
         guard NSEvent.pressedMouseButtons == 0 else {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.03) {
-                forcePointerReset(attempt: attempt + 1)
+                forcePointerReset(attempt: attempt + 1, completion: completion)
             }
             return
         }
         // Never inline: let the event that triggered this finish dispatching first.
-        DispatchQueue.main.async { performPointerReset() }
+        DispatchQueue.main.async { performPointerReset(completion: completion) }
     }
 
-    private static func performPointerReset() {
+    private static func performPointerReset(completion: (() -> Void)? = nil) {
         let screen = NSScreen.screens.first { $0.frame.contains(NSEvent.mouseLocation) }
             ?? NSScreen.main ?? NSScreen.screens[0]
         redrawPointer(on: screen)
@@ -288,6 +299,7 @@ final class ScreenshotController {
             // key, click-eating ghost). It has no event handlers of its own, so
             // closing it directly from this later tick is safe.
             win.close()
+            completion?()
         }
     }
 
@@ -309,9 +321,20 @@ final class ScreenshotController {
         }
     }
 
+    /// Wrap the capture's pixels for encoding, straight off its `CGImage`.
+    ///
+    /// This used to go `tiffRepresentation` → `NSBitmapImageRep(data:)`, a full encode and
+    /// decode of the whole capture (on the main thread, for the save-direct and
+    /// clipboard-only behaviours) whose only purpose was to obtain a rep the app already
+    /// had the pixels for. The round trip also re-derived the colour space instead of
+    /// carrying the capture's own — the very thing `CanvasView.exportColorSpace` exists to
+    /// preserve on the editor path. `CanvasView.rebuildBitmap` had already dropped the same
+    /// round trip for the eyedropper, for the same reasons.
     private static func bitmap(from image: NSImage) -> NSBitmapImageRep? {
-        guard let tiff = image.tiffRepresentation else { return nil }
-        return NSBitmapImageRep(data: tiff)
+        guard let cg = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
+            return nil
+        }
+        return NSBitmapImageRep(cgImage: cg)
     }
 
     private static func copyToPasteboard(_ image: NSImage) {
@@ -330,6 +353,8 @@ final class ScreenshotController {
             let ok = Settings.shared.encode(rep).map { (try? $0.write(to: url)) != nil } ?? false
             DispatchQueue.main.async {
                 if !ok {
+                    // The write never happened, so let the name go (see `Settings.fileURL`).
+                    Settings.shared.releaseClaim(url)
                     BrandAlert(title: L("Unable to save the capture"),
                                message: L("Saving failed. Check your save folder in Settings → Output."),
                                titles: ["OK"], primary: 0, cancel: 0,

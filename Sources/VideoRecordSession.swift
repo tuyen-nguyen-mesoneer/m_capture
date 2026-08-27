@@ -160,6 +160,12 @@ final class VideoRecordSession: NSObject, @unchecked Sendable {
         cfg.pixelFormat = kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange
         cfg.capturesAudio = audioSource.capturesSystemAudio
         cfg.showsCursor = Settings.shared.captureCursor
+        // Explicit, matching the screenshot path: the default is
+        // `SCCaptureResolutionAutomatic`, which leaves it to ScreenCaptureKit whether the
+        // frames arrive at the display's native pixel density. `width`/`height` above are
+        // already the native pixel size, so asking for `.best` is what keeps the two
+        // agreeing rather than relying on the framework reaching the same conclusion.
+        cfg.captureResolution = .best
 
         // AVAssetWriter — mp4 container.
         let writer = try AVAssetWriter(outputURL: outputURL, fileType: .mp4)

@@ -52,7 +52,7 @@ final class HistoryWindowController {
             f.origin = CGPoint(x: prev.minX, y: prev.maxY - f.height)
             w.setFrame(f, display: true)
         } else {
-            window?.center()
+            window?.centerOnActiveScreen()
         }
         if wasVisible || !keepPosition { window?.makeKeyAndOrderFront(nil) }
     }
@@ -398,6 +398,11 @@ private final class HistoryCell: NSView {
     }
     override func mouseEntered(with event: NSEvent) { hovering = true; setHighlighted(true) }
     override func mouseExited(with event: NSEvent) { hovering = false; setHighlighted(false) }
+    /// Deliberately **no** `mouseDown` override, unlike `HistoryIconButton`: the cells
+    /// tile most of the panel, so letting the press fall through to
+    /// `isMovableByWindowBackground` is what makes History draggable by its thumbnails.
+    /// Double-click still opens the file — a click is delivered whether or not the press
+    /// is consumed; only the small action icons need to hold onto it.
     override func mouseUp(with event: NSEvent) {
         if event.clickCount == 2 { NSWorkspace.shared.open(url) }
     }
@@ -451,6 +456,11 @@ private final class HistoryIconButton: NSView {
     }
     override func mouseEntered(with event: NSEvent) { hovering = true }
     override func mouseExited(with event: NSEvent) { hovering = false }
+    /// Consume the press so the panel's `isMovableByWindowBackground` drag doesn't claim
+    /// it — the same guard `PanelCloseButton` carries. A perfectly still click is
+    /// delivered either way (verified), but a few pixels of tremor while pressing hands
+    /// the gesture to the window and drags the panel instead of running the action.
+    override func mouseDown(with event: NSEvent) {}
     override func mouseUp(with event: NSEvent) {
         if bounds.contains(convert(event.locationInWindow, from: nil)) { onClick() }
     }

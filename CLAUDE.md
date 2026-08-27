@@ -121,17 +121,13 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
   anything fired from a background context — nested `runModal` from callbacks can
   wedge the run loop. Panel level sits above the capture overlays — floored in `AlertPanel`'s
   own setter, because `runModal` overwrites it (see the window-ladder gotcha).
-  **It also picks its own screen** (`centerOnActiveScreen`): `NSWindow.center()` always centres
-  on `NSScreen.main` — the menu-bar display — no matter which window raised the alert, so a
-  discard confirm for a capture on a second display opened on the *first* one. Nothing appeared
-  over the picture and `runModal` held the app meanwhile, which reads as the editor freezing,
-  not as a prompt waiting off-screen; the `.screenSaver + 2` level was never the problem. The
-  anchor is the key window (every caller is answering for one), then the pointer's screen, then
-  `main`, so it must run **before** `makeKeyAndOrderFront` while that window is still key. The
-  placement arithmetic is `center()`'s own, measured not guessed — centred horizontally in the
-  `visibleFrame`, a quarter of the vertical slack above — so alerts sit where they always have
-  and only the display changes. `HistoryWindow` / `SettingsWindow` / `TrimWindow` still call
-  bare `center()` and so still always open on the built-in panel.
+  **It also picks its own screen**, via `NSWindow.centerOnActiveScreen()` in
+  `PanelChrome.swift` — see that helper for why (`center()` resolves to `NSScreen.main`, so a
+  discard confirm for a capture on a second display opened on the *first* one, invisible behind
+  the work it was asking about) and for the ordering rule it depends on: **call it before
+  `makeKeyAndOrderFront`**, while the window being answered for is still key. `HistoryWindow`,
+  `SettingsWindow` and `TrimWindow` use the same helper, so every panel and alert now opens on
+  the display the user is looking at; nothing moves on a single-display Mac.
 - `BrandToast.swift` — brief auto-fading toast pill (copied / trashed confirmations).
 - `BrandCursor.swift` — mesoneer-styled pointer cursors, **one style and one builder**
   (`makeOutlined`): a white glyph ringed with a brand-purple keyline. Capture overlay, editor
@@ -221,7 +217,14 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
   happened to sweep across it. **Anything else drawn only before the drag has to be added
   there too**, or it will ghost the same way. An `OverlayCoordinator`
   is shared across every display's overlay so mode-cycling and capture work on any
-  connected screen, not just the one under the initial cursor. Window mode
+  connected screen, not just the one under the initial cursor. It owns a local event
+  monitor as a key-status safety net, and **that monitor must be captured weakly and torn
+  down explicitly** (`stopMonitoring()`, called from both controllers' dismiss paths):
+  AppKit retains a monitor's handler until `removeMonitor`, so a strong `self` made the
+  coordinator and its monitor retain each other — `deinit` never ran and every capture left
+  one more monitor intercepting each `keyDown`/`leftMouseDown` for the rest of the launch.
+  The weak `views` table kept the strays harmless, which is why it went unnoticed; two live
+  coordinators would cycle the mode twice on one Space press. Window mode
   hover-highlights the window under the pointer (via `WindowList`) and captures it on
   mouse-up (release) over it; the completion reports either a rect or a `CGWindowID`.
   Cursors are mesoneer-styled (`BrandCursor`) — camera for screenshots, video for
@@ -272,6 +275,41 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
   Region/whole-screen targets only: a window filter has no fixed display rect to map a cursor into.
 - `ClickVisualizer.swift` — expanding ripple windows at mouse clicks while recording
   (global `NSEvent` monitor; deliberately *not* excluded from the stream).
+- `RecordDrawOverlay.swift` — freehand drawing over the screen *during* a recording
+  (⌃⇧D, the bar's pencil, or the menu): pencil / rectangle / circle / line / arrow, with
+  ⇧ constraining, single letters switching tool (rebindable in Settings → Video →
+  Drawing), Esc leaving and ⌫ clearing. Strokes reach the video for the same reason
+  `ClickVisualizer`'s ripples do — the window is deliberately **not** in the stream's
+  exclusion list — and it carries the same `punchHole` hazard: a fully transparent
+  non-opaque window leaks every click to the app below, so draw mode paints the region
+  at alpha 0.02 to hit-test at all. Region/whole-screen only; a
+  `desktopIndependentWindow` filter composites nothing but that window, so the
+  controller builds no overlay for a window target. Each mark fades on **its own**
+  timer from when *it* finished, so marks vanish oldest-first and a long recording needs
+  no clearing gesture; one `pending` work item per mark means scheduling something new
+  always supersedes what it replaces. A fade starts from the layer's
+  **presentation** opacity, never the model value — `fillMode = .forwards` leaves the
+  model at 1, so reading that made Clear flash every mid-fade mark back to full strength
+  before taking it down. Leaving draw mode calls
+  `ScreenshotController.forcePointerReset()` and hands activation back only on its
+  completion: dropping the cursor rect doesn't redraw the pointer (see the cursor-rect
+  gotcha), and the reset briefly takes key status, so yielding first would snatch focus
+  off the app just handed it.
+- `Relocator.swift` — first-launch self-install into `~/Applications`. The DMG ships no
+  `/Applications` drop target, so a distributed build launched from anywhere else (a
+  mounted DMG, `~/Downloads`, a translocation path, even `/Applications`) copies itself
+  there, strips the quarantine and relaunches — which is what lets the updater swap the
+  bundle without admin rights. Opt-in via the `MCAutoInstall` Info.plist flag `build.sh`
+  sets for DMG builds only, so the dev `--run` loop and the `--…-demo` launches stay in
+  `build/`. Launch flags are forwarded by hand because `open` drops the original argv.
+- `UpdateInstaller.swift` — the UI-free half of applying an update: download the `.dmg`,
+  mount it, `ditto` the app out, verify, and `replaceItemAt` over the running bundle. Safe
+  while running — the process keeps executing from its old inode — so the swap takes
+  effect on the next launch. `URLSession` sets no quarantine xattr, so the swapped build
+  doesn't re-trigger Gatekeeper. The staged bundle must be **both** newer than current
+  *and* the exact version that was offered (`expectedVersion`): the caller records that
+  string as what is now staged and the relaunch prompt names it, so a mismatched asset
+  would have the app claim a version it isn't running.
 - `HistoryWindow.swift` — the History panel: newest captures from the save folder as
   thumbnail cards (adaptive grid, video play badges) with Copy / Pin / Trim / Reveal /
   Trash actions; rebuilt from the folder on every open.
@@ -433,7 +471,13 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
   checkbox). `fileURL()` + `encode(_:)` are the
   single source for where/how captures are saved; `fileURL()` uniquifies the name and
   `resolvedSaveDirectory()` falls back to the Desktop when the configured folder is
-  gone/unwritable.
+  gone/unwritable. `fileURL()` also **claims** the name it hands out (`claimedNames`), because
+  `fileExists` alone can't separate two captures resolving in the same second: the encode and
+  the write happen off the main thread, so the second probes before the first has created
+  anything and silently overwrites it. The claim is in-memory, not a placeholder file —
+  `AVAssetWriter` refuses a URL that already exists, so touching the recording's `.mp4` would
+  break recording. A name that is only being *shown* (a save panel's prefill) must use
+  `suggestedFileName()`, which claims nothing.
 - `SettingsWindow.swift` — the dark Settings panel (`SettingsWindowController.shared`):
   an icon sidebar (macOS System Settings shape) with General / Shortcuts / Capture /
   Output / Video / About sections, per-row info-dot tips, and a fixed window size

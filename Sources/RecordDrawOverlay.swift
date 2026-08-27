@@ -108,10 +108,32 @@ final class RecordDrawOverlay {
         // Stop intercepting clicks at once, but leave the window up if strokes are still
         // fading — cutting them off mid-fade would show as a jump in the video.
         window.ignoresMouseEvents = true
-        if let bundleID = appToRestore { NSApp.yieldActivation(toApplicationWithBundleIdentifier: bundleID) }
-        appToRestore = nil
         if !hasStrokes { window.orderOut(nil) }
+        restorePointerThenYield()
         onModeChange?(false)
+    }
+
+    /// Put the pointer back to the plain arrow, then hand activation back.
+    ///
+    /// Dropping the cursor *rect* (which `view.isActive = false` does, via
+    /// `invalidateCursorRects`) is not enough on its own: the window server keeps
+    /// compositing the image it last drew until **pointer motion** makes it re-evaluate.
+    /// Draw mode is left by Esc, the hotkey or the menu — none of which move the mouse — so
+    /// the pencil sat on screen, and got composited into the recording, until the user next
+    /// touched the trackpad. Exactly the hazard `ScreenshotController.forcePointerReset`
+    /// exists for, and the same call the two selection overlays make when they dismiss.
+    ///
+    /// The yield rides on its completion, and the order matters both ways: cursor rects are
+    /// honoured only while we are the active app, and the reset briefly takes key status, so
+    /// yielding first would have it snatch focus straight back off the app we just handed it
+    /// to. The cost is a couple of single-frame cursor blinks in the video while the reset
+    /// runs — cheap against a wrong pointer baked in for the rest of the take.
+    private func restorePointerThenYield() {
+        let bundleID = appToRestore
+        appToRestore = nil
+        ScreenshotController.forcePointerReset {
+            if let bundleID { NSApp.yieldActivation(toApplicationWithBundleIdentifier: bundleID) }
+        }
     }
 
     /// Wipe every stroke now (⌫, or the menu's Clear Drawings).
@@ -122,12 +144,23 @@ final class RecordDrawOverlay {
     /// since this can run from the window's own event handling — because `orderOut` alone
     /// can leave a floating-level window's surface on screen, the same hazard
     /// `VideoRecordController.dismissOverlays` documents.
-    func tearDown() {
+    /// - Parameter terminating: Skip the pointer reset. It runs over ~200 ms and hides the
+    ///   cursor for a tick at a time, with the `unhide` on a later run-loop turn — worth
+    ///   nothing if the process is about to exit, and the one way to leave the Mac with no
+    ///   pointer at all is to exit between the two.
+    func tearDown(terminating: Bool = false) {
+        let wasActive = view.isActive
         view.isActive = false
         view.dropAllStrokes()
         window.ignoresMouseEvents = true
-        if let bundleID = appToRestore { NSApp.yieldActivation(toApplicationWithBundleIdentifier: bundleID) }
-        appToRestore = nil
+        // Only if draw mode was still on: teardown otherwise runs with the plain arrow
+        // already showing, and the record flow's own `dismissOverlays` has reset it.
+        if wasActive, !terminating {
+            restorePointerThenYield()
+        } else if let bundleID = appToRestore {
+            NSApp.yieldActivation(toApplicationWithBundleIdentifier: bundleID)
+            appToRestore = nil
+        }
         window.orderOut(nil)
         let stale = window
         DispatchQueue.main.async { stale.close() }
@@ -195,7 +228,10 @@ private final class DrawOverlayView: NSView {
         var points: [CGPoint] = []
         var origin: CGPoint = .zero
         var end: CGPoint = .zero
-        var fade: DispatchWorkItem?
+        /// Whatever is queued next for this mark — the start of its fade, or the removal
+        /// once a fade is running. One slot, so scheduling something new always supersedes
+        /// what it replaces instead of both firing.
+        var pending: DispatchWorkItem?
         init(tool: DrawTool) { self.tool = tool }
     }
 
@@ -325,43 +361,57 @@ private final class DrawOverlayView: NSView {
             guard let self, let s else { return }
             self.fadeOut(s, duration: Self.fadeDuration)
         }
-        s.fade = work
+        s.pending = work
         DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
     }
 
+    /// Dissolve one mark and remove it once it's gone.
+    ///
+    /// `fromValue` comes from the **presentation** layer, not the model. A mark already
+    /// dissolving still reports `layer.opacity == 1` — the running animation uses
+    /// `fillMode = .forwards` and never writes the model value back — so reading that made
+    /// Clear flash every mid-fade mark back to full strength before taking it down, the
+    /// hard cut this fade exists to avoid. The presentation value is what the compositor is
+    /// showing right now, so Clear picks each mark up where it actually is and they all land
+    /// together.
     private func fadeOut(_ s: Mark, duration: TimeInterval) {
+        let from = s.layer.presentation()?.opacity ?? s.layer.opacity
+        // Supersede whatever was queued for this mark — otherwise an earlier fade's removal
+        // still fires on its own schedule and reports "no strokes left" a second time.
+        s.pending?.cancel()
         let fade = CABasicAnimation(keyPath: "opacity")
-        fade.fromValue = s.layer.opacity
+        fade.fromValue = from
         fade.toValue = 0
         fade.duration = duration
         fade.timingFunction = CAMediaTimingFunction(name: .easeOut)
         fade.isRemovedOnCompletion = false
         fade.fillMode = .forwards
         s.layer.add(fade, forKey: "fade")
-        DispatchQueue.main.asyncAfter(deadline: .now() + duration + 0.02) { [weak self, weak s] in
+        let removal = DispatchWorkItem { [weak self, weak s] in
             guard let self, let s else { return }
+            s.pending = nil
             s.layer.removeFromSuperlayer()
             self.strokes.removeAll { $0 === s }
             if self.strokes.isEmpty { self.onStrokesEmpty?() }
         }
+        s.pending = removal
+        DispatchQueue.main.asyncAfter(deadline: .now() + duration + 0.02, execute: removal)
     }
 
     /// Clear everything at once, on a quick fade rather than a pop — a hard cut from a
     /// screen full of marks to none reads as a glitch in the video.
     func clearAll() {
         current = nil
-        for s in strokes {
-            s.fade?.cancel()
-            s.fade = nil
-            fadeOut(s, duration: Self.clearFadeDuration)
-        }
+        // `fadeOut` cancels each mark's pending work itself, so a mark part-way through its
+        // own fade is continued from where it is rather than restarted.
+        for s in strokes { fadeOut(s, duration: Self.clearFadeDuration) }
     }
 
     /// Remove every stroke immediately, cancelling pending fades — recording teardown.
     func dropAllStrokes() {
         for s in strokes {
-            s.fade?.cancel()
-            s.fade = nil
+            s.pending?.cancel()
+            s.pending = nil
             s.layer.removeFromSuperlayer()
         }
         strokes.removeAll()

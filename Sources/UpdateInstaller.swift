@@ -15,7 +15,7 @@ enum UpdateInstaller {
     /// kick off two installs at once. Only touched on the main queue.
     private(set) static var isInstalling = false
 
-    enum InstallError: Error { case busy, download, noMountPoint, appNotFound, notNewer }
+    enum InstallError: Error { case busy, download, noMountPoint, appNotFound, notNewer, versionMismatch }
 
     /// Download `dmgURL`, mount it, and atomically swap `m_capture.app` over the running
     /// bundle. `completion` fires on the main queue; on `.success` the new build is on disk.
@@ -68,6 +68,13 @@ enum UpdateInstaller {
         guard let stagedVersion = bundleShortVersion(at: staged),
               Updater.isNewer(stagedVersion, than: Updater.effectiveCurrentVersion) else {
             throw InstallError.notNewer
+        }
+        // The bundle must be the version that was offered, not merely *a* newer one. The
+        // caller records `expectedVersion` as what is now staged and the relaunch prompt
+        // names it, so a mismatched asset (a re-uploaded release, a tag pointing at the
+        // wrong build) would otherwise have the app claim a version it isn't running.
+        guard Updater.normalize(stagedVersion) == Updater.normalize(expectedVersion) else {
+            throw InstallError.versionMismatch
         }
 
         _ = try fm.replaceItemAt(Bundle.main.bundleURL, withItemAt: staged)

@@ -115,15 +115,22 @@ enum Background {
         let pad = Background.padding(maxDim: max(iw, ih))
         let radius = Background.cornerRadius(minDim: min(iw, ih), pad: pad)
         let W = Int((iw + pad * 2).rounded()), H = Int((ih + pad * 2).rounded())
+        // Build the frame in whatever space `inner` is already in — `CanvasView.flatten`
+        // preserves the capture's (see `exportColorSpace`), and a `.deviceRGB` destination
+        // here would convert it straight back down to sRGB, so choosing a background would
+        // silently cost the gamut that flattening had just kept.
+        let space = inner.colorSpace.cgColorSpace.flatMap { $0.model == .rgb ? $0 : nil }
+            ?? CGColorSpace(name: CGColorSpace.sRGB)
+            ?? CGColorSpaceCreateDeviceRGB()
         guard W > 0, H > 0,
-              let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: W, pixelsHigh: H,
-                                         bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true,
-                                         isPlanar: false, colorSpaceName: .deviceRGB,
-                                         bytesPerRow: 0, bitsPerPixel: 0),
-              let gctx = NSGraphicsContext(bitmapImageRep: rep) else { return nil }
+              let ctx = CGContext(data: nil, width: W, height: H, bitsPerComponent: 8,
+                                  bytesPerRow: 0, space: space,
+                                  bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+        else { return nil }
+        ctx.interpolationQuality = .high
+        let gctx = NSGraphicsContext(cgContext: ctx, flipped: false)
         NSGraphicsContext.saveGraphicsState()
         NSGraphicsContext.current = gctx
-        let ctx = gctx.cgContext
 
         fill(CGRect(x: 0, y: 0, width: CGFloat(W), height: CGFloat(H)), in: ctx)
 
@@ -140,7 +147,8 @@ enum Background {
         ctx.restoreGState()
 
         NSGraphicsContext.restoreGraphicsState()
-        return rep
+        guard let out = ctx.makeImage() else { return nil }
+        return NSBitmapImageRep(cgImage: out)
     }
 }
 

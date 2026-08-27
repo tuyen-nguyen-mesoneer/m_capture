@@ -25,8 +25,18 @@ final class OverlayCoordinator {
     /// interaction the user is already making, no crossing required.
     private var eventMonitor: Any?
 
+    /// **`[weak self]` is load-bearing, and so is `stopMonitoring()`.** AppKit retains a
+    /// monitor's handler until `removeMonitor`, so capturing `self` strongly here made the
+    /// coordinator and its monitor retain each other: `deinit` never ran, the monitor was
+    /// never removed, and every capture left one more behind — permanently intercepting
+    /// each `keyDown`/`leftMouseDown` for the rest of the launch. The weak table of views
+    /// kept the strays harmless (a dead coordinator finds no visible view and passes the
+    /// event on), but they accumulated, and two live coordinators would cycle the mode
+    /// twice on one Space press. `deinit` alone can't be trusted to clean this up — the
+    /// dismissal paths call `stopMonitoring()` explicitly.
     init() {
-        eventMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .leftMouseDown]) { event in
+        eventMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .leftMouseDown]) { [weak self] event in
+            guard let self else { return event }
             if let window = event.window as? OverlayWindow, !window.isKeyWindow {
                 window.makeKeyAndOrderFront(nil)
             }
@@ -42,9 +52,15 @@ final class OverlayCoordinator {
         }
     }
 
-    deinit {
-        if let m = eventMonitor { NSEvent.removeMonitor(m) }
+    /// Drop the monitor the moment this capture's overlays go away, rather than waiting on
+    /// the last reference to the coordinator. Idempotent.
+    func stopMonitoring() {
+        guard let m = eventMonitor else { return }
+        NSEvent.removeMonitor(m)
+        eventMonitor = nil
     }
+
+    deinit { stopMonitoring() }
 
     fileprivate func register(_ view: SelectionView) { views.add(view) }
 
@@ -66,6 +82,10 @@ final class OverlayWindow: NSWindow {
     var onCancel: (() -> Void)?
 
     let captureScreen: NSScreen
+    /// The mode state shared with every other overlay of this capture. Exposed so the
+    /// controllers can `stopMonitoring()` it when they tear the overlays down — see
+    /// `OverlayCoordinator.init`.
+    let coordinator: OverlayCoordinator
     private let selectionView: SelectionView
 
     /// - Parameters:
@@ -80,6 +100,7 @@ final class OverlayWindow: NSWindow {
          allowsWindowMode: Bool = true, allowsFullScreenMode: Bool = true, recording: Bool = false,
          previousRect: CGRect? = nil, frozen: NSImage? = nil) {
         captureScreen = screen
+        self.coordinator = coordinator
         selectionView = SelectionView(frame: NSRect(origin: .zero, size: screen.frame.size),
                                      coordinator: coordinator,
                                      allowsWindowMode: allowsWindowMode,

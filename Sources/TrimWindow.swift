@@ -100,7 +100,7 @@ final class TrimWindowController: NSObject {
         loadDuration()
 
         AppPanels.closeAll(except: window)
-        window.center()
+        window.centerOnActiveScreen()
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
     }
