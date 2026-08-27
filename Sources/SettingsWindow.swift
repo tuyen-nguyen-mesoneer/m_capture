@@ -49,7 +49,7 @@ final class SettingsWindowController: NSObject {
         if window == nil { build() }
         AppPanels.closeAll(except: window)
         refresh()
-        window?.center()
+        window?.centerOnActiveScreen()
         NSApp.activate(ignoringOtherApps: true)
         window?.makeKeyAndOrderFront(nil)
     }
@@ -1367,7 +1367,7 @@ private final class DrawColorRow: NSView {
 /// Click to arm, then press a letter or digit. Unlike `HotKeyField` these are not global
 /// hotkeys — the draw overlay owns the keyboard while it is up — so nothing is registered
 /// with Carbon and no modifiers are involved.
-private final class DrawKeyField: NSView {
+private final class DrawKeyField: NSView, KeyRecorder {
     private let tool: DrawTool
     private let keyLabel = NSTextField(labelWithString: "")
     private var monitor: Any?
@@ -1409,6 +1409,8 @@ private final class DrawKeyField: NSView {
     override func mouseDown(with event: NSEvent) { recording ? stopRecording() : startRecording() }
 
     private func startRecording() {
+        // One field armed at a time — see `KeyRecorders`.
+        KeyRecorders.arm(self)
         recording = true
         window?.makeFirstResponder(self)
         // The Settings panel is a reused singleton that closes by ordering out, so a field
@@ -1449,11 +1451,14 @@ private final class DrawKeyField: NSView {
                    icon: "exclamationmark.triangle").present()
     }
 
+    func disarm() { stopRecording() }
+
     private func stopRecording() {
         guard recording else { return }
         if let m = monitor { NSEvent.removeMonitor(m); monitor = nil }
         if let o = resignObserver { NotificationCenter.default.removeObserver(o); resignObserver = nil }
         recording = false
+        KeyRecorders.resign(self)
     }
 
     deinit { stopRecording() }

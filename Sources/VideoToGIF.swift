@@ -56,7 +56,17 @@ enum VideoToGIF {
                 leadingGaps += 1
             }
         }
-        guard lastGood != nil else { return false }
-        return CGImageDestinationFinalize(dest)
+        // Every failure past `CGImageDestinationCreateWithURL` has to take the file with
+        // it. The destination is created at `gifURL` before a single frame is decoded, so
+        // bailing out left an unfinalized stub in the save folder — and since it carries
+        // the capture prefix and a `.gif` extension, History listed it as a card with a
+        // broken thumbnail, sitting next to the `.mp4` the caller correctly kept.
+        guard lastGood != nil else { discard(gifURL); return false }
+        guard CGImageDestinationFinalize(dest) else { discard(gifURL); return false }
+        return true
+    }
+
+    private static func discard(_ url: URL) {
+        try? FileManager.default.removeItem(at: url)
     }
 }

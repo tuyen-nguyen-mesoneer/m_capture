@@ -72,13 +72,33 @@ class FreehandAnnotation: Annotation {
             .insetBy(dx: -strokeWidth / 2, dy: -strokeWidth / 2)
     }
 
+    /// Move-to plus the line segments — or, for a single point, a hair of length so the
+    /// round cap renders it as a dot.
+    ///
+    /// A tap is a legitimate pencil mark (the same gesture draws a dot in
+    /// `RecordDrawOverlay.smoothed`), and it used to produce an *invisible* one: `draw`
+    /// bailed below two points, so the mark went into the annotation list and the undo
+    /// stack, drew nothing, and could still be picked up by the Select tool. Unlike the
+    /// drag-only tools — which discard a stray click in `CanvasView.mouseUp` rather than
+    /// drop a default-size shape nobody asked for — a dot is exactly what this gesture
+    /// means, so it is drawn rather than thrown away.
+    fileprivate func buildPath(in ctx: CGContext) {
+        guard let first = points.first else { return }
+        ctx.beginPath()
+        ctx.move(to: first)
+        guard points.count > 1 else {
+            ctx.addLine(to: CGPoint(x: first.x + 0.01, y: first.y))
+            return
+        }
+        for p in points.dropFirst() { ctx.addLine(to: p) }
+    }
+
     func draw(in ctx: CGContext) {
-        guard points.count > 1 else { return }
+        guard !points.isEmpty else { return }
         ctx.setLineCap(.round); ctx.setLineJoin(.round)
         ctx.setStrokeColor(style.color.cgColor)
         ctx.setLineWidth(strokeWidth)
-        ctx.beginPath(); ctx.move(to: points[0])
-        for p in points.dropFirst() { ctx.addLine(to: p) }
+        buildPath(in: ctx)
         ctx.strokePath()
     }
     func hit(_ p: CGPoint) -> Bool { hit(p, pixelsPerPoint: 1) }
@@ -93,14 +113,13 @@ final class PencilAnnotation: FreehandAnnotation {}
 final class MarkerAnnotation: FreehandAnnotation {
     override var strokeWidth: CGFloat { style.lineWidth * 5 }
     override func draw(in ctx: CGContext) {
-        guard points.count > 1 else { return }
+        guard !points.isEmpty else { return }
         ctx.saveGState()
         ctx.setBlendMode(.multiply)
         ctx.setLineCap(.round); ctx.setLineJoin(.round)
         ctx.setStrokeColor(style.color.withAlphaComponent(0.4).cgColor)
         ctx.setLineWidth(strokeWidth)
-        ctx.beginPath(); ctx.move(to: points[0])
-        for p in points.dropFirst() { ctx.addLine(to: p) }
+        buildPath(in: ctx)
         ctx.strokePath()
         ctx.restoreGState()
     }

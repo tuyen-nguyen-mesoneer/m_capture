@@ -1746,27 +1746,58 @@ final class CanvasView: NSView, NSTextViewDelegate {
         let ppp = pixelsPerPoint
         let pw = Int((image.size.width * ppp).rounded()), ph = Int((image.size.height * ppp).rounded())
         guard pw > 0, ph > 0,
-              let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: pw, pixelsHigh: ph,
-                                         bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true,
-                                         isPlanar: false, colorSpaceName: .deviceRGB,
-                                         bytesPerRow: 0, bitsPerPixel: 0) else { return nil }
-        rep.size = image.size
-        guard let gctx = NSGraphicsContext(bitmapImageRep: rep) else { return nil }
+              let ctx = CGContext(data: nil, width: pw, height: ph, bitsPerComponent: 8,
+                                  bytesPerRow: 0, space: exportColorSpace,
+                                  bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+        else { return nil }
+        ctx.interpolationQuality = .high
+        // Drawing still goes through `NSGraphicsContext` — `NSImage.draw` and the text
+        // marks need a current context — but the *destination* is now a CGContext we own,
+        // which is the only way to choose its colour space (the
+        // `NSBitmapImageRep(bitmapDataPlanes:…)` initialiser takes only an
+        // `NSColorSpaceName`, and retagging afterwards would relabel already-converted
+        // pixels rather than preserve them).
+        let gctx = NSGraphicsContext(cgContext: ctx, flipped: false)
         NSGraphicsContext.saveGraphicsState()
         NSGraphicsContext.current = gctx
-        gctx.cgContext.interpolationQuality = .high
         image.draw(in: CGRect(x: 0, y: 0, width: image.size.width, height: image.size.height))
         for a in annotations {
             if !includingOverlays, a is ImageOverlayAnnotation { continue }
-            a.draw(in: gctx.cgContext)
+            a.draw(in: ctx)
         }
         // Bake the in-progress mark too. A mark only moves from `live` into `annotations`
         // on mouseUp; if that never fired (e.g. the shape-drag lost mouse tracking to a
         // display switch or a panel taking focus) the mark is on screen but stranded in
         // `live` — so an export that skipped it would drop a square the user clearly drew.
-        live?.draw(in: gctx.cgContext)
+        live?.draw(in: ctx)
         NSGraphicsContext.restoreGraphicsState()
+        guard let out = ctx.makeImage() else { return nil }
+        let rep = NSBitmapImageRep(cgImage: out)
+        rep.size = image.size
         return rep
+    }
+
+    /// The colour space an export is built in: **the capture's own**.
+    ///
+    /// ScreenCaptureKit returns frames in the colour space of the display they came from
+    /// (that is the documented default for `SCStreamConfiguration.colorSpaceName`), so a
+    /// capture off a Retina panel arrives in Display P3. Flattening into `.deviceRGB`
+    /// converted that down to sRGB on the way out — *correctly*, colours were never wrong,
+    /// which is why this never looked like a bug: every saturated pixel a P3 display can
+    /// show was simply squeezed into the smaller gamut and came back duller than it looked
+    /// on screen.
+    ///
+    /// Taking the source's own space keeps what was captured, and adapts rather than
+    /// forcing one answer: a P3 capture stays P3, while one from a plain sRGB external
+    /// stays sRGB instead of being inflated into a wider space it never filled (and
+    /// carrying an embedded ICC profile it has no use for). This is also what Apple's own
+    /// `screencapture` does. Anything not RGB-based falls back to sRGB, since the whole
+    /// annotation palette and every blend below assume RGB.
+    private var exportColorSpace: CGColorSpace {
+        let sRGB = CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB()
+        guard let space = image.cgImage(forProposedRect: nil, context: nil, hints: nil)?.colorSpace,
+              space.model == .rgb else { return sRGB }
+        return space
     }
 }
 

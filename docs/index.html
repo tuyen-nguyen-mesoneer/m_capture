@@ -150,7 +150,10 @@
   /* install steps: dark text + purple number badges; the command block stays dark */
   .light .istep p{color:#5b556a}
   .light .istep .n{background:linear-gradient(145deg,rgba(67,42,132,.12),rgba(67,42,132,.03));border-color:rgba(67,42,132,.22);color:#432a84}
+  /* the pale panel needs its own hover: the dark side's lavender → #fff would
+     land white text on a #eceaf3 background, i.e. an invisible link */
   .light .istep a{color:#432a84}
+  .light .istep a:hover{color:#1b1430}
   .light .istep strong{color:#1b1430}
   .light .istep p code{color:#432a84;background:rgba(67,42,132,.08);border-color:rgba(67,42,132,.18)}
   .sec-head{text-align:center;max-width:660px;margin:0 auto 58px}
@@ -236,7 +239,7 @@
   .istep h3{font-size:17px;margin-bottom:9px;letter-spacing:-.01em}
   .istep p{color:var(--ink-dim);font-size:15px;line-height:1.62}
   .istep p+p{margin-top:12px}
-  .istep a{color:var(--lavender)} .istep a:hover{color:#fff}
+  .istep a{color:var(--lavender);transition:color .15s} .istep a:hover{color:#fff}
   .istep strong{color:var(--ink);font-weight:600}
   .istep p code{
     font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.88em;color:var(--lavender);
@@ -330,7 +333,8 @@
   .faq-list summary .pm::after{top:0;bottom:0;left:8px;width:2px}
   .faq-list details[open] summary .pm::after{transform:scaleY(0);opacity:0}
   .faq-list p{color:#5b556a;font-size:15px;line-height:1.62;padding:0 2px 24px;max-width:660px}
-  .faq-list a{color:#432a84;font-weight:600}
+  .faq-list a{color:#432a84;font-weight:600;transition:color .15s}
+  .faq-list a:hover{color:#1b1430}
   @media(prefers-reduced-motion:reduce){.faq-list summary .pm::before,.faq-list summary .pm::after{transition:none}}
 
   /* footer */
@@ -629,6 +633,18 @@
       <h2 data-i18n="rel.h2">Release notes</h2>
     </div>
     <div class="releases collapsed" id="releaseList">
+
+      <div class="release">
+        <span class="date" data-i18n="rel.38.date">Aug 27, 2026</span>
+        <span class="ver">v1.7.6</span>
+        <div>
+          <p class="note" data-i18n="rel.38.note">Panels and alerts open on the display you are working on, and saved captures keep that display's full colour.</p>
+          <a class="changelog" href="https://github.com/tuyen-nguyen-mesoneer/m_capture/releases/tag/1.7.6">
+            <span data-i18n="rel.changelog">See full changelog</span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+          </a>
+        </div>
+      </div>
 
       <div class="release">
         <span class="date" data-i18n="rel.37.date">Aug 26, 2026</span>
@@ -1282,6 +1298,8 @@
       "rel.26.note": "Fixed the drag-to-select overlay occasionally freezing mid-capture, and the region border briefly baking into recordings.",
       "rel.27.date": "Jul 29, 2026",
       "rel.27.note": "A second capture hotkey pressed mid-selection no longer strands a dim overlay on screen, and stacked overlays clear cleanly.",
+      "rel.38.date": "Aug 27, 2026",
+      "rel.38.note": "Panels and alerts open on the display you are working on, and saved captures keep that display's full colour.",
       "rel.37.date": "Aug 26, 2026",
       "rel.37.note": "Captures from a non-Retina display open and resize sharp, and confirmation dialogs no longer hide behind the capture.",
       "rel.36.date": "Aug 25, 2026",
@@ -1451,6 +1469,8 @@
       "rel.26.note": "Behoben: Das Auswahl-Overlay konnte gelegentlich einfrieren, und der Bereichsrahmen erschien kurz in Aufnahmen.",
       "rel.27.date": "29. Juli 2026",
       "rel.27.note": "Ein zweiter Aufnahme-Kurzbefehl während der Auswahl hinterlässt kein dunkles Overlay mehr, und gestapelte Overlays werden sauber entfernt.",
+      "rel.38.date": "27. August 2026",
+      "rel.38.note": "Fenster und Hinweise öffnen auf dem Display, an dem gearbeitet wird, und gespeicherte Aufnahmen behalten dessen vollen Farbraum.",
       "rel.37.date": "26. August 2026",
       "rel.37.note": "Aufnahmen von Nicht-Retina-Displays öffnen und skalieren scharf, und Bestätigungen verstecken sich nicht mehr hinter der Aufnahme.",
       "rel.36.date": "25. August 2026",

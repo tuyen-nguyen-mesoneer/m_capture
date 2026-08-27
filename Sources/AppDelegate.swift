@@ -300,12 +300,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
         countdownActive = true
-        let savedImage = button.image
         func tick(_ remaining: Int) {
             guard remaining > 0 else {
-                button.image = savedImage
-                button.title = ""
+                // Rebuild the idle look from current state rather than restoring an image
+                // captured a few seconds ago: `refreshStatusIcon` is the single owner of
+                // it, and a badge that appeared mid-countdown (a release staged and
+                // awaiting relaunch) was being painted straight back out again.
                 countdownActive = false
+                refreshStatusIcon()
                 ScreenshotController.shared.begin()
                 return
             }

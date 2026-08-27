@@ -19,6 +19,46 @@ enum AppPanels {
     }
 }
 
+extension NSWindow {
+    /// Centre on the display the user is actually looking at.
+    ///
+    /// `NSWindow.center()` always centres on `NSScreen.main` — the display carrying the menu
+    /// bar — regardless of where the window is or what raised it. So every panel and alert
+    /// opened on the built-in screen no matter which display the work was on: finish a
+    /// recording on a second monitor and History appeared on the laptop, behind whatever was
+    /// there.
+    ///
+    /// **Call this before `makeKeyAndOrderFront`**, while the window that raised this one is
+    /// still key — that window is the right anchor, because this one is about it. The
+    /// pointer's screen covers the case where nothing is key (a background save failure, an
+    /// update offer, a panel opened from the status menu), and `main` is the last resort.
+    ///
+    /// The default placement arithmetic is `center()`'s own, measured rather than guessed:
+    /// centred horizontally in the visible frame, with a *quarter* of the vertical slack above
+    /// so the window sits a little high, where the eye already is. Reproducing it means only
+    /// the screen changes and a panel doesn't move on a single-display Mac. (Moving the window
+    /// onto the target display and then calling `center()` does not work — `center()` resolves
+    /// to `NSScreen.main`, not to the window's own screen.)
+    ///
+    /// - Parameter verticallyCentred: Put the window in the true middle instead. Alerts take
+    ///   this: they arrive over a full-screen capture the user is looking *at*, not over a
+    ///   desktop they are looking near the top of, so AppKit's bias toward the upper third
+    ///   just parks the question off to one side of the thing it is asking about.
+    func centerOnActiveScreen(verticallyCentred: Bool = false) {
+        // A window can be its own key window on a re-show; it can't anchor itself.
+        let key = NSApp.keyWindow
+        let anchor = (key === self ? nil : key?.screen)
+            ?? (NSApp.mainWindow === self ? nil : NSApp.mainWindow?.screen)
+            ?? NSScreen.screens.first { $0.frame.contains(NSEvent.mouseLocation) }
+            ?? NSScreen.main
+        guard let f = anchor?.visibleFrame else { center(); return }
+        let size = frame.size
+        let slack = f.height - size.height
+        setFrameOrigin(NSPoint(x: f.minX + ((f.width - size.width) / 2).rounded(.down),
+                               y: f.minY + (verticallyCentred ? slack / 2 : slack * 3 / 4).rounded(.down)))
+    }
+}
+
 /// A borderless, square-cornered panel window for Settings / Trim. macOS rounds the
 /// corners of `.titled` windows and offers no API to square them, so these panels are
 /// borderless and supply their own chrome: a `PanelCloseButton`, Esc / ⌘W to close, and

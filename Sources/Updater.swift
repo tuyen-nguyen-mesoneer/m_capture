@@ -450,14 +450,42 @@ enum Updater {
                 clearFailures()
                 markInstalled(version)
                 offerPending(force: true)
-            case .failure:
-                // A machine where the swap can't succeed (the bundle on a read-only
-                // volume — running straight from the mounted DMG — or an /Applications
-                // copy this user can't write) fails this way every time, so it's also
-                // counted toward the About warning.
-                recordCheckFailure(.cantInstall)
-                presentInstallFailedAlert()
+            case .failure(let error):
+                switch Self.classify(error) {
+                case .alreadyRunning:
+                    // Nothing failed — an install was already in flight and this one lost
+                    // the race. The one that is running will report its own outcome, so
+                    // neither an alert nor a failure count belongs here.
+                    break
+                case .badAsset:
+                    // About's `.cantInstall` line tells the user to move the app, which is
+                    // wrong advice for a release whose .dmg doesn't hold what its tag says —
+                    // nothing on this Mac would fix that.
+                    recordCheckFailure(.network)
+                    presentInstallFailedAlert()
+                case .cantWrite:
+                    // A machine where the swap can't succeed (the bundle on a read-only
+                    // volume — running straight from the mounted DMG — or an /Applications
+                    // copy this user can't write) fails this way every time, so it's also
+                    // counted toward the About warning.
+                    recordCheckFailure(.cantInstall)
+                    presentInstallFailedAlert()
+                }
             }
+        }
+    }
+
+    /// Who an install failure is actually about — which decides both what the user is told
+    /// and whether it counts toward the About warning.
+    private enum InstallFailure { case alreadyRunning, badAsset, cantWrite }
+
+    /// `badAsset` is the release's fault (the download, the disk image, or a bundle that
+    /// isn't the version its tag advertised); `cantWrite` is this Mac's.
+    private static func classify(_ error: Error) -> InstallFailure {
+        switch error as? UpdateInstaller.InstallError {
+        case .busy: return .alreadyRunning
+        case .download, .noMountPoint, .appNotFound, .notNewer, .versionMismatch: return .badAsset
+        case .none: return .cantWrite
         }
     }
 
@@ -774,9 +802,18 @@ enum Updater {
                                            _ completion: @escaping (Result<Release, Error>) -> Void) {
         guard index < releases.count else { completion(.failure(CheckError.network)); return }
         let release = releases[index]
-        guard isNewer(release.tagName, than: effectiveCurrentVersion),
-              let dmg = dmgURL(for: release.tagName) else {
+        guard isNewer(release.tagName, than: effectiveCurrentVersion) else {
+            // Nothing newer here or below it — hand this one back and let the caller see
+            // for itself that there is nothing to install.
             completion(.success(release))
+            return
+        }
+        guard let dmg = dmgURL(for: release.tagName) else {
+            // Newer, but we can't even derive a download URL for the tag. Skip it exactly
+            // as a missing asset is skipped: reporting it as installable would offer an
+            // update whose Install button can only fail, which is the one thing
+            // `resolveInstallable` exists to prevent.
+            resolveInstallable(releases, from: index + 1, completion)
             return
         }
         assetExists(dmg) { exists in
@@ -803,8 +840,10 @@ enum Updater {
         }.resume()
     }
 
-    /// Drop a leading "v" and any pre-release suffix so tags compare numerically.
-    private static func normalize(_ tag: String) -> String {
+    /// Drop a leading "v" and any pre-release suffix so tags compare numerically. Internal
+    /// alongside `isNewer` so `UpdateInstaller` can check the extracted bundle against the
+    /// version that was actually offered.
+    static func normalize(_ tag: String) -> String {
         var t = tag.hasPrefix("v") ? String(tag.dropFirst()) : tag
         if let dash = t.firstIndex(of: "-") { t = String(t[..<dash]) }
         return t

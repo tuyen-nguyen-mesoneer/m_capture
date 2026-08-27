@@ -1,5 +1,6 @@
 // m_capture — independent implementation.
 // SPDX-License-Identifier: MIT
+import Foundation
 import ImageIO
 import UniformTypeIdentifiers
 import CoreGraphics
@@ -24,7 +25,13 @@ enum AnimatedGIF {
         for frame in frames {
             CGImageDestinationAddImage(dest, frame, frameProps as CFDictionary)
         }
-        return CGImageDestinationFinalize(dest)
+        // The destination creates the file up front, so a failed finalize would otherwise
+        // leave an unreadable stub exactly where the user asked for their animation.
+        guard CGImageDestinationFinalize(dest) else {
+            try? FileManager.default.removeItem(at: url)
+            return false
+        }
+        return true
     }
 }
 

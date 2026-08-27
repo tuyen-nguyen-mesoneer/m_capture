@@ -36,12 +36,6 @@ final class RecordZoomEngine {
     private let ciContext: CIContext
     private let pool: CVPixelBufferPool?
 
-    // Rolling cost stats, so a recording can report what the transform actually cost
-    // instead of relying on a benchmark done under different conditions.
-    private(set) var frameCount = 0
-    private var totalSeconds = 0.0
-    var averageMilliseconds: Double { frameCount == 0 ? 0 : totalSeconds / Double(frameCount) * 1000 }
-
     // MARK: - Zoom state
 
     /// Where the recorded region sits in global AppKit space, and how many pixels one point
@@ -259,7 +253,6 @@ final class RecordZoomEngine {
         guard CVPixelBufferPoolCreatePixelBuffer(nil, pool, &vended) == kCVReturnSuccess,
               let destination = vended else { return nil }
 
-        let started = CACurrentMediaTime()
         let image = CIImage(cvPixelBuffer: source)
         // Crop, move the crop to the origin, then scale — in that order, so the scale
         // applies to the cropped extent rather than the whole frame.
@@ -279,8 +272,6 @@ final class RecordZoomEngine {
             scaled = cropped.transformed(by: CGAffineTransform(scaleX: scaleX, y: scaleY))
         }
         ciContext.render(scaled, to: destination)
-        totalSeconds += CACurrentMediaTime() - started
-        frameCount += 1
         return destination
     }
 
@@ -330,7 +321,9 @@ extension RecordZoomEngine {
     /// needs **no Screen Recording permission** and can be run before the pipeline is wired
     /// up at all. That makes it the cheap way to answer the one question that decides the
     /// design: does a Lanczos crop-and-upscale fit inside 33 ms (30 fps) / 16.7 ms (60 fps)?
-    static func runBenchmark(iterations: Int = 120) {
+    static func runBenchmark(requestedIterations: Int = 120) {
+        // At least one frame, so the per-frame average below always has something to divide by.
+        let iterations = max(1, requestedIterations)
         let sizes: [(String, CGSize)] = [
             ("1080p", CGSize(width: 1920, height: 1080)),
             ("1440p", CGSize(width: 2560, height: 1440)),
@@ -365,11 +358,16 @@ extension RecordZoomEngine {
                     // One untimed pass first: the first render pays shader compilation and
                     // pool warm-up, which would otherwise skew a short run.
                     _ = engine.transform(source, viewport: viewport)
+                    // Timed here rather than inside `transform`: the frame path runs on the
+                    // capture write queue and the only reader was ever this loop, so
+                    // per-frame counters there bought nothing and were written without the
+                    // lock every other piece of engine state takes.
                     let warmed = RecordZoomEngine(outputSize: size, scaler: scaler)
+                    let started = CACurrentMediaTime()
                     for _ in 0..<iterations {
                         _ = warmed.transform(source, viewport: viewport)
                     }
-                    let ms = warmed.averageMilliseconds
+                    let ms = (CACurrentMediaTime() - started) / Double(iterations) * 1000
                     let fps = ms > 0 ? 1000 / ms : 0
                     let verdict = ms < 16.7 ? "60 fps" : (ms < 33.3 ? "30 fps" : "TOO SLOW")
                     print(col(label, 8)

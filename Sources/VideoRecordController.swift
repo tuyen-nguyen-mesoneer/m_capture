@@ -325,6 +325,10 @@ final class VideoRecordController {
         // runloop tick later (never inline — this can run from that very window's
         // own mouseUp) unconditionally tears down its window-server surface.
         let stale = overlays
+        // Drop the shared coordinator's event monitor here rather than leaving it to
+        // `deinit` — see `OverlayCoordinator.init` for why waiting leaked one monitor
+        // per capture.
+        stale.first?.coordinator.stopMonitoring()
         overlays.forEach { $0.orderOut(nil) }
         overlays.removeAll()
         DispatchQueue.main.async { stale.forEach { $0.close() } }
@@ -564,12 +568,15 @@ final class VideoRecordController {
     /// bar, the region dim, the click ripples and the menu-bar indicator. Every exit path
     /// (stop / discard / unexpected stop / start failure / termination) funnels through
     /// this, so none of them can forget a piece and strand a window on screen.
-    private func teardownRecordingUI() {
+    ///
+    /// - Parameter terminating: The process is about to exit, so skip teardown that is only
+    ///   cosmetic and needs later run-loop turns to complete (see `RecordDrawOverlay.tearDown`).
+    private func teardownRecordingUI(terminating: Bool = false) {
         updateTimer?.cancel()
         updateTimer = nil
         bar?.close()
         bar = nil
-        drawOverlay?.tearDown()
+        drawOverlay?.tearDown(terminating: terminating)
         drawOverlay = nil
         zoomTicker?.cancel()
         zoomTicker = nil
@@ -660,12 +667,12 @@ final class VideoRecordController {
         // Nothing was captured in simulate mode, so there is no file to finalize — just
         // clear the HUD so the app doesn't exit leaving overlay windows behind.
         if isSimulatedRecording {
-            teardownRecordingUI()
+            teardownRecordingUI(terminating: true)
             clearSimulatedState()
             return
         }
         guard let session = session, let url = currentURL else { return }
-        teardownRecordingUI()
+        teardownRecordingUI(terminating: true)
         self.session = nil; self.currentURL = nil; self.isPaused = false
         let done = DispatchSemaphore(value: 0)
         Task.detached { await session.stop(); done.signal() }

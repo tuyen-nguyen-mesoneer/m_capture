@@ -62,11 +62,44 @@ extension Shortcut {
     }
 }
 
+/// A field that can be armed to capture the next keystroke — Settings' global-shortcut
+/// fields and its drawing-key fields both are.
+protocol KeyRecorder: AnyObject {
+    /// Stand down: remove the event monitor and go back to showing the stored binding.
+    func disarm()
+}
+
+/// Exactly one key recorder armed at a time, across every field in Settings.
+///
+/// Arming works by installing a local event monitor, and clicking a second field while one
+/// was already armed left *both* monitors live. The next keypress then reached both
+/// handlers: the first field took the key and the second rejected it as already in use — an
+/// alert about a collision the user never made. `HotKeyField` compounded it, because
+/// `HotKey.suspendAll()` is a latch rather than a count, so whichever field finished first
+/// re-registered every global hotkey and the field still armed could no longer see an
+/// already-bound combination at all (a live Carbon hotkey swallows the event system-wide).
+enum KeyRecorders {
+    private static weak var armed: (any KeyRecorder)?
+
+    /// Hand the keyboard to `recorder`, standing whoever holds it down first. Call this
+    /// *before* any other arming side effect — `HotKey.suspendAll()` in particular — since
+    /// disarming the previous field undoes its own.
+    static func arm(_ recorder: any KeyRecorder) {
+        if let current = armed, current !== recorder { current.disarm() }
+        armed = recorder
+    }
+
+    /// Give the keyboard back. Safe to call for a recorder that never held it.
+    static func resign(_ recorder: any KeyRecorder) {
+        if armed === recorder { armed = nil }
+    }
+}
+
 /// A brand-styled control that records a global hotkey: click to arm, then press
 /// the desired combination. Shows the current shortcut as glyphs; lavender border
 /// while recording. Esc cancels. On capture it persists to `Settings` and calls
 /// `onChange` so the app can re-register its hotkeys.
-final class HotKeyField: NSView {
+final class HotKeyField: NSView, KeyRecorder {
     private let action: ShortcutAction
     private let onChange: () -> Void
     private let glyphLabel = NSTextField(labelWithString: "")
@@ -121,6 +154,9 @@ final class HotKeyField: NSView {
     }
 
     private func startRecording() {
+        // Before `suspendAll()`: standing the previously-armed field down resumes the global
+        // hotkeys it had suspended, which would otherwise undo the suspend below.
+        KeyRecorders.arm(self)
         recording = true
         HotKey.suspendAll()
         window?.makeFirstResponder(self)
@@ -158,6 +194,8 @@ final class HotKeyField: NSView {
 
     private func cancelRecording() { stopRecording() }
 
+    func disarm() { stopRecording() }
+
     /// Explain a rejected binding instead of appearing to ignore the keypress. Presented
     /// non-modally: this runs from inside a local event monitor, where a nested
     /// `runModal` can wedge the run loop.
@@ -174,6 +212,7 @@ final class HotKeyField: NSView {
         if let m = monitor { NSEvent.removeMonitor(m); monitor = nil }
         if let o = resignObserver { NotificationCenter.default.removeObserver(o); resignObserver = nil }
         recording = false
+        KeyRecorders.resign(self)
         HotKey.resumeAll()
     }
 

@@ -493,8 +493,11 @@ final class Settings {
     }
 
     /// The name of whatever already claims `key`, or nil if it is free. Two tools sharing a
-    /// letter would leave one permanently unreachable, and draw mode reserves ⌫ for Clear
-    /// and Esc for leaving — so those can't be taken either.
+    /// letter would leave one permanently unreachable.
+    ///
+    /// Draw mode also reserves ⌫ for Clear and Esc for leaving, but that isn't enforced here:
+    /// `DrawKeyField` only ever offers this a single alphanumeric, so a reserved key can't
+    /// reach it. Change that filter and this needs to grow a check.
     func drawKeyConflict(_ key: String, excluding tool: DrawTool) -> String? {
         let k = key.uppercased()
         for other in DrawTool.allCases where other != tool && drawKey(other) == k {
@@ -630,20 +633,56 @@ final class Settings {
         return fallback
     }
 
-    /// A destination file URL: `<saveDirectory>/<prefix><timestamp>.<ext>`, made
-    /// unique with a `-1`, `-2`, … suffix so two captures in the same second never
-    /// silently overwrite each other. `ext` overrides the configured image format
-    /// (e.g. "gif" for the before/after animation export).
+    /// Names handed out this launch whose file isn't on disk yet.
+    ///
+    /// `fileExists` alone can't separate two captures that resolve in the same second: the
+    /// encode and the write both happen off the main thread, so the second capture probes
+    /// before the first has created anything, both get the same path, and the second
+    /// silently overwrites the first — a capture lost with no error anywhere. Claiming the
+    /// name at hand-out time closes that window. Main-thread only, like the rest of
+    /// `Settings`; every caller resolves its destination there before dispatching the write.
+    ///
+    /// Not an on-disk placeholder: `AVAssetWriter` refuses a URL that already exists, so
+    /// reserving the recording's `.mp4` by touching the file would break recording outright.
+    private var claimedNames: Set<String> = []
+
+    /// A destination file URL: `<saveDirectory>/<prefix><timestamp>.<ext>`, made unique with
+    /// a `-1`, `-2`, … suffix so two captures in the same second never silently overwrite
+    /// each other. `ext` overrides the configured image format (e.g. "gif" for the
+    /// before/after animation export).
+    ///
+    /// The returned name is **claimed** for this launch (see `claimedNames`) — use
+    /// `suggestedFileName` for a name that is only being *shown*, such as a save panel's
+    /// prefill, which must not consume one.
     func fileURL(date: Date = Date(), ext: String? = nil) -> URL {
-        let fmt = DateFormatter(); fmt.dateFormat = "HH-mm-ss-dd-MM-yyyy"
+        // Drop claims that have since landed on disk: `fileExists` covers those from here
+        // on, so the set only ever holds writes still in flight.
+        claimedNames = claimedNames.filter { !FileManager.default.fileExists(atPath: $0) }
         let dir = resolvedSaveDirectory(), e = ext ?? format.ext
-        let base = "\(filenamePrefix)\(fmt.string(from: date))"
+        let base = "\(filenamePrefix)\(Self.timestamp(date))"
         var url = dir.appendingPathComponent("\(base).\(e)")
         var n = 1
-        while FileManager.default.fileExists(atPath: url.path) {
+        while FileManager.default.fileExists(atPath: url.path) || claimedNames.contains(url.path) {
             url = dir.appendingPathComponent("\(base)-\(n).\(e)"); n += 1
         }
+        claimedNames.insert(url.path)
         return url
+    }
+
+    /// Give a claimed name back after a write that didn't happen, so a retry reuses it
+    /// instead of landing on a `-1` suffix nothing else is holding.
+    func releaseClaim(_ url: URL) { claimedNames.remove(url.path) }
+
+    /// The filename a save would use, for prefilling a save panel. Deliberately claims
+    /// nothing: the user is about to choose their own name and path, and burning a claim
+    /// here would push the next real save to a `-1` suffix for no reason.
+    func suggestedFileName(date: Date = Date(), ext: String? = nil) -> String {
+        "\(filenamePrefix)\(Self.timestamp(date)).\(ext ?? format.ext)"
+    }
+
+    private static func timestamp(_ date: Date) -> String {
+        let fmt = DateFormatter(); fmt.dateFormat = "HH-mm-ss-dd-MM-yyyy"
+        return fmt.string(from: date)
     }
 
     /// Whether a file in the save folder is one of ours. The save folder is

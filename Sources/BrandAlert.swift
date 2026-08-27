@@ -153,36 +153,22 @@ final class BrandAlert: NSObject {
         return v
     }
 
-    /// Centre the panel on the display the user is actually looking at.
+    /// Put the panel on the display the user is looking at (`NSWindow.centerOnActiveScreen`,
+    /// shared with the app's panels).
     ///
-    /// `NSWindow.center()` always centres on `NSScreen.main` — the display with the menu bar —
-    /// regardless of where the window is or which one raised it. So an alert always landed on
-    /// the built-in panel, wherever the editor or the recording actually was. Confirming a
-    /// discard over a capture on a second display put the prompt on the *first* one: nothing
-    /// appeared over the picture, and `runModal` held the app meanwhile, so the editor read as
-    /// frozen rather than as waiting for an answer somewhere off-screen. The window level was
-    /// never the problem — `.screenSaver + 2` was already above everything.
+    /// This is what fixed the discard confirm that opened on the *built-in* display while the
+    /// capture being discarded was on a second one: nothing appeared over the picture, and
+    /// `runModal` held the app meanwhile, so the editor read as frozen rather than as waiting
+    /// for an answer somewhere off-screen. The window level was never the problem —
+    /// `.screenSaver + 2` was already above everything.
     ///
-    /// Must be called *before* `makeKeyAndOrderFront`, while the window that raised the alert
-    /// is still key: that window is the right anchor because every caller is answering for one.
-    /// The pointer's screen covers an alert raised while nothing is key (a background save
-    /// failure, an update offer), and `main` is the last resort.
-    private func centerOnActiveScreen() {
-        let anchor = NSApp.keyWindow?.screen
-            ?? NSApp.mainWindow?.screen
-            ?? NSScreen.screens.first { $0.frame.contains(NSEvent.mouseLocation) }
-            ?? NSScreen.main
-        guard let f = anchor?.visibleFrame else { panel.center(); return }
-        // Placement is `center()`'s own, measured rather than guessed: it centres horizontally
-        // in the visible frame and leaves a *quarter* of the vertical slack above, so the panel
-        // sits a little high — where the eye already is. Reproducing it keeps every brand alert
-        // sitting exactly where alerts have always sat; only the screen changes.
-        // (Moving the panel onto the target display and then calling `center()` does not work —
-        // `center()` resolves to `NSScreen.main`, not to the panel's own screen.)
-        let size = panel.frame.size
-        panel.setFrameOrigin(NSPoint(x: f.minX + ((f.width - size.width) / 2).rounded(.down),
-                                     y: f.minY + ((f.height - size.height) * 3 / 4).rounded(.down)))
-    }
+    /// Ordering is the one rule: it has to run *before* `makeKeyAndOrderFront`, while the
+    /// window being answered for is still key.
+    ///
+    /// Dead centre, unlike the app's panels: an alert is raised over the capture or the
+    /// recording it is asking about, and AppKit's traditional bias toward the upper third
+    /// left the question sitting above the picture rather than on it.
+    private func centerOnActiveScreen() { panel.centerOnActiveScreen(verticallyCentred: true) }
 
     /// Show the panel modally and return the index of the button the user chose.
     /// Reserve this for user-initiated flows that genuinely can't continue without

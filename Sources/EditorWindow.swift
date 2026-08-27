@@ -1173,6 +1173,9 @@ final class EditorWindowController: NSObject {
                     }
                     onSuccess()
                 } else {
+                    // The write never happened, so let the name go — a retry should land on
+                    // it rather than on a `-1` suffix.
+                    Settings.shared.releaseClaim(url)
                     BrandAlert(title: L("Unable to save the capture"),
                                message: L("Saving failed. The capture remains open — try Save As."),
                                titles: ["OK"], primary: 0, cancel: 0,
@@ -1188,7 +1191,7 @@ final class EditorWindowController: NSObject {
         guard let rep = exportRep() else { return }
         let panel = NSSavePanel()
         panel.allowedContentTypes = [Settings.shared.format.utType]
-        panel.nameFieldStringValue = Settings.shared.fileURL().lastPathComponent
+        panel.nameFieldStringValue = Settings.shared.suggestedFileName()
         panel.directoryURL = Settings.shared.resolvedSaveDirectory()
         panel.message = "Save the capture"
         panel.beginSheetModal(for: window) { [weak self] resp in
@@ -1314,7 +1317,7 @@ final class EditorWindowController: NSObject {
         }
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.gif]
-        panel.nameFieldStringValue = Settings.shared.fileURL(ext: "gif").lastPathComponent
+        panel.nameFieldStringValue = Settings.shared.suggestedFileName(ext: "gif")
         panel.directoryURL = Settings.shared.resolvedSaveDirectory()
         panel.message = "Save the before/after animation"
         panel.beginSheetModal(for: window) { [weak self] resp in
