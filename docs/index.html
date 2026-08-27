@@ -152,10 +152,10 @@
   .light .istep .n{background:linear-gradient(145deg,rgba(67,42,132,.12),rgba(67,42,132,.03));border-color:rgba(67,42,132,.22);color:#432a84}
   /* the pale panel needs its own hover: the dark side's lavender → #fff would
      land white text on a #eceaf3 background, i.e. an invisible link */
-  .light .istep a,.light .install-brew a{color:#432a84}
-  .light .istep a:hover,.light .install-brew a:hover{color:#1b1430}
-  .light .istep strong{color:#1b1430}
-  .light .istep p code,.light .install-brew p code{color:#432a84;background:rgba(67,42,132,.08);border-color:rgba(67,42,132,.18)}
+  .light .istep a,.light .install-brew a,.light .install-after a{color:#432a84}
+  .light .istep a:hover,.light .install-brew a:hover,.light .install-after a:hover{color:#1b1430}
+  .light .istep strong,.light .install-brew strong,.light .install-after strong{color:#1b1430}
+  .light .istep p code,.light .install-brew p code,.light .install-after p code{color:#432a84;background:rgba(67,42,132,.08);border-color:rgba(67,42,132,.18)}
   .light .install-brew{border-bottom-color:rgba(67,42,132,.14)}
   .light .install-after{border-top-color:rgba(67,42,132,.14)}
   .sec-head{text-align:center;max-width:660px;margin:0 auto 58px}
@@ -240,9 +240,9 @@
   }
   .istep h3,.install-brew h3,.install-after h3{font-size:17px;margin-bottom:9px;letter-spacing:-.01em}
   .istep p,.install-brew p,.install-after p{color:var(--ink-dim);font-size:15px;line-height:1.62}
-  .istep p+p,.install-after p+p{margin-top:12px}
-  .istep a,.install-brew a{color:var(--lavender);transition:color .15s} .istep a:hover,.install-brew a:hover{color:#fff}
-  .istep strong{color:var(--ink);font-weight:600}
+  .istep p+p,.install-brew p+p,.install-after p+p{margin-top:12px}
+  .istep a,.install-brew a,.install-after a{color:var(--lavender);transition:color .15s} .istep a:hover,.install-brew a:hover,.install-after a:hover{color:#fff}
+  .istep strong,.install-brew strong,.install-after strong{color:var(--ink);font-weight:600}
   .istep p code,.install-brew p code,.install-after p code{
     font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.88em;color:var(--lavender);
     background:rgba(213,186,255,.1);border:1px solid rgba(213,186,255,.22);border-radius:2px;padding:1px 6px;white-space:nowrap;
