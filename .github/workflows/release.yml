@@ -105,6 +105,45 @@ jobs:
             gh release create "$TAG" m_capture.dmg --title "m_capture $VERSION" --generate-notes
           fi
 
+      - name: Bump the Homebrew cask
+        env:
+          TAP_GITHUB_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN }}
+        run: |
+          # The cask in tuyen-nguyen-mesoneer/homebrew-tap pins the version and the DMG's
+          # sha256, so it has to move with every release or `brew install --cask m_capture`
+          # keeps handing out the previous build. A missing token only warns: the release
+          # itself is already published and correct, so it must not fail the run.
+          if [ -z "${TAP_GITHUB_TOKEN:-}" ]; then
+            echo "::warning::TAP_GITHUB_TOKEN is not set — the Homebrew cask was NOT bumped. Update Casks/m_capture.rb in tuyen-nguyen-mesoneer/homebrew-tap by hand (see CONTRIBUTING.md > Releasing)."
+            exit 0
+          fi
+
+          VERSION="${TAG#v}"
+          SHA="$(shasum -a 256 m_capture.dmg | cut -d' ' -f1)"
+          echo "Bumping the cask to $VERSION (sha256 $SHA)"
+
+          git clone --depth 1 \
+            "https://x-access-token:${TAP_GITHUB_TOKEN}@github.com/tuyen-nguyen-mesoneer/homebrew-tap.git" tap
+          CASK="tap/Casks/m_capture.rb"
+
+          sed -i '' "s/^  version \".*\"/  version \"$VERSION\"/" "$CASK"
+          sed -i '' "s/^  sha256 \".*\"/  sha256 \"$SHA\"/" "$CASK"
+
+          # A sed that matched nothing would leave the cask pointing at the previous DMG,
+          # which installs fine and is silently the wrong version — check, don't assume.
+          grep -Fq "  version \"$VERSION\"" "$CASK" || { echo "::error::Failed to rewrite the cask version."; exit 1; }
+          grep -Fq "  sha256 \"$SHA\"" "$CASK" || { echo "::error::Failed to rewrite the cask sha256."; exit 1; }
+
+          cd tap
+          if git diff --quiet; then
+            echo "Cask already at $VERSION — nothing to push."
+            exit 0
+          fi
+          git -c user.name="github-actions[bot]" \
+              -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+              commit -qam "m_capture $VERSION"
+          git push
+
       - name: Clean up the signing keychain
         if: always()
         run: |
