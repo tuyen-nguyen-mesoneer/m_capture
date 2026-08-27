@@ -148,7 +148,7 @@
   .light .eyebrow{color:#6e6781}
   .light .sec-head p{color:#5b556a}
   /* install steps: dark text + purple number badges; the command block stays dark */
-  .light .istep p,.light .install-brew p{color:#5b556a}
+  .light .istep p,.light .install-brew p,.light .install-after p{color:#5b556a}
   .light .istep .n{background:linear-gradient(145deg,rgba(67,42,132,.12),rgba(67,42,132,.03));border-color:rgba(67,42,132,.22);color:#432a84}
   /* the pale panel needs its own hover: the dark side's lavender → #fff would
      land white text on a #eceaf3 background, i.e. an invisible link */
@@ -157,6 +157,7 @@
   .light .istep strong{color:#1b1430}
   .light .istep p code,.light .install-brew p code{color:#432a84;background:rgba(67,42,132,.08);border-color:rgba(67,42,132,.18)}
   .light .install-brew{border-bottom-color:rgba(67,42,132,.14)}
+  .light .install-after{border-top-color:rgba(67,42,132,.14)}
   .sec-head{text-align:center;max-width:660px;margin:0 auto 58px}
   .sec-head h2{font-size:clamp(30px,4.4vw,46px);line-height:1.2;margin-bottom:16px}
   .sec-head p{color:var(--ink-dim);font-size:18px}
@@ -237,12 +238,12 @@
     background:linear-gradient(145deg,rgba(213,186,255,.16),rgba(213,186,255,.04));
     border:1px solid rgba(213,186,255,.32);
   }
-  .istep h3,.install-brew h3{font-size:17px;margin-bottom:9px;letter-spacing:-.01em}
-  .istep p,.install-brew p{color:var(--ink-dim);font-size:15px;line-height:1.62}
+  .istep h3,.install-brew h3,.install-after h3{font-size:17px;margin-bottom:9px;letter-spacing:-.01em}
+  .istep p,.install-brew p,.install-after p{color:var(--ink-dim);font-size:15px;line-height:1.62}
   .istep p+p{margin-top:12px}
   .istep a,.install-brew a{color:var(--lavender);transition:color .15s} .istep a:hover,.install-brew a:hover{color:#fff}
   .istep strong{color:var(--ink);font-weight:600}
-  .istep p code,.install-brew p code{
+  .istep p code,.install-brew p code,.install-after p code{
     font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.88em;color:var(--lavender);
     background:rgba(213,186,255,.1);border:1px solid rgba(213,186,255,.22);border-radius:2px;padding:1px 6px;white-space:nowrap;
   }
@@ -250,6 +251,8 @@
      which stay for anyone without Homebrew */
   .install-brew{max-width:760px;margin:0 auto 38px;padding-bottom:32px;border-bottom:1px solid var(--hairline)}
   .install-brew .or{margin-top:24px}
+  /* granting Screen Recording is not part of either route — both end here */
+  .install-after{max-width:760px;margin:36px auto 0;padding-top:32px;border-top:1px solid var(--hairline)}
   .cmd{display:flex;align-items:center;gap:12px;margin-top:14px;background:#0d0a18;border:1px solid var(--hairline);padding:11px 12px 11px 16px}
   .cmd code{
     flex:1;min-width:0;overflow-x:auto;white-space:nowrap;
@@ -521,7 +524,7 @@
         <button type="button" data-copy data-i18n="install.copy">Copy</button>
         <span data-copied data-i18n="install.copied" hidden>Copied</span>
       </div>
-      <p class="or" data-i18n="install.brew.or">No Homebrew? Install it manually in three steps:</p>
+      <p class="or" data-i18n="install.brew.or">No Homebrew? Install it manually in two steps:</p>
     </div>
 
     <div class="install-steps">
@@ -548,14 +551,11 @@
         </div>
       </div>
 
-      <div class="istep">
-        <div class="n">3</div>
-        <div>
-          <h3 data-i18n="install.3.h">Grant Screen Recording</h3>
-          <p data-i18n="install.3.p">On first capture, macOS asks for <strong>Screen Recording</strong> permission. Approve <strong>m_capture</strong> under <strong>System Settings → Privacy &amp; Security → Screen Recording</strong> and relaunch.</p>
-        </div>
-      </div>
+    </div>
 
+    <div class="install-after">
+      <h3 data-i18n="install.3.h">Grant Screen Recording</h3>
+      <p data-i18n="install.3.p">Either way: on your first capture, macOS asks for <strong>Screen Recording</strong> permission. Approve <strong>m_capture</strong> under <strong>System Settings → Privacy &amp; Security → Screen Recording</strong> and relaunch.</p>
     </div>
   </div>
 </section>
@@ -1251,7 +1251,7 @@
       "install.h2": "Installing m_capture",
       "install.brew.h": "Install with Homebrew",
       "install.brew.p": "One command with <a href='https://brew.sh/' target='_blank' rel='noopener'>Homebrew</a> — it installs into <code>~/Applications</code>, clears the download quarantine, and leaves updates to the app's built-in updater.",
-      "install.brew.or": "No Homebrew? Install it manually in three steps:",
+      "install.brew.or": "No Homebrew? Install it manually in two steps:",
       "install.1.h": "Download the DMG",
       "install.1.p": "Download the latest <strong>m_capture.dmg</strong> from <a href='https://github.com/tuyen-nguyen-mesoneer/m_capture/releases' target='_blank' rel='noopener'>Releases</a> and open it.",
       "install.2.h": "Move it to ~/Applications",
@@ -1260,7 +1260,7 @@
       "install.copy": "Copy",
       "install.copied": "Copied",
       "install.3.h": "Grant Screen Recording",
-      "install.3.p": "On first capture, macOS asks for <strong>Screen Recording</strong> permission. Approve <strong>m_capture</strong> under <strong>System Settings → Privacy & Security → Screen Recording</strong> and relaunch.",
+      "install.3.p": "Either way: on your first capture, macOS asks for <strong>Screen Recording</strong> permission. Approve <strong>m_capture</strong> under <strong>System Settings → Privacy & Security → Screen Recording</strong> and relaunch.",
       "rel.eyebrow": "Changelog",
       "rel.h2": "Release notes",
       "rel.changelog": "See full changelog",
@@ -1426,7 +1426,7 @@
       "install.h2": "m_capture installieren",
       "install.brew.h": "Mit Homebrew installieren",
       "install.brew.p": "Ein Befehl mit <a href='https://brew.sh/' target='_blank' rel='noopener'>Homebrew</a> — installiert nach <code>~/Applications</code>, entfernt die Download-Quarantäne und überlässt Aktualisierungen dem integrierten Updater.",
-      "install.brew.or": "Kein Homebrew? Installieren Sie manuell in drei Schritten:",
+      "install.brew.or": "Kein Homebrew? Installieren Sie manuell in zwei Schritten:",
       "install.1.h": "DMG herunterladen",
       "install.1.p": "Laden Sie die neueste <strong>m_capture.dmg</strong> von <a href='https://github.com/tuyen-nguyen-mesoneer/m_capture/releases' target='_blank' rel='noopener'>Releases</a> herunter und öffnen Sie sie.",
       "install.2.h": "Nach ~/Applications verschieben",
@@ -1435,7 +1435,7 @@
       "install.copy": "Kopieren",
       "install.copied": "Kopiert",
       "install.3.h": "Bildschirmaufnahme erlauben",
-      "install.3.p": "Bei der ersten Aufnahme fragt macOS nach der Berechtigung zur <strong>Bildschirmaufnahme</strong>. Erteilen Sie diese unter <strong>Systemeinstellungen → Datenschutz & Sicherheit → Bildschirmaufnahme</strong> und starten Sie die App neu.",
+      "install.3.p": "In beiden Fällen: Bei der ersten Aufnahme fragt macOS nach der Berechtigung zur <strong>Bildschirmaufnahme</strong>. Genehmigen Sie <strong>m_capture</strong> unter <strong>Systemeinstellungen → Datenschutz & Sicherheit → Bildschirmaufnahme</strong> und starten Sie die App neu.",
       "rel.eyebrow": "Änderungen",
       "rel.h2": "Versionshinweise",
       "rel.changelog": "Vollständiges Changelog ansehen",
