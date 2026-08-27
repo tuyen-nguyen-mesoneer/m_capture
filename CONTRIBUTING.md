@@ -86,10 +86,32 @@ casually.
 2. Tag (no `v` prefix, equal to `VERSION`) and push:
    `git tag 1.2.0 && git push origin 1.2.0`.
 
-CI checks the tag matches `VERSION`, signs the DMG, and publishes the release. Users' apps
-download it, swap in place, and run the new version on next launch (a silent daily check, plus
-**Check for Updates**). The repo's releases (and issues, for **Report a Bug**) must be readable
-by every user — keep the repo public or org-accessible.
+CI checks the tag matches `VERSION`, signs the DMG, publishes the release, and bumps the
+Homebrew cask (below). Users' apps download it, swap in place, and run the new version on next
+launch (a silent daily check, plus **Check for Updates**). The repo's releases (and issues, for
+**Report a Bug**) must be readable by every user — keep the repo public or org-accessible.
+
+### The Homebrew tap
+
+`brew install --cask m_capture` is served by
+[**tuyen-nguyen-mesoneer/homebrew-tap**](https://github.com/tuyen-nguyen-mesoneer/homebrew-tap),
+a separate repo holding one file, `Casks/m_capture.rb`. It pins the version and the DMG's
+`sha256`, so it has to move with every release — the **Bump the Homebrew cask** step in
+`release.yml` rewrites both and pushes.
+
+That step needs one secret, `TAP_GITHUB_TOKEN`: a fine-grained personal access token scoped to
+**that repo only**, with **Contents: read and write** (the release job's own `github.token`
+cannot reach another repository). Add it under **Settings → Secrets and variables → Actions**.
+Without it the release still publishes and the step only warns — the cask then lags a version
+until someone edits it by hand.
+
+The cask deliberately installs into `~/Applications` and declares `auto_updates true`: the app's
+`Relocator` moves itself there on first launch anyway, so a `/Applications` install would leave
+Homebrew tracking a stale duplicate, and the in-app updater — not `brew upgrade` — owns updates.
+It also strips the download quarantine in a `postflight`, which is what removes the manual
+`xattr -dr` step from the README. A tap can do that; the official homebrew-cask repo could not
+(and would reject the cask anyway on notability grounds — it wants 75 stars, 30 forks, or 30
+watchers).
 
 ## Conventions
 

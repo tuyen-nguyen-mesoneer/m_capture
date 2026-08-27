@@ -148,14 +148,15 @@
   .light .eyebrow{color:#6e6781}
   .light .sec-head p{color:#5b556a}
   /* install steps: dark text + purple number badges; the command block stays dark */
-  .light .istep p{color:#5b556a}
+  .light .istep p,.light .install-brew p{color:#5b556a}
   .light .istep .n{background:linear-gradient(145deg,rgba(67,42,132,.12),rgba(67,42,132,.03));border-color:rgba(67,42,132,.22);color:#432a84}
   /* the pale panel needs its own hover: the dark side's lavender → #fff would
      land white text on a #eceaf3 background, i.e. an invisible link */
   .light .istep a{color:#432a84}
   .light .istep a:hover{color:#1b1430}
   .light .istep strong{color:#1b1430}
-  .light .istep p code{color:#432a84;background:rgba(67,42,132,.08);border-color:rgba(67,42,132,.18)}
+  .light .istep p code,.light .install-brew p code{color:#432a84;background:rgba(67,42,132,.08);border-color:rgba(67,42,132,.18)}
+  .light .install-brew{border-bottom-color:rgba(67,42,132,.14)}
   .sec-head{text-align:center;max-width:660px;margin:0 auto 58px}
   .sec-head h2{font-size:clamp(30px,4.4vw,46px);line-height:1.2;margin-bottom:16px}
   .sec-head p{color:var(--ink-dim);font-size:18px}
@@ -236,15 +237,19 @@
     background:linear-gradient(145deg,rgba(213,186,255,.16),rgba(213,186,255,.04));
     border:1px solid rgba(213,186,255,.32);
   }
-  .istep h3{font-size:17px;margin-bottom:9px;letter-spacing:-.01em}
-  .istep p{color:var(--ink-dim);font-size:15px;line-height:1.62}
+  .istep h3,.install-brew h3{font-size:17px;margin-bottom:9px;letter-spacing:-.01em}
+  .istep p,.install-brew p{color:var(--ink-dim);font-size:15px;line-height:1.62}
   .istep p+p{margin-top:12px}
   .istep a{color:var(--lavender);transition:color .15s} .istep a:hover{color:#fff}
   .istep strong{color:var(--ink);font-weight:600}
-  .istep p code{
+  .istep p code,.install-brew p code{
     font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.88em;color:var(--lavender);
     background:rgba(213,186,255,.1);border:1px solid rgba(213,186,255,.22);border-radius:2px;padding:1px 6px;white-space:nowrap;
   }
+  /* the Homebrew one-liner leads: one command replaces all three numbered steps,
+     which stay for anyone without Homebrew */
+  .install-brew{max-width:760px;margin:0 auto 38px;padding-bottom:32px;border-bottom:1px solid var(--hairline)}
+  .install-brew .or{margin-top:24px}
   .cmd{display:flex;align-items:center;gap:12px;margin-top:14px;background:#0d0a18;border:1px solid var(--hairline);padding:11px 12px 11px 16px}
   .cmd code{
     flex:1;min-width:0;overflow-x:auto;white-space:nowrap;
@@ -507,6 +512,16 @@
       <span class="eyebrow" data-i18n="install.eyebrow">Get started</span>
       <h2 data-i18n="install.h2">Installing m_capture</h2>
     </div>
+    <div class="install-brew">
+      <h3 data-i18n="install.brew.h">Install with Homebrew</h3>
+      <p data-i18n="install.brew.p">One command — it installs into <code>~/Applications</code>, clears the download quarantine, and leaves updates to the app's built-in updater.</p>
+      <div class="cmd">
+        <code>brew install --cask tuyen-nguyen-mesoneer/tap/m_capture</code>
+        <button type="button" data-copy data-i18n="install.copy">Copy</button>
+      </div>
+      <p class="or" data-i18n="install.brew.or">No Homebrew? Install it manually in three steps:</p>
+    </div>
+
     <div class="install-steps">
 
       <div class="istep">
@@ -1121,7 +1136,7 @@
       </details>
       <details>
         <summary><span data-i18n="faq.3.q">Why does macOS block it on first launch?</span><span class="pm" aria-hidden="true"></span></summary>
-        <p data-i18n="faq.3.a">It isn't notarized by Apple yet. Move it into the <code>Applications</code> folder in your home folder (<code>~/Applications</code>, not <code>/Applications</code>) and clear the quarantine flag from <strong>Terminal</strong> — see <a href="#install">Get started</a> above.</p>
+        <p data-i18n="faq.3.a">It isn't notarized by Apple yet. Installing with <strong>Homebrew</strong> handles this for you. By hand, move it into the <code>Applications</code> folder in your home folder (<code>~/Applications</code>, not <code>/Applications</code>) and clear the quarantine flag from <strong>Terminal</strong> — see <a href="#install">Get started</a> above.</p>
       </details>
       <details>
         <summary><span data-i18n="faq.4.q">Where are my captures saved?</span><span class="pm" aria-hidden="true"></span></summary>
@@ -1231,6 +1246,9 @@
       "how.3.p": 'The in-place editor opens directly over your capture. Press <kbd>⌘C</kbd> to copy or <kbd>⌘S</kbd> to save.',
       "install.eyebrow": "Get started",
       "install.h2": "Installing m_capture",
+      "install.brew.h": "Install with Homebrew",
+      "install.brew.p": "One command — it installs into <code>~/Applications</code>, clears the download quarantine, and leaves updates to the app's built-in updater.",
+      "install.brew.or": "No Homebrew? Install it manually in three steps:",
       "install.1.h": "Download the DMG",
       "install.1.p": "Download the latest <a href='https://github.com/tuyen-nguyen-mesoneer/m_capture/releases/latest/download/m_capture.dmg'>m_capture.dmg</a> from <a href='https://github.com/tuyen-nguyen-mesoneer/m_capture/releases'>Releases</a> and open it.",
       "install.2.h": "Move it to ~/Applications",
@@ -1338,7 +1356,7 @@
       "faq.2.q": "Which macOS versions are supported?",
       "faq.2.a": "macOS 14 (Sonoma) and later. It lives in the menu bar, with a Dock icon for quick access.",
       "faq.3.q": "Why does macOS block it on first launch?",
-      "faq.3.a": "It isn't notarized by Apple yet. Move it into the <code>Applications</code> folder in your home folder (<code>~/Applications</code>, not <code>/Applications</code>) and clear the quarantine flag from <strong>Terminal</strong> — see <a href='#install'>Get started</a> above.",
+      "faq.3.a": "It isn't notarized by Apple yet. Installing with <strong>Homebrew</strong> handles this for you. By hand, move it into the <code>Applications</code> folder in your home folder (<code>~/Applications</code>, not <code>/Applications</code>) and clear the quarantine flag from <strong>Terminal</strong> — see <a href='#install'>Get started</a> above.",
       "faq.4.q": "Where are my captures saved?",
       "faq.4.a": "To your chosen folder (the Desktop by default) and the clipboard. Set the format and location in Settings.",
       "faq.5.q": "Does it send my screenshots anywhere?",
@@ -1402,6 +1420,9 @@
       "how.3.p": 'Der Editor öffnet sich direkt über Ihrer Aufnahme. Drücken Sie <kbd>⌘C</kbd> zum Kopieren oder <kbd>⌘S</kbd> zum Speichern.',
       "install.eyebrow": "Erste Schritte",
       "install.h2": "m_capture installieren",
+      "install.brew.h": "Mit Homebrew installieren",
+      "install.brew.p": "Ein Befehl — installiert nach <code>~/Applications</code>, entfernt die Download-Quarantäne und überlässt Aktualisierungen dem integrierten Updater.",
+      "install.brew.or": "Kein Homebrew? Installieren Sie manuell in drei Schritten:",
       "install.1.h": "DMG herunterladen",
       "install.1.p": "Laden Sie die neueste <a href='https://github.com/tuyen-nguyen-mesoneer/m_capture/releases/latest/download/m_capture.dmg'>m_capture.dmg</a> von <a href='https://github.com/tuyen-nguyen-mesoneer/m_capture/releases'>Releases</a> herunter und öffnen Sie sie.",
       "install.2.h": "Nach ~/Applications verschieben",
@@ -1509,7 +1530,7 @@
       "faq.2.q": "Welche macOS-Versionen werden unterstützt?",
       "faq.2.a": "macOS 14 (Sonoma) und neuer. Lebt in der Menüleiste, mit einem Dock-Symbol für den schnellen Zugriff.",
       "faq.3.q": "Warum blockiert macOS die App beim ersten Start?",
-      "faq.3.a": "Sie ist noch nicht von Apple notarisiert. Verschieben Sie sie in den Ordner <code>Applications</code> in Ihrem Benutzerordner (<code>~/Applications</code>, nicht <code>/Applications</code>) und entfernen Sie das Quarantäne-Flag im <strong>Terminal</strong> — siehe <a href='#install'>Erste Schritte</a> oben.",
+      "faq.3.a": "Sie ist noch nicht von Apple notarisiert. Die Installation mit <strong>Homebrew</strong> übernimmt das für Sie. Manuell verschieben Sie sie in den Ordner <code>Applications</code> in Ihrem Benutzerordner (<code>~/Applications</code>, nicht <code>/Applications</code>) und entfernen das Quarantäne-Flag im <strong>Terminal</strong> — siehe <a href='#install'>Erste Schritte</a> oben.",
       "faq.4.q": "Wo werden meine Aufnahmen gespeichert?",
       "faq.4.a": "In dem gewählten Ordner (standardmäßig Schreibtisch) und in der Zwischenablage. Format und Speicherort legen Sie in den Einstellungen fest.",
       "faq.5.q": "Werden meine Screenshots irgendwohin gesendet?",

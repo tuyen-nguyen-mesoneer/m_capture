@@ -64,6 +64,24 @@ on-device, with no subscriptions, cloud services, or accounts.
 
 ## Install
 
+### With Homebrew
+
+```sh
+brew tap tuyen-nguyen-mesoneer/tap
+brew trust tuyen-nguyen-mesoneer/tap   # optional — silences Homebrew's third-party-tap notice
+brew install --cask m_capture
+```
+
+The tap is added once; from then on the bare name is enough (`brew install --cask
+m_capture`). The cask installs into `~/Applications`, clears the download quarantine for
+you, and leaves the app to update itself — so `brew upgrade` won't fight the built-in
+updater (see [Updates & feedback](#updates--feedback)).
+
+Launch **m_capture** and grant **Screen Recording** permission when prompted (see
+[Permissions](#permissions)).
+
+### From the DMG
+
 1. Download the latest **`m_capture.dmg`** from [**Releases**](https://github.com/tuyen-nguyen-mesoneer/m_capture/releases) and open it.
 2. **Drag m_capture into your home Applications folder** (`~/Applications`). Because the
    app isn't notarized, macOS would block it on first launch — open **Terminal** and clear
