@@ -52,7 +52,7 @@ on-device, with no subscriptions, cloud services, or accounts.
 - **Transform** — crop, rotate and flip, all baked into the export. Resize the picture itself from **eight handles**, each edge on its own, to work at whatever size suits you — that part is the view only; the saved file keeps its full resolution.
 
 **🚀 Share**
-- **History** — a panel with your newest captures and recordings as thumbnail cards: copy, pin, trim (videos), reveal in Finder, or trash them without leaving the app. Opens automatically after every save.
+- **History** — a panel with your newest captures and recordings as thumbnail cards, grouped by the day you took them: copy, pin, trim (videos), reveal in Finder, or trash them without leaving the app. Drive it from the keyboard (arrows, `Return` to open, `Space` for Quick Look, `⌘C`, `⌫`), **drag a capture straight into Slack or Mail**, and narrow to just images or just recordings. Opens automatically after every save.
 - **Copy text / QR (OCR)** — extract text or decode a QR code from any capture, on-device via Apple Vision.
 - **Pin to screen** — keep a capture floating above other windows, across Spaces.
 - **Share-ready backgrounds** — padding, rounded corners, and a soft shadow over 10 solid or gradient presets, or a custom color.

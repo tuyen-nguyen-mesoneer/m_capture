@@ -316,8 +316,20 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
   string as what is now staged and the relaunch prompt names it, so a mismatched asset
   would have the app claim a version it isn't running.
 - `HistoryWindow.swift` — the History panel: newest captures from the save folder as
-  thumbnail cards (adaptive grid, video play badges) with Copy / Pin / Trim / Reveal /
-  Trash actions; rebuilt from the folder on every open.
+  thumbnail cards (adaptive grid) with Copy / Pin / Trim / Reveal / Trash actions; rebuilt
+  from the folder on every open, and on every filter change. Cards group under **day
+  headings** (Today / Yesterday / date), which is what lets a card's caption shrink to a
+  bare time — or "5m ago" inside the hour; the filename it dropped survives as the tooltip.
+  Recordings carry their **duration** as a pill, the one fact a thumbnail can't show.
+  The grid view is the panel's **first responder**: arrows move a selection, Return opens,
+  Space is Quick Look (`QLPreviewPanel`, driven from the responder chain), ⌘C copies, ⌫
+  trashes. Arrows walk the **visual rows** (`rows: [[Int]]`), not the flat order, so a
+  short last row in one day's group can't send Down into the wrong column of the next.
+  Unhandled keys must reach `super` or Esc stops closing the panel
+  (`PanelWindow.cancelOperation`). Cells are drag sources, so a capture can be dragged into
+  another app — which is why they now **consume their mouse-down**, and the panel no longer
+  drags by its thumbnails (header and background only). The All / Images / Videos filter
+  reuses Settings' `SectionTab`, so the underlined-tab look is defined once.
 - `EditorWindow.swift` — the annotation editor: tool tiles in five groups
   (Markup, Shapes, Style, Actions, Background) placed by a **gap model**
   (`measureGaps`): the four strips of screen around the selection are measured in whole
@@ -590,7 +602,7 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
   uniquified on collision. ⌘C flattens and writes to the pasteboard.
 - Global hotkeys use Carbon `RegisterEventHotKey` (`HotKey.swift`) — no Accessibility
   permission needed.
-- **The capture cursor is a cursor *rect*, and a rect must be released.** `SelectionView`
+- **The capture cursor is a cursor *rect*, and the rect must be handed back, not dropped.** `SelectionView`
   claims one over its whole bounds (`resetCursorRects`), because a one-shot `NSCursor.set()`
   races window activation and the plain arrow would survive until the pointer first moved —
   and a `.cursorUpdate` tracking area doesn't help, since a pointer already inside the

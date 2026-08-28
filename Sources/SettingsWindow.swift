@@ -1027,18 +1027,19 @@ final class SectionTabBar: NSView {
 }
 
 /// One tab in a `SectionTabBar`: label above a 2 pt lavender underline that sits on the
-/// strip's baseline when selected.
-private final class SectionTab: NSView {
+/// strip's baseline when selected. Not private — History's filter reuses it, so the
+/// underlined-tab look is defined once (see `HistoryFilterBar`).
+final class SectionTab: NSView {
     var onClick: (() -> Void)?
     var isSelected = false { didSet { if isSelected != oldValue { restyle() } } }
     private var hovering = false { didSet { if hovering != oldValue { restyle() } } }
     private let label = NSTextField(labelWithString: "")
 
-    init(title: String) {
+    init(title: String, font: NSFont = Theme.font(12, .semibold)) {
         super.init(frame: .zero)
         wantsLayer = true
         label.stringValue = title
-        label.font = Theme.font(12, .semibold)
+        label.font = font
         label.translatesAutoresizingMaskIntoConstraints = false
         addSubview(label)
         translatesAutoresizingMaskIntoConstraints = false
