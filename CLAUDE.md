@@ -34,8 +34,12 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
 - **Record** (⌃⇧R): drag a region → record it in-process via ScreenCaptureKit
   (`SCStream`), encoding HEVC video + AAC audio into an `.mp4` at 30 or 60 fps, with an
   optional start countdown and mouse-click ripples captured into the video. The hotkey
-  toggles (press again to stop & save); ⌥+hotkey discards (with confirm). The floating
-  control bar (live timer, size estimate, quality badge, pause/stop, minimize) starts
+  toggles (press again to stop & save), ⌃⇧X stops and only ever stops, and ⌥+hotkey
+  discards (with confirm). Every stop the user can trigger funnels through
+  `stopRecording`, which **asks first** by default (Settings → Video) and **pauses the
+  take while it asks** — the alert is on screen, so without the pause it would be the last
+  thing in the video. The floating control bar (live timer, size estimate, quality badge,
+  pause/stop, minimize) starts
   minimized to the menu bar by default; **Esc**/**Return** work only while it's visible.
   While recording, the menu-bar icon shows a red dot + live timer, and the status menu
   offers Stop / Stop-as-GIF / Stop-&-Trim / Discard / Pause-Resume / Show-bar. Finishing
@@ -467,7 +471,8 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
 - `Settings.swift` — persisted output prefs (`Settings.shared` / `UserDefaults`):
   save dir, format (`ImageFormat`), quality, auto-copy, cursor, sound, delay,
   post-capture `CaptureBehavior`, per-action hotkeys, background padding/radius,
-  launch-at-login (live via `SMAppService`), Dock-icon visibility, `simulateRecording`
+  launch-at-login (live via `SMAppService`), Dock-icon visibility, `videoConfirmStop`
+  (ask before a stop that saves), `simulateRecording`
   (+ the `--simulate-recording` launch override, which pins it on and disables the
   checkbox). `fileURL()` + `encode(_:)` are the
   single source for where/how captures are saved; `fileURL()` uniquifies the name and

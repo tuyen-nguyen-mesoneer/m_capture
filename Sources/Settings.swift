@@ -291,6 +291,7 @@ final class Settings {
         static let videoQuality = "videoQuality", videoAudioSource = "videoAudioSource"
         static let videoFrameRate = "videoFrameRate", videoShowClicks = "videoShowClicks"
         static let videoCountdown = "videoCountdown", videoBarMinimized = "videoBarMinimized"
+        static let videoConfirmStop = "videoConfirmStop"
         static let simulateRecording = "simulateRecording"
         static let drawColor = "drawColor", drawStroke = "drawStroke"
         static let drawFade = "drawFade", drawTool = "drawTool"
@@ -445,6 +446,13 @@ final class Settings {
     var videoStartBarMinimized: Bool {
         get { d.object(forKey: Key.videoBarMinimized) == nil ? true : d.bool(forKey: Key.videoBarMinimized) }
         set { d.set(newValue, forKey: Key.videoBarMinimized) }
+    }
+
+    /// Ask for confirmation before a stop that saves the take (default on). Unset reads
+    /// as on; the discard confirm is separate and always shown.
+    var videoConfirmStop: Bool {
+        get { d.object(forKey: Key.videoConfirmStop) == nil ? true : d.bool(forKey: Key.videoConfirmStop) }
+        set { d.set(newValue, forKey: Key.videoConfirmStop) }
     }
 
     /// How far live zoom magnifies while recording (default 2×).

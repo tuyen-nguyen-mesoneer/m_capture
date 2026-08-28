@@ -32,6 +32,7 @@ final class SettingsWindowController: NSObject {
     private var videoCountdownPopup: NSPopUpButton!
     private var videoClicksCheck: NSButton!
     private var videoBarMinCheck: NSButton!
+    private var videoConfirmStopCheck: NSButton!
     private var videoSimulateCheck: NSButton!
     private var videoZoomPopup: NSPopUpButton!
     private var lastCheckedLabel: NSTextField!
@@ -107,6 +108,8 @@ final class SettingsWindowController: NSObject {
         videoClicksCheck = checkbox(L("Show mouse clicks in recordings"), #selector(videoClicksToggled))
         videoZoomPopup = popup(VideoZoomFactor.allCases.map { $0.label }, #selector(videoZoomChanged))
         videoBarMinCheck = checkbox(L("Start with the recording bar minimized"), #selector(videoBarMinToggled))
+        videoConfirmStopCheck = checkbox(L("Ask before stopping a recording"),
+                                         #selector(videoConfirmStopToggled))
         videoSimulateCheck = checkbox(L("Simulate recording (nothing is saved)"),
                                       #selector(videoSimulateToggled))
 
@@ -127,6 +130,7 @@ final class SettingsWindowController: NSObject {
                     tip: L("Magnification when zoom is toggled while recording. Only the video zooms — your screen is untouched.")),
                 checkRow(videoClicksCheck),
                 checkRow(videoBarMinCheck),
+                checkRow(videoConfirmStopCheck),
                 checkRow(videoSimulateCheck),
             ],
             // The marks' look, how long they last, and the letters that pick a tool
@@ -618,6 +622,7 @@ final class SettingsWindowController: NSObject {
         videoCountdownPopup.selectItem(at: CaptureDelay.allCases.firstIndex(of: s.videoCountdown) ?? 0)
         videoClicksCheck.state = s.videoShowClicks ? .on : .off
         videoBarMinCheck.state = s.videoStartBarMinimized ? .on : .off
+        videoConfirmStopCheck.state = s.videoConfirmStop ? .on : .off
         videoZoomPopup.selectItem(at: VideoZoomFactor.allCases.firstIndex(of: s.videoZoomFactor) ?? 1)
         videoSimulateCheck.state = s.simulateRecording ? .on : .off
         // `--simulate-recording` pins the mode on for the whole launch, so the checkbox
@@ -800,6 +805,10 @@ final class SettingsWindowController: NSObject {
 
     @objc private func videoBarMinToggled() {
         Settings.shared.videoStartBarMinimized = (videoBarMinCheck.state == .on)
+    }
+
+    @objc private func videoConfirmStopToggled() {
+        Settings.shared.videoConfirmStop = (videoConfirmStopCheck.state == .on)
     }
 
     @objc private func videoZoomChanged() {
