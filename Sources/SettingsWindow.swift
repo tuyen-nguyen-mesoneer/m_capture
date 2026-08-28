@@ -32,6 +32,7 @@ final class SettingsWindowController: NSObject {
     private var videoCountdownPopup: NSPopUpButton!
     private var videoClicksCheck: NSButton!
     private var videoBarMinCheck: NSButton!
+    private var videoConfirmStopCheck: NSButton!
     private var videoSimulateCheck: NSButton!
     private var videoZoomPopup: NSPopUpButton!
     private var lastCheckedLabel: NSTextField!
@@ -107,6 +108,8 @@ final class SettingsWindowController: NSObject {
         videoClicksCheck = checkbox(L("Show mouse clicks in recordings"), #selector(videoClicksToggled))
         videoZoomPopup = popup(VideoZoomFactor.allCases.map { $0.label }, #selector(videoZoomChanged))
         videoBarMinCheck = checkbox(L("Start with the recording bar minimized"), #selector(videoBarMinToggled))
+        videoConfirmStopCheck = checkbox(L("Ask before stopping a recording"),
+                                         #selector(videoConfirmStopToggled))
         videoSimulateCheck = checkbox(L("Simulate recording (nothing is saved)"),
                                       #selector(videoSimulateToggled))
 
@@ -127,6 +130,7 @@ final class SettingsWindowController: NSObject {
                     tip: L("Magnification when zoom is toggled while recording. Only the video zooms — your screen is untouched.")),
                 checkRow(videoClicksCheck),
                 checkRow(videoBarMinCheck),
+                checkRow(videoConfirmStopCheck),
                 checkRow(videoSimulateCheck),
             ],
             // The marks' look, how long they last, and the letters that pick a tool
@@ -416,6 +420,7 @@ final class SettingsWindowController: NSObject {
         switch a {
         case .screenshot:  return L("Drag to select a region, or press Space to capture a window or screen.")
         case .record:      return L("Drag to select a region, or press Space to record a window or screen.")
+        case .stop:        return L("Stops the recording and saves it. Unlike the record shortcut it can only ever stop, never start a new recording.")
         case .draw:        return L("While recording, sketch directly on the screen; strokes fade after a few seconds and appear in the video.")
         case .zoom:        return L("While recording, zoom the video in on the cursor and back out again. Your own screen is not magnified.")
         case .forceQuit:   return L("Force-quits m_capture and any duplicate instances — use if the menu bar icon is stuck or duplicated.")
@@ -430,7 +435,7 @@ final class SettingsWindowController: NSObject {
         let fields = Dictionary(uniqueKeysWithValues: zip(ShortcutAction.allCases, shortcutFields))
         let groups: [(String, [ShortcutAction])] = [
             (L("Capture"), [.screenshot, .record]),
-            (L("While recording"), [.draw, .zoom]),
+            (L("While recording"), [.stop, .draw, .zoom]),
             (L("App"), [.forceQuit]),
         ]
         return groups.enumerated().flatMap { index, group -> [NSView] in
@@ -617,6 +622,7 @@ final class SettingsWindowController: NSObject {
         videoCountdownPopup.selectItem(at: CaptureDelay.allCases.firstIndex(of: s.videoCountdown) ?? 0)
         videoClicksCheck.state = s.videoShowClicks ? .on : .off
         videoBarMinCheck.state = s.videoStartBarMinimized ? .on : .off
+        videoConfirmStopCheck.state = s.videoConfirmStop ? .on : .off
         videoZoomPopup.selectItem(at: VideoZoomFactor.allCases.firstIndex(of: s.videoZoomFactor) ?? 1)
         videoSimulateCheck.state = s.simulateRecording ? .on : .off
         // `--simulate-recording` pins the mode on for the whole launch, so the checkbox
@@ -799,6 +805,10 @@ final class SettingsWindowController: NSObject {
 
     @objc private func videoBarMinToggled() {
         Settings.shared.videoStartBarMinimized = (videoBarMinCheck.state == .on)
+    }
+
+    @objc private func videoConfirmStopToggled() {
+        Settings.shared.videoConfirmStop = (videoConfirmStopCheck.state == .on)
     }
 
     @objc private func videoZoomChanged() {
@@ -1017,18 +1027,19 @@ final class SectionTabBar: NSView {
 }
 
 /// One tab in a `SectionTabBar`: label above a 2 pt lavender underline that sits on the
-/// strip's baseline when selected.
-private final class SectionTab: NSView {
+/// strip's baseline when selected. Not private — History's filter reuses it, so the
+/// underlined-tab look is defined once (see `HistoryFilterBar`).
+final class SectionTab: NSView {
     var onClick: (() -> Void)?
     var isSelected = false { didSet { if isSelected != oldValue { restyle() } } }
     private var hovering = false { didSet { if hovering != oldValue { restyle() } } }
     private let label = NSTextField(labelWithString: "")
 
-    init(title: String) {
+    init(title: String, font: NSFont = Theme.font(12, .semibold)) {
         super.init(frame: .zero)
         wantsLayer = true
         label.stringValue = title
-        label.font = Theme.font(12, .semibold)
+        label.font = font
         label.translatesAutoresizingMaskIntoConstraints = false
         addSubview(label)
         translatesAutoresizingMaskIntoConstraints = false

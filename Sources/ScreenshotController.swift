@@ -203,6 +203,11 @@ final class ScreenshotController {
         // instant visual hide, then `close()` one runloop tick later (never inline —
         // this can run from that very window's own mouseUp) to unconditionally tear
         // down its window-server surface rather than trust the soft hide.
+        //
+        // The pointer is handed back before either: only a window still on screen can
+        // install the arrow as a cursor rect, which is the one thing that makes the server
+        // redraw the pointer without the user moving it (see `SelectionView.relinquishCursor`).
+        overlays.forEach { $0.restoreArrowCursor() }
         let stale = overlays
         // Drop the shared coordinator's event monitor here rather than leaving it to
         // `deinit` — see `OverlayCoordinator.init` for why waiting leaked one monitor

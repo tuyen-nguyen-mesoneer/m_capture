@@ -45,6 +45,15 @@ enum L10n {
         "History": "Verlauf",
         "HISTORY": "VERLAUF",
         "No captures yet.": "Noch keine Aufnahmen.",
+        "Screenshots and recordings you take appear here.":
+            "Screenshots und Aufnahmen erscheinen hier.",
+        "Today": "Heute",
+        "Yesterday": "Gestern",
+        "Just now": "Gerade eben",
+        "%@ ago": "vor %@",
+        "All": "Alle",
+        "Images": "Bilder",
+        "Videos": "Videos",
         "Pin to screen": "Anpinnen",
         "Reveal in Finder": "Im Finder zeigen",
         "Move to Trash": "In den Papierkorb legen",
@@ -152,6 +161,9 @@ enum L10n {
             "%@ wird bereits von \"%@\" verwendet. Bitte wählen Sie eine andere Kombination.",
         "This recording will be deleted.": "Diese Aufnahme wird gelöscht.",
         "Keep Recording": "Weiter aufnehmen",
+        "Stop recording?": "Aufnahme stoppen?",
+        "The recording will be saved.": "Die Aufnahme wird gesichert.",
+        "Ask before stopping a recording": "Vor dem Stoppen fragen",
         "Recording stopped": "Aufnahme gestoppt",
         "The recording ended unexpectedly.": "Die Aufnahme wurde unerwartet beendet.",
         " The partial recording was saved.": " Die Teilaufnahme wurde gesichert.",
@@ -286,6 +298,8 @@ enum L10n {
         "Drawing on — Esc to stop, ⌫ to clear": "Zeichnen aktiv — Esc beendet, ⌫ löscht",
         "While recording, sketch directly on the screen; strokes fade after a few seconds and appear in the video.":
             "Während der Aufnahme direkt auf dem Bildschirm zeichnen; Striche verblassen nach wenigen Sekunden und erscheinen im Video.",
+        "Stops the recording and saves it. Unlike the record shortcut it can only ever stop, never start a new recording.":
+            "Beendet die Aufnahme und sichert sie. Anders als das Aufnahme-Kürzel kann es nur stoppen, nie eine neue Aufnahme starten.",
 
         // ── Settings enum labels ─────────────────────────────────────────
         "None": "Ohne",
@@ -396,6 +410,15 @@ enum L10n {
         "History": "Lịch sử",
         "HISTORY": "LỊCH SỬ",
         "No captures yet.": "Chưa có ảnh chụp nào.",
+        "Screenshots and recordings you take appear here.":
+            "Ảnh chụp và bản ghi của bạn sẽ xuất hiện ở đây.",
+        "Today": "Hôm nay",
+        "Yesterday": "Hôm qua",
+        "Just now": "Vừa xong",
+        "%@ ago": "%@ trước",
+        "All": "Tất cả",
+        "Images": "Hình ảnh",
+        "Videos": "Video",
         "Pin to screen": "Ghim lên màn hình",
         "Reveal in Finder": "Hiện trong Finder",
         "Move to Trash": "Chuyển vào Thùng rác",
@@ -503,6 +526,9 @@ enum L10n {
             "%@ đã được dùng cho \"%@\". Vui lòng chọn tổ hợp khác.",
         "This recording will be deleted.": "Bản ghi này sẽ bị xoá.",
         "Keep Recording": "Tiếp tục ghi",
+        "Stop recording?": "Dừng ghi hình?",
+        "The recording will be saved.": "Bản ghi sẽ được lưu.",
+        "Ask before stopping a recording": "Hỏi trước khi dừng ghi hình",
         "Recording stopped": "Đã dừng ghi hình",
         "The recording ended unexpectedly.": "Bản ghi kết thúc ngoài dự kiến.",
         " The partial recording was saved.": " Phần đã ghi được lưu lại.",
@@ -637,6 +663,8 @@ enum L10n {
         "Drawing on — Esc to stop, ⌫ to clear": "Đang vẽ — Esc để dừng, ⌫ để xoá",
         "While recording, sketch directly on the screen; strokes fade after a few seconds and appear in the video.":
             "Trong khi ghi hình, vẽ trực tiếp lên màn hình; nét vẽ mờ dần sau vài giây và xuất hiện trong video.",
+        "Stops the recording and saves it. Unlike the record shortcut it can only ever stop, never start a new recording.":
+            "Dừng ghi hình và lưu lại. Khác với phím tắt ghi hình, phím này chỉ dừng, không bao giờ bắt đầu bản ghi mới.",
 
         // ── Settings enum labels ─────────────────────────────────────────
         "None": "Không",

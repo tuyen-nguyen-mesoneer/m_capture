@@ -317,6 +317,12 @@ final class VideoRecordController {
     }
 
     private func dismissOverlays() {
+        // Hand the pointer back *first*, while these windows are still on screen: only a
+        // window under the pointer can install the arrow as a cursor rect, and that rect is
+        // the one thing that makes the server redraw the pointer without the user moving it.
+        // Skip it and the capture cursor stays on screen — and `SCStream` bakes that glyph
+        // into the start of the recording. See `SelectionView.relinquishCursor`.
+        overlays.forEach { $0.restoreArrowCursor() }
         // `orderOut` occasionally leaves a `.screenSaver`-level, `.canJoinAllSpaces`
         // overlay window fully on screen even after this method returns and Swift's
         // own reference is dropped — confirmed via `CGWindowListCopyWindowInfo` on a
@@ -597,6 +603,7 @@ final class VideoRecordController {
     }
 
     private func stopRecording(destination: StopDestination = .movie) {
+        guard confirmStopIfWanted() else { return }
         // Simulate mode captured nothing, so there is no file to finalize, convert or
         // trim — tear the HUD down and say so plainly, rather than opening History onto
         // an unchanged folder and letting it read as a lost recording.
@@ -684,6 +691,34 @@ final class VideoRecordController {
         if Settings.shared.playSound, FileManager.default.fileExists(atPath: url.path) {
             NSSound(named: "Grab")?.play()
         }
+    }
+
+    /// Ask before ending a take that would be saved (Settings → Video). Returns whether
+    /// to go ahead. Every stop the user can trigger — the menu, the Stop shortcut, the
+    /// record shortcut's toggle, the bar's button, Esc/Return on the bar — funnels through
+    /// `stopRecording`, so asking there covers all of them at once; the unattended stops
+    /// (quit, a display vanishing) don't come this way and are never blocked by a prompt.
+    ///
+    /// The recording is **paused for the duration of the question**, because everything on
+    /// screen is being recorded and that includes this alert: without the pause, the last
+    /// second of every take would be a picture of the app asking whether to end it. Pausing
+    /// is a state the recording already has, so nothing new appears in the file — the writes
+    /// simply stop before the alert is drawn and resume if the answer is no. A take the user
+    /// had already paused stays paused either way.
+    private func confirmStopIfWanted() -> Bool {
+        guard isRecording, Settings.shared.videoConfirmStop else { return true }
+        let wasPaused = isPaused
+        if !wasPaused { togglePause() }
+        NSApp.activate(ignoringOtherApps: true)
+        let answer = BrandAlert(title: L("Stop recording?"),
+                                message: L("The recording will be saved."),
+                                titles: [L("Stop"), L("Keep Recording")],
+                                primary: 0, cancel: 1, icon: "stop.circle").runModal()
+        guard answer == 0 else {
+            if !wasPaused { togglePause() }
+            return false
+        }
+        return true
     }
 
     /// Discard the recording (Esc): confirm, then stop the session and delete the

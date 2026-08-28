@@ -34,8 +34,12 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
 - **Record** (⌃⇧R): drag a region → record it in-process via ScreenCaptureKit
   (`SCStream`), encoding HEVC video + AAC audio into an `.mp4` at 30 or 60 fps, with an
   optional start countdown and mouse-click ripples captured into the video. The hotkey
-  toggles (press again to stop & save); ⌥+hotkey discards (with confirm). The floating
-  control bar (live timer, size estimate, quality badge, pause/stop, minimize) starts
+  toggles (press again to stop & save), ⌃⇧X stops and only ever stops, and ⌥+hotkey
+  discards (with confirm). Every stop the user can trigger funnels through
+  `stopRecording`, which **asks first** by default (Settings → Video) and **pauses the
+  take while it asks** — the alert is on screen, so without the pause it would be the last
+  thing in the video. The floating control bar (live timer, size estimate, quality badge,
+  pause/stop, minimize) starts
   minimized to the menu bar by default; **Esc**/**Return** work only while it's visible.
   While recording, the menu-bar icon shows a red dot + live timer, and the status menu
   offers Stop / Stop-as-GIF / Stop-&-Trim / Discard / Pause-Resume / Show-bar. Finishing
@@ -75,7 +79,8 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
   Stop-&-Trim / Discard / Pause), and the menu-bar recording indicator
   (`updateRecordingIndicator`); opening the menu closes any app panel; Quit/Force-Quit
   finalize an active recording first. The record hotkey toggles (stop & save); a
-  derived ⌥ variant discards.
+  derived ⌥ variant discards; a separate Stop binding (⌃⇧X) no-ops unless something is
+  recording, so it can never start one by mistake.
 - `Updater.swift` — checks GitHub Releases (`releases.atom`, newest-first) for a newer
   build; drives the manual "Check for Updates" item and the silent daily check. The
   schedule lives in **wall-clock stamps** (`updater.lastSuccessfulCheck` /
@@ -311,8 +316,20 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
   string as what is now staged and the relaunch prompt names it, so a mismatched asset
   would have the app claim a version it isn't running.
 - `HistoryWindow.swift` — the History panel: newest captures from the save folder as
-  thumbnail cards (adaptive grid, video play badges) with Copy / Pin / Trim / Reveal /
-  Trash actions; rebuilt from the folder on every open.
+  thumbnail cards (adaptive grid) with Copy / Pin / Trim / Reveal / Trash actions; rebuilt
+  from the folder on every open, and on every filter change. Cards group under **day
+  headings** (Today / Yesterday / date), which is what lets a card's caption shrink to a
+  bare time — or "5m ago" inside the hour; the filename it dropped survives as the tooltip.
+  Recordings carry their **duration** as a pill, the one fact a thumbnail can't show.
+  The grid view is the panel's **first responder**: arrows move a selection, Return opens,
+  Space is Quick Look (`QLPreviewPanel`, driven from the responder chain), ⌘C copies, ⌫
+  trashes. Arrows walk the **visual rows** (`rows: [[Int]]`), not the flat order, so a
+  short last row in one day's group can't send Down into the wrong column of the next.
+  Unhandled keys must reach `super` or Esc stops closing the panel
+  (`PanelWindow.cancelOperation`). Cells are drag sources, so a capture can be dragged into
+  another app — which is why they now **consume their mouse-down**, and the panel no longer
+  drags by its thumbnails (header and background only). The All / Images / Videos filter
+  reuses Settings' `SectionTab`, so the underlined-tab look is defined once.
 - `EditorWindow.swift` — the annotation editor: tool tiles in five groups
   (Markup, Shapes, Style, Actions, Background) placed by a **gap model**
   (`measureGaps`): the four strips of screen around the selection are measured in whole
@@ -466,7 +483,8 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
 - `Settings.swift` — persisted output prefs (`Settings.shared` / `UserDefaults`):
   save dir, format (`ImageFormat`), quality, auto-copy, cursor, sound, delay,
   post-capture `CaptureBehavior`, per-action hotkeys, background padding/radius,
-  launch-at-login (live via `SMAppService`), Dock-icon visibility, `simulateRecording`
+  launch-at-login (live via `SMAppService`), Dock-icon visibility, `videoConfirmStop`
+  (ask before a stop that saves), `simulateRecording`
   (+ the `--simulate-recording` launch override, which pins it on and disables the
   checkbox). `fileURL()` + `encode(_:)` are the
   single source for where/how captures are saved; `fileURL()` uniquifies the name and
@@ -584,7 +602,7 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
   uniquified on collision. ⌘C flattens and writes to the pasteboard.
 - Global hotkeys use Carbon `RegisterEventHotKey` (`HotKey.swift`) — no Accessibility
   permission needed.
-- **The capture cursor is a cursor *rect*, and a rect must be released.** `SelectionView`
+- **The capture cursor is a cursor *rect*, and the rect must be handed back, not dropped.** `SelectionView`
   claims one over its whole bounds (`resetCursorRects`), because a one-shot `NSCursor.set()`
   races window activation and the plain arrow would survive until the pointer first moved —
   and a `.cursorUpdate` tracking area doesn't help, since a pointer already inside the
@@ -592,15 +610,30 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
   **active** and `NSApp.activate` is asynchronous, so `claimKeyboard` re-asserts across its
   retries, not just when key status is missing. The flip side: a rect the window server still
   remembers keeps re-asserting after the overlay is gone, which left a camera pointer on
-  screen until the next mouse move — so `OverlayWindow.orderOut` calls `relinquishCursor()`,
-  which discards the rect, latches `cursorReleased` (a late rect pass would otherwise
-  re-claim) and hands back the arrow. **Out-`set()`ing a rect does not work; release it.**
-  Releasing it still isn't enough on its own, and this is the part that cost several wrong
-  fixes: `NSCursor.set()`, cursor rects, `hide`/`unhide`, and a front window owning its own
-  rect all change the cursor **claim**. The window server keeps drawing the image it last
-  composited until *pointer motion* makes it re-evaluate — which is why the stale camera
-  cleared the instant the mouse was nudged and not before. Asserting on `NSCursor.current`
-  proves nothing here; it was already the arrow the whole time.
+  screen until the next mouse move. **Hand the rect back as the arrow; do not drop it.**
+  `relinquishCursor()` latches `cursorReleased` (so a late rect pass can't re-claim the
+  capture cursor) and then installs `.arrow` as the rect — immediately, via `addCursorRect`,
+  not `invalidateCursorRects`, which only *schedules* a pass a closing window never gets.
+  Both controllers call it **before** ordering the overlays out, because only a window still
+  under the pointer has a rect to push.
+  Discarding the rect instead — what this used to do — leaves the server with no claim, and
+  what it then keeps drawing is the last image it composited: the capture cursor. That is
+  the bug that put a video-camera glyph in the first ~0.5 s of **every recording**, since
+  `SCStream` bakes whatever the server is drawing into the frames.
+  The other half was `viewDidMoveToWindow`, which called `modeCursor.set()` unguarded and is
+  called *again* on `close()` with `window == nil` — re-installing the capture cursor a
+  run-loop turn after the teardown had just handed the pointer back. It now returns early
+  once the cursor is released. **Anything on the teardown path that sets a cursor has to be
+  guarded the same way.**
+  What does *not* work, and cost several wrong fixes: `NSCursor.set()`, `hide`/`unhide`,
+  `CGWarpMouseCursorPosition`, `CGDisplayHideCursor`, `NSCursor.setHiddenUntilMouseMoves`,
+  and a *fresh* window owning a rect — all change the **claim**, not the drawn image, and the
+  server keeps drawing what it last composited until *pointer motion* makes it re-evaluate.
+  A rect on a window already under the pointer is the one exception, which is exactly why
+  Space cycling the overlay's mode changes the glyph instantly without moving the mouse.
+  `SCStream.updateConfiguration` cannot flip `showsCursor` on a live stream either (it
+  returns no error and does nothing), so the capture side is no escape hatch.
+  Asserting on `NSCursor.current` proves nothing here; it was already the arrow the whole time.
   `ScreenshotController.redrawPointer(on:)` therefore supplies the motion:
   `CGWarpMouseCursorPosition` one point and back on the next tick — two distinct positions so
   it can't be coalesced, net position unchanged, imperceptible. It needs **no** Accessibility
