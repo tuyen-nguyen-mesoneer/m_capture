@@ -592,15 +592,30 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
   **active** and `NSApp.activate` is asynchronous, so `claimKeyboard` re-asserts across its
   retries, not just when key status is missing. The flip side: a rect the window server still
   remembers keeps re-asserting after the overlay is gone, which left a camera pointer on
-  screen until the next mouse move — so `OverlayWindow.orderOut` calls `relinquishCursor()`,
-  which discards the rect, latches `cursorReleased` (a late rect pass would otherwise
-  re-claim) and hands back the arrow. **Out-`set()`ing a rect does not work; release it.**
-  Releasing it still isn't enough on its own, and this is the part that cost several wrong
-  fixes: `NSCursor.set()`, cursor rects, `hide`/`unhide`, and a front window owning its own
-  rect all change the cursor **claim**. The window server keeps drawing the image it last
-  composited until *pointer motion* makes it re-evaluate — which is why the stale camera
-  cleared the instant the mouse was nudged and not before. Asserting on `NSCursor.current`
-  proves nothing here; it was already the arrow the whole time.
+  screen until the next mouse move. **Hand the rect back as the arrow; do not drop it.**
+  `relinquishCursor()` latches `cursorReleased` (so a late rect pass can't re-claim the
+  capture cursor) and then installs `.arrow` as the rect — immediately, via `addCursorRect`,
+  not `invalidateCursorRects`, which only *schedules* a pass a closing window never gets.
+  Both controllers call it **before** ordering the overlays out, because only a window still
+  under the pointer has a rect to push.
+  Discarding the rect instead — what this used to do — leaves the server with no claim, and
+  what it then keeps drawing is the last image it composited: the capture cursor. That is
+  the bug that put a video-camera glyph in the first ~0.5 s of **every recording**, since
+  `SCStream` bakes whatever the server is drawing into the frames.
+  The other half was `viewDidMoveToWindow`, which called `modeCursor.set()` unguarded and is
+  called *again* on `close()` with `window == nil` — re-installing the capture cursor a
+  run-loop turn after the teardown had just handed the pointer back. It now returns early
+  once the cursor is released. **Anything on the teardown path that sets a cursor has to be
+  guarded the same way.**
+  What does *not* work, and cost several wrong fixes: `NSCursor.set()`, `hide`/`unhide`,
+  `CGWarpMouseCursorPosition`, `CGDisplayHideCursor`, `NSCursor.setHiddenUntilMouseMoves`,
+  and a *fresh* window owning a rect — all change the **claim**, not the drawn image, and the
+  server keeps drawing what it last composited until *pointer motion* makes it re-evaluate.
+  A rect on a window already under the pointer is the one exception, which is exactly why
+  Space cycling the overlay's mode changes the glyph instantly without moving the mouse.
+  `SCStream.updateConfiguration` cannot flip `showsCursor` on a live stream either (it
+  returns no error and does nothing), so the capture side is no escape hatch.
+  Asserting on `NSCursor.current` proves nothing here; it was already the arrow the whole time.
   `ScreenshotController.redrawPointer(on:)` therefore supplies the motion:
   `CGWarpMouseCursorPosition` one point and back on the next tick — two distinct positions so
   it can't be coalesced, net position unchanged, imperceptible. It needs **no** Accessibility

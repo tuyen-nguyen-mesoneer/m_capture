@@ -317,6 +317,12 @@ final class VideoRecordController {
     }
 
     private func dismissOverlays() {
+        // Hand the pointer back *first*, while these windows are still on screen: only a
+        // window under the pointer can install the arrow as a cursor rect, and that rect is
+        // the one thing that makes the server redraw the pointer without the user moving it.
+        // Skip it and the capture cursor stays on screen — and `SCStream` bakes that glyph
+        // into the start of the recording. See `SelectionView.relinquishCursor`.
+        overlays.forEach { $0.restoreArrowCursor() }
         // `orderOut` occasionally leaves a `.screenSaver`-level, `.canJoinAllSpaces`
         // overlay window fully on screen even after this method returns and Swift's
         // own reference is dropped — confirmed via `CGWindowListCopyWindowInfo` on a

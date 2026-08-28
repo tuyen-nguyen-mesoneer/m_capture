@@ -179,6 +179,11 @@ final class OverlayWindow: NSWindow {
         selectionView.relinquishCursor()
         super.orderOut(sender)
     }
+
+    /// Put the plain arrow back under the pointer while this overlay is still on screen.
+    /// The controllers call this before they order the overlays out, because only a window
+    /// that is still up can hand the cursor back — see `SelectionView.relinquishCursor`.
+    func restoreArrowCursor() { selectionView.relinquishCursor() }
 }
 
 /// Dims the screen with a transparent "hole" for the current selection, plus a
@@ -233,7 +238,17 @@ final class SelectionView: NSView {
     required init?(coder: NSCoder) { fatalError() }
 
     override var acceptsFirstResponder: Bool { true }
-    override func viewDidMoveToWindow() { window?.makeFirstResponder(self); modeCursor.set() }
+    /// Claim the keyboard and the capture cursor as the overlay goes up — but never on the
+    /// way *out*: AppKit calls this again when the window is closed (with `window` now nil),
+    /// and the unguarded `modeCursor.set()` there was re-installing the capture cursor a
+    /// run-loop turn after the teardown had just handed the pointer back. Nothing moved it
+    /// afterwards, so the window server kept drawing that glyph — on screen, and into the
+    /// first seconds of every recording — until the user next moved the mouse.
+    override func viewDidMoveToWindow() {
+        guard let window, !cursorReleased else { return }
+        window.makeFirstResponder(self)
+        modeCursor.set()
+    }
 
     /// Focus follows the pointer across displays: the overlay under the cursor becomes
     /// key so keyboard events (Esc) target the right screen and its cursor updates.
@@ -299,21 +314,43 @@ final class SelectionView: NSView {
     /// pointer already inside the overlay when it appears never enters. A rect is declarative
     /// and gets re-applied on every activation, so it can't be raced.
     override func resetCursorRects() {
-        guard !cursorReleased else { return }
-        addCursorRect(bounds, cursor: modeCursor)
+        // Once released the rect stays — as the *arrow*. Dropping it instead leaves the
+        // window server with no claim under the pointer, and what it then keeps drawing is
+        // the last image it composited: the capture cursor (see `relinquishCursor`).
+        addCursorRect(bounds, cursor: cursorReleased ? .arrow : modeCursor)
     }
 
     /// Set once the overlay is on its way out, so a late cursor-rect pass — AppKit re-runs
     /// them on activation changes, which the teardown itself triggers — can't re-claim the
-    /// pointer after we handed it back.
+    /// capture cursor after we handed it back.
     private var cursorReleased = false
 
-    /// Drop the cursor claim and hand the pointer back to the plain arrow.
+    /// Hand the pointer back to the plain arrow, **while this overlay is still on screen**.
+    ///
+    /// The window server draws the cursor image it last composited and re-evaluates only on
+    /// real pointer motion. Nothing an app can do without an Accessibility grant forces that
+    /// re-evaluation from the outside — `NSCursor.set`, hide/unhide, `CGWarpMouseCursorPosition`
+    /// and a fresh window owning a cursor rect all change the *claim*, not the drawn image
+    /// (all four were tried; every one left the capture cursor on screen until the user next
+    /// moved the mouse, and `SCStream` baked it into the top of every recording).
+    ///
+    /// What does work is the mechanism the overlay already relies on: **Space cycles the mode
+    /// and the pointer changes glyph instantly, without moving**. A cursor *rect* on the
+    /// window under the pointer is pushed to the server the moment it is invalidated. So the
+    /// arrow has to be installed as this window's rect while the window is still up and
+    /// hit-testable — hence `restoreArrowCursor()`, which both controllers call *before*
+    /// ordering the overlays out. Dismissing first and restoring after is the version that
+    /// fails: with no window of ours under the pointer there is no rect to push, and the
+    /// capture cursor stays on screen.
     func relinquishCursor() {
         guard !cursorReleased else { return }
         cursorReleased = true
+        // Install the arrow rect *now*, not via `invalidateCursorRects`: that only schedules
+        // a reset pass, and a window on its way out never gets one — so the capture cursor's
+        // rect was still the installed one when the teardown made the server re-evaluate,
+        // and the server drew exactly that.
         discardCursorRects()
-        window?.invalidateCursorRects(for: self)
+        addCursorRect(bounds, cursor: .arrow)
         NSCursor.arrow.set()
     }
 
