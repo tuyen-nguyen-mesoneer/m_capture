@@ -75,7 +75,8 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
   Stop-&-Trim / Discard / Pause), and the menu-bar recording indicator
   (`updateRecordingIndicator`); opening the menu closes any app panel; Quit/Force-Quit
   finalize an active recording first. The record hotkey toggles (stop & save); a
-  derived ⌥ variant discards.
+  derived ⌥ variant discards; a separate Stop binding (⌃⇧X) no-ops unless something is
+  recording, so it can never start one by mistake.
 - `Updater.swift` — checks GitHub Releases (`releases.atom`, newest-first) for a newer
   build; drives the manual "Check for Updates" item and the silent daily check. The
   schedule lives in **wall-clock stamps** (`updater.lastSuccessfulCheck` /

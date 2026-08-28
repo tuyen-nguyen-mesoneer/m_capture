@@ -98,14 +98,15 @@ struct Shortcut: Equatable {
 
 /// The capture actions that each have a rebindable global hotkey.
 enum ShortcutAction: String, CaseIterable {
-    case screenshot, record, draw, zoom, forceQuit
+    case screenshot, record, stop, draw, zoom, forceQuit
 
     var label: String {
         switch self {
         case .screenshot:  return L("Screenshot")
         case .record:      return L("Record")
         // Short on purpose: the Settings rows sit under a "While recording" heading
-        // that carries the context these two would otherwise have to spell out.
+        // that carries the context these three would otherwise have to spell out.
+        case .stop:        return L("Stop")
         case .draw:        return L("Draw")
         case .zoom:        return L("Zoom")
         case .forceQuit:   return L("Force Quit")
@@ -117,6 +118,7 @@ enum ShortcutAction: String, CaseIterable {
         switch self {
         case .screenshot:  return Shortcut(keyCode: UInt32(kVK_ANSI_S), modifiers: cs)
         case .record:      return Shortcut(keyCode: UInt32(kVK_ANSI_R), modifiers: cs)
+        case .stop:        return Shortcut(keyCode: UInt32(kVK_ANSI_X), modifiers: cs)
         case .draw:        return Shortcut(keyCode: UInt32(kVK_ANSI_D), modifiers: cs)
         case .zoom:        return Shortcut(keyCode: UInt32(kVK_ANSI_Z), modifiers: cs)
         case .forceQuit:   return Shortcut(keyCode: UInt32(kVK_ANSI_Q), modifiers: UInt32(controlKey | optionKey | shiftKey))

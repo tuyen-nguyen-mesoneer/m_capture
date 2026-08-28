@@ -161,7 +161,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // and finalize a recording (see `quit()`).
         if rec.isRecording {
             entries.append(.item(title: L("Stop Recording"), symbol: "stop.circle",
-                                 shortcut: nil) { rec.stopFromMenu() })
+                                 shortcut: s.shortcut(.stop).displayString) { rec.stopFromMenu() })
             // The file-only stop variants are dropped in simulate mode: nothing is
             // captured, so there'd be no .mp4 to convert or trim.
             if !rec.isSimulatedRecording {
@@ -249,6 +249,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let s = Settings.shared
         hotKeys.append(HotKey(s.shortcut(.screenshot)) { [weak self] in self?.takeScreenshot() })
         hotKeys.append(HotKey(s.shortcut(.record)) { [weak self] in self?.record() })
+        // Stop and save, for people who would rather not rely on the record shortcut's
+        // toggle: pressed with nothing recording it does nothing, so it can never start one
+        // by mistake. Registered for the whole session like the two below.
+        hotKeys.append(HotKey(s.shortcut(.stop)) {
+            let rec = VideoRecordController.shared
+            guard rec.isRecording else { return }
+            rec.stopFromMenu()
+        })
         // Draw on screen — only meaningful mid-recording on a display-backed target, so it
         // no-ops otherwise rather than registering conditionally (the binding has to stay
         // claimed for the whole session, or Settings → Shortcuts would report it free).

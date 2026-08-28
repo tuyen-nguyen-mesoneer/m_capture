@@ -286,6 +286,8 @@ enum L10n {
         "Drawing on — Esc to stop, ⌫ to clear": "Zeichnen aktiv — Esc beendet, ⌫ löscht",
         "While recording, sketch directly on the screen; strokes fade after a few seconds and appear in the video.":
             "Während der Aufnahme direkt auf dem Bildschirm zeichnen; Striche verblassen nach wenigen Sekunden und erscheinen im Video.",
+        "Stops the recording and saves it. Unlike the record shortcut it can only ever stop, never start a new recording.":
+            "Beendet die Aufnahme und sichert sie. Anders als das Aufnahme-Kürzel kann es nur stoppen, nie eine neue Aufnahme starten.",
 
         // ── Settings enum labels ─────────────────────────────────────────
         "None": "Ohne",
@@ -637,6 +639,8 @@ enum L10n {
         "Drawing on — Esc to stop, ⌫ to clear": "Đang vẽ — Esc để dừng, ⌫ để xoá",
         "While recording, sketch directly on the screen; strokes fade after a few seconds and appear in the video.":
             "Trong khi ghi hình, vẽ trực tiếp lên màn hình; nét vẽ mờ dần sau vài giây và xuất hiện trong video.",
+        "Stops the recording and saves it. Unlike the record shortcut it can only ever stop, never start a new recording.":
+            "Dừng ghi hình và lưu lại. Khác với phím tắt ghi hình, phím này chỉ dừng, không bao giờ bắt đầu bản ghi mới.",
 
         // ── Settings enum labels ─────────────────────────────────────────
         "None": "Không",

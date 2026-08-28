@@ -416,6 +416,7 @@ final class SettingsWindowController: NSObject {
         switch a {
         case .screenshot:  return L("Drag to select a region, or press Space to capture a window or screen.")
         case .record:      return L("Drag to select a region, or press Space to record a window or screen.")
+        case .stop:        return L("Stops the recording and saves it. Unlike the record shortcut it can only ever stop, never start a new recording.")
         case .draw:        return L("While recording, sketch directly on the screen; strokes fade after a few seconds and appear in the video.")
         case .zoom:        return L("While recording, zoom the video in on the cursor and back out again. Your own screen is not magnified.")
         case .forceQuit:   return L("Force-quits m_capture and any duplicate instances — use if the menu bar icon is stuck or duplicated.")
@@ -430,7 +431,7 @@ final class SettingsWindowController: NSObject {
         let fields = Dictionary(uniqueKeysWithValues: zip(ShortcutAction.allCases, shortcutFields))
         let groups: [(String, [ShortcutAction])] = [
             (L("Capture"), [.screenshot, .record]),
-            (L("While recording"), [.draw, .zoom]),
+            (L("While recording"), [.stop, .draw, .zoom]),
             (L("App"), [.forceQuit]),
         ]
         return groups.enumerated().flatMap { index, group -> [NSView] in
