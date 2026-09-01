@@ -1,6 +1,8 @@
 // m_capture — independent implementation.
 // SPDX-License-Identifier: MIT
 import AppKit
+import ImageIO
+import UniformTypeIdentifiers
 
 /// A floating, always-on-top window that "pins" a captured image to the screen
 /// so it stays visible while you work. Drag anywhere to move, drag the
@@ -15,12 +17,29 @@ final class PinnedWindowController: NSObject, NSWindowDelegate {
 
     private let window: PinWindow
     private let rep: NSBitmapImageRep
+    /// Set only for a pinned **animated** GIF: its original bytes and where they came
+    /// from. `rep` still holds the same picture (a GIF's `NSBitmapImageRep` carries every
+    /// frame), but Copy and Save must hand over these bytes rather than re-encode `rep`,
+    /// which would flatten the animation to one frame — the same trap `HistoryCell.copyItem`
+    /// had.
+    private let gif: (data: Data, url: URL)?
+
+    /// Pin an animated GIF. Returns nil if the file can't be read or decoded, so a
+    /// caller can fall back rather than put up an empty window.
+    @discardableResult
+    static func pinGIF(url: URL, screenRect: CGRect) -> PinnedWindowController? {
+        guard let data = try? Data(contentsOf: url),
+              let rep = NSBitmapImageRep(data: data) else { return nil }
+        return PinnedWindowController(rep: rep, screenRect: screenRect, gif: (data, url))
+    }
 
     /// - Parameters:
     ///   - rep: the flattened, full-resolution capture.
     ///   - screenRect: where to place it, in global screen coordinates.
-    init(rep: NSBitmapImageRep, screenRect: CGRect) {
+    ///   - gif: original GIF bytes when the pin is animated (see `gif`).
+    init(rep: NSBitmapImageRep, screenRect: CGRect, gif: (data: Data, url: URL)? = nil) {
         self.rep = rep
+        self.gif = gif
         window = PinWindow(contentRect: screenRect, styleMask: .borderless,
                            backing: .buffered, defer: false)
         super.init()
@@ -33,7 +52,7 @@ final class PinnedWindowController: NSObject, NSWindowDelegate {
         window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         window.minSize = NSSize(width: 60, height: 60)
 
-        let view = PinView(rep: rep)
+        let view = PinView(rep: rep, animated: gif?.data)
         view.initialSize = screenRect.size
         view.onCopy = { [weak self] in self?.copyToClipboard() }
         view.onSave = { [weak self] in self?.saveToDisk() }
@@ -54,27 +73,41 @@ final class PinnedWindowController: NSObject, NSWindowDelegate {
 
     private func copyToClipboard() {
         NSPasteboard.general.clearContents()
-        NSPasteboard.general.writeObjects([image()])
+        if let gif {
+            // Same reasoning as `HistoryCell.copyItem`: an `NSImage` on the pasteboard
+            // offers only a one-frame TIFF, so the bytes have to go over as GIF.
+            let item = NSPasteboardItem()
+            item.setData(gif.data, forType: NSPasteboard.PasteboardType(UTType.gif.identifier))
+            item.setString(gif.url.absoluteString, forType: .fileURL)
+            NSPasteboard.general.writeObjects([item])
+        } else {
+            NSPasteboard.general.writeObjects([image()])
+        }
     }
 
     private func saveToDisk() {
         let fellBack = !Settings.shared.saveDirectoryAvailable
-        let url = Settings.shared.fileURL()
+        // An animated pin saves as a GIF whatever the configured image format is: running
+        // it through `Settings.encode` would write a PNG holding a single frame, i.e.
+        // silently throw the animation away on the way to disk.
+        let url = Settings.shared.fileURL(ext: gif != nil ? "gif" : nil)
         let rep = self.rep
+        let gifData = gif?.data
         DispatchQueue.global(qos: .userInitiated).async {
-            let ok = Settings.shared.encode(rep).map { (try? $0.write(to: url)) != nil } ?? false
+            let payload = gifData ?? Settings.shared.encode(rep)
+            let ok = payload.map { (try? $0.write(to: url)) != nil } ?? false
             DispatchQueue.main.async {
                 if !ok {
                     // The write never happened, so let the name go (see `Settings.fileURL`).
                     Settings.shared.releaseClaim(url)
-                    BrandAlert(title: L("Unable to save the image"),
+                    BrandAlert(title: L("Unable to save the capture"),
                                message: L("Saving failed. Check your save folder in Settings → Output."),
-                               titles: ["OK"], primary: 0, cancel: 0,
+                               titles: [L("OK")], primary: 0, cancel: 0,
                                icon: "exclamationmark.triangle").present()
                 } else if fellBack {
                     BrandAlert(title: L("Saved to the Desktop"),
                                message: L("The save folder was unavailable; the file was saved to the Desktop. Update it in Settings → Output."),
-                               titles: ["OK"], primary: 0, cancel: 0,
+                               titles: [L("OK")], primary: 0, cancel: 0,
                                icon: "folder.badge.questionmark").present()
                 }
             }
@@ -113,17 +146,88 @@ private final class PinView: NSView {
     private var startMouse: NSPoint = .zero
     private var startFrame: NSRect = .zero
 
-    init(rep: NSBitmapImageRep) {
+    /// Animated-GIF playback state. Frames are decoded **on demand, one at a time**
+    /// rather than up front: a GIF exported from a recording is capped at 960 px and
+    /// 10 fps, so a 30-second take is ~300 frames — holding those as `CGImage`s would be
+    /// hundreds of megabytes for one pinned window. Keeping the `CGImageSource` and
+    /// decoding the current frame each tick is a few milliseconds of work and bounded
+    /// memory. Only the delays are read up front; they are cheap and needed for timing.
+    private let gifSource: CGImageSource?
+    private let frameCount: Int
+    private let frameDelays: [TimeInterval]
+    private var frameIndex = 0
+    private var currentFrame: NSImage?
+    private var frameTimer: Timer?
+
+    init(rep: NSBitmapImageRep, animated: Data? = nil) {
         let img = NSImage(size: NSSize(width: rep.pixelsWide, height: rep.pixelsHigh))
         img.addRepresentation(rep)
         image = img
         aspect = rep.pixelsHigh > 0 ? CGFloat(rep.pixelsWide) / CGFloat(rep.pixelsHigh) : 1
+
+        if let animated,
+           let src = CGImageSourceCreateWithData(animated as CFData, nil),
+           CGImageSourceGetCount(src) > 1 {
+            gifSource = src
+            frameCount = CGImageSourceGetCount(src)
+            frameDelays = (0..<CGImageSourceGetCount(src)).map { Self.delay(of: src, at: $0) }
+        } else {
+            gifSource = nil; frameCount = 0; frameDelays = []
+        }
         super.init(frame: .zero)
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
+    deinit { frameTimer?.invalidate() }
+
+    private var isAnimating: Bool { gifSource != nil }
+
+    /// One frame's on-screen duration. GIFs in the wild carry 0 or absurdly small delays
+    /// meaning "as fast as possible"; every browser floors those at 100 ms, so we do too,
+    /// otherwise a pin would spin the CPU redrawing faster than anyone can see.
+    private static func delay(of src: CGImageSource, at i: Int) -> TimeInterval {
+        let props = CGImageSourceCopyPropertiesAtIndex(src, i, nil) as? [CFString: Any]
+        let gif = props?[kCGImagePropertyGIFDictionary] as? [CFString: Any]
+        let unclamped = gif?[kCGImagePropertyGIFUnclampedDelayTime] as? Double ?? 0
+        let clamped = gif?[kCGImagePropertyGIFDelayTime] as? Double ?? 0
+        let d = unclamped > 0 ? unclamped : clamped
+        return d < 0.02 ? 0.1 : d
+    }
+
+    /// Decode `frameIndex` and schedule the next tick. Rescheduled one-shot rather than a
+    /// single repeating timer because GIF frame delays vary per frame.
+    private func showFrame() {
+        guard let src = gifSource, frameCount > 0 else { return }
+        if let cg = CGImageSourceCreateImageAtIndex(src, frameIndex, nil) {
+            currentFrame = NSImage(cgImage: cg, size: NSSize(width: cg.width, height: cg.height))
+            needsDisplay = true
+        }
+        let delay = frameDelays.indices.contains(frameIndex) ? frameDelays[frameIndex] : 0.1
+        frameTimer?.invalidate()
+        frameTimer = Timer.scheduledTimer(withTimeInterval: delay, repeats: false) { [weak self] _ in
+            guard let self else { return }
+            self.frameIndex = (self.frameIndex + 1) % self.frameCount
+            self.showFrame()
+        }
+        // A pin sits above other apps and must keep animating while they are frontmost,
+        // and while the user drags or resizes it — both of which run a modal event loop
+        // that a .default-mode timer never gets a turn in.
+        if let t = frameTimer { RunLoop.main.add(t, forMode: .common) }
+    }
+
     override var acceptsFirstResponder: Bool { true }
-    override func viewDidMoveToWindow() { window?.makeFirstResponder(self) }
+    override func viewDidMoveToWindow() {
+        window?.makeFirstResponder(self)
+        if window != nil, isAnimating, frameTimer == nil { showFrame() }
+    }
+
+    /// Stop the clock when the pin closes. The timer's block holds `self` weakly, so a
+    /// stray one could not resurrect the view — but the run loop would keep it scheduled
+    /// and firing for the rest of the launch, once per closed pin.
+    override func viewWillMove(toWindow newWindow: NSWindow?) {
+        super.viewWillMove(toWindow: newWindow)
+        if newWindow == nil { frameTimer?.invalidate(); frameTimer = nil }
+    }
     override func resetCursorRects() { addCursorRect(bounds, cursor: .openHand) }
 
     override func draw(_ dirtyRect: NSRect) {
@@ -131,7 +235,7 @@ private final class PinView: NSView {
                                 xRadius: cornerRadius, yRadius: cornerRadius)
         NSGraphicsContext.saveGraphicsState()
         path.addClip()
-        image.draw(in: bounds)
+        (currentFrame ?? image).draw(in: bounds)
         NSGraphicsContext.restoreGraphicsState()
 
         func gripPath() -> NSBezierPath {

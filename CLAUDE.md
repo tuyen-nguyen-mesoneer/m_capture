@@ -517,7 +517,21 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
 - `CounterFormatPicker.swift` — popover for counter numbering (Numbers / Letters / Roman).
 - `PinnedWindow.swift` — Pin to screen: a floating, always-on-top window across
   Spaces; drag / corner-drag to scale / right-click `BrandMenu`. Self-retained via
-  a static array.
+  a static array. **An animated GIF pins as an animation** (`pinGIF(url:)`, used by
+  History): `PinView` keeps the `CGImageSource` and decodes **one frame at a time** on a
+  rescheduled one-shot timer — not every frame up front, because a GIF exported from a
+  recording is 960 px at 10 fps, so a 30-second take is ~300 frames and hundreds of MB
+  for a single window. Only the per-frame delays are read eagerly (cheap, and needed for
+  timing); a 0/near-0 delay is floored at 100 ms the way browsers do it, or a pin would
+  redraw as fast as the CPU allows. The timer goes on `RunLoop.main` in **`.common`**
+  mode: a pin has to keep moving while another app is frontmost and while the user drags
+  or resizes it, and a drag runs a modal event loop that `.default` never gets a turn in.
+  It is invalidated in `viewWillMove(toWindow:)` — the block captures `self` weakly so a
+  stray timer cannot resurrect the view, but the run loop would keep firing it for the
+  rest of the launch, once per closed pin.
+  Copy and Save on an animated pin hand over the **original GIF bytes**; routing them
+  through `image()` / `Settings.encode(rep)` writes a one-frame TIFF/PNG, which is how
+  pinning and copying a GIF used to silently flatten it.
 - `Background.swift` — share-ready backgrounds: the `Background` enum (None + 10
   presets + custom solid) with padding/radius geometry; `compose(_:)` bakes the
   frame (fill + shadow + rounded image) at full res.
