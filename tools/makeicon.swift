@@ -1,8 +1,15 @@
 // Generates the m_capture app icon, drawn in code (no external assets).
 //
-// Usage:
-//   swift makeicon.swift <out.icns>        — full multi-resolution .icns
-//   swift makeicon.swift <out.png> [px]    — a single PNG at `px` (default 1024)
+// Usage (compiled by build.sh alongside Sources/Logo.swift + Sources/Theme.swift):
+//   makeicon <out.icns>        — full multi-resolution .icns
+//   makeicon <out.png> [px]    — a single PNG at `px` (default 1024)
+//
+// It draws nothing itself: the mark comes from `Logo.image`, the same official vector
+// the menu, About card and stamps use. That is the point of compiling this against the
+// app's own sources instead of running it as a standalone script — the icon and the
+// in-app mark are one definition, so the logo cannot silently drift between them. It
+// used to duplicate a typeset "m." and its gradient here, and duplicating a logo is
+// exactly the kind of copy that goes stale unnoticed.
 //
 // The .icns is written directly via ImageIO, so the build needs neither `sips`
 // nor `iconutil` — both of which spill into the system temp dir and fail under a
@@ -21,54 +28,26 @@ func bitmap(_ w: Int, _ h: Int) -> (NSBitmapImageRep, NSGraphicsContext) {
     return (rep, NSGraphicsContext(bitmapImageRep: rep)!)
 }
 
-// Render "m." white, trimmed to ink, so it can be centered precisely.
-func glyph() -> (CGImage, CGFloat)? {
-    let r = 200
-    let (rep, ctx) = bitmap(r, r)
-    NSGraphicsContext.saveGraphicsState(); NSGraphicsContext.current = ctx
-    let attrs: [NSAttributedString.Key: Any] = [
-        .font: NSFont.systemFont(ofSize: CGFloat(r) * 0.6, weight: .bold),
-        .foregroundColor: NSColor.white,
-    ]
-    let g = "m."; let gs = g.size(withAttributes: attrs)
-    g.draw(at: CGPoint(x: (CGFloat(r) - gs.width) / 2, y: (CGFloat(r) - gs.height) / 2), withAttributes: attrs)
-    NSGraphicsContext.restoreGraphicsState()
-    var minX = r, minY = r, maxX = 0, maxY = 0
-    for y in 0..<r { for x in 0..<r where (rep.colorAt(x: x, y: y)?.alphaComponent ?? 0) > 0.05 {
-        if x < minX { minX = x }; if x > maxX { maxX = x }; if y < minY { minY = y }; if y > maxY { maxY = y } } }
-    guard maxX >= minX, let full = rep.cgImage,
-          let cg = full.cropping(to: CGRect(x: minX, y: minY, width: maxX - minX + 1, height: maxY - minY + 1))
-    else { return nil }
-    return (cg, CGFloat(cg.width) / CGFloat(cg.height))
-}
-
-// A full-bleed gradient square with the centered "m." glyph, at `px` square — no
-// manual corner rounding. macOS applies its own standard squircle mask to app
-// icons, so a self-rounded tile here would double up into a rounded-square-inside-
-// a-rounded-square with visible background bleeding through the corners. A plain
-// square (matching `Logo.image`, the same brand tile used in the About window and
-// menu bar) lets the system mask do that job, same as every other macOS app icon.
+/// The brand icon at `px` square. Circular because the Brand Icon guidelines define the
+/// mark that way and name app icons as one of its uses; it is the one place the brand's
+/// otherwise square-cornered chrome does not apply.
+///
+/// The circle is inset rather than full-bleed, which serves two purposes at once: it
+/// gives the mark the clear space the guidelines require (≥1 x-unit, i.e. ~3% of the
+/// diameter), and an inscribed circle sits entirely inside macOS's squircle no matter
+/// whether the system masks the icon or takes it as drawn — so the shape is correct
+/// either way, with no corners bleeding through.
 func render(_ px: Int) -> NSBitmapImageRep {
     let size = CGFloat(px)
     let (rep, ctx) = bitmap(px, px)
     NSGraphicsContext.saveGraphicsState()
     NSGraphicsContext.current = ctx
 
-    let tile = NSRect(x: 0, y: 0, width: size, height: size)
-    let path = NSBezierPath(rect: tile)
-    // Same tile colors/angle as `Logo.image` (the brand "m." mark used in the About
-    // window and menu bar) — this script can't import Theme.swift (it's compiled
-    // standalone, see build.sh), so the values are duplicated from Theme.logoTileTop/Bottom.
-    let top = NSColor(srgbRed: 0x41 / 255, green: 0x28 / 255, blue: 0x80 / 255, alpha: 1)
-    let bottom = NSColor(srgbRed: 0x2a / 255, green: 0x20 / 255, blue: 0x48 / 255, alpha: 1)
-    NSGradient(starting: top, ending: bottom)!.draw(in: path, angle: 225)
-
-    if let (cg, aspect) = glyph() {
-        let gw = tile.width * 0.54
-        let gh = gw / aspect
-        NSImage(cgImage: cg, size: NSSize(width: gw, height: gh))
-            .draw(in: NSRect(x: (size - gw) / 2, y: (size - gh) / 2, width: gw, height: gh))
-    }
+    let inset = (size * 0.07).rounded()
+    let edge = size - 2 * inset
+    // The dark variation: the app icon lands on the Dock, Finder and Launchpad, i.e. on
+    // light or unknown ground, which is what the filled gradient circle is for.
+    Logo.image(size: edge).draw(in: NSRect(x: inset, y: inset, width: edge, height: edge))
 
     NSGraphicsContext.restoreGraphicsState()
     return rep

@@ -62,7 +62,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let button = self?.statusItem.button else { return }
             if exporting {
                 button.image = nil
-                button.font = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .semibold)
+                button.font = Theme.monoDigitFont(11, .semibold)
                 button.title = " GIF… "
             } else {
                 self?.refreshStatusIcon()
@@ -386,17 +386,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // carries the simulate-mode signal too: an amber hollow dot and a SIM prefix,
         // unmistakable against the red filled dot of a real capture.
         let simulated = VideoRecordController.shared.isSimulatedRecording
-        let tint: NSColor = paused ? .systemGray : (simulated ? Theme.warning : .systemRed)
+        // Vibrant Coral rather than `.systemRed`: the brand keeps exactly one accent, and
+        // "a capture is live" is precisely the emphasis it exists for.
+        let tint: NSColor = paused ? .systemGray : (simulated ? Theme.warning : Theme.accent)
         let conf = NSImage.SymbolConfiguration(pointSize: 12, weight: .bold)
             .applying(.init(paletteColors: [tint]))
         let dot = NSImage(systemSymbolName: simulated ? "record.circle" : "record.circle.fill",
-                          accessibilityDescription: "Recording")?
+                          accessibilityDescription: L("Recording"))?
             .withSymbolConfiguration(conf)
         dot?.isTemplate = false
         button.image = dot
         button.imagePosition = .imageLeading
         button.imageHugsTitle = true
-        button.font = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .semibold)
+        button.font = Theme.monoDigitFont(11, .semibold)
         // Zoom shows in the menu bar too, since the floating bar is minimized by default and
         // would otherwise be the only place the state is visible.
         let zoomLevel = VideoRecordController.shared.zoomLevelInEffect
@@ -415,7 +417,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let button = statusItem?.button else { return }
         if installingUpdate {
             button.image = nil
-            button.font = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .semibold)
+            button.font = Theme.monoDigitFont(11, .semibold)
             button.title = " " + L("Updating…") + " "
             return
         }

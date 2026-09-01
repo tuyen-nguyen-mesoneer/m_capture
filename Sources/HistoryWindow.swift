@@ -3,6 +3,7 @@
 import AppKit
 import AVFoundation
 import Quartz
+import UniformTypeIdentifiers
 
 /// Which captures the grid is showing. Recordings and stills are different enough
 /// errands — one gets trimmed and shared, the other pinned and marked up — that
@@ -260,7 +261,7 @@ final class HistoryWindowController {
         title.alignment = .center
         title.preferredMaxLayoutWidth = maxW
 
-        let hint = NSTextField(wrappingLabelWithString: L("Screenshots and recordings you take appear here."))
+        let hint = NSTextField(wrappingLabelWithString: L("Screenshots and recordings appear here."))
         hint.font = Theme.font(11)
         hint.textColor = Theme.textMuted
         hint.alignment = .center
@@ -484,6 +485,11 @@ private final class HistoryFilterBar: NSView {
 private final class HistoryCell: NSView {
     let fileURL: URL
     private let isVideo: Bool
+    /// A GIF sits in the Images tab — it *is* an image file, Quick Look treats it as one,
+    /// and it can be pinned — but it animates, so copying and badging must not treat it
+    /// like a still. `isVideo` stays false: its thumbnail comes from ImageIO, not AVAsset,
+    /// and Trim (an `AVAssetExportSession` passthrough) cannot operate on it.
+    private var isAnimated: Bool { fileURL.pathExtension.lowercased() == "gif" }
     private let thumb = NSImageView()
     private let thumbBox = NSView()
     private let durationPill = NSTextField(labelWithString: "")
@@ -537,7 +543,10 @@ private final class HistoryCell: NSView {
         // Recordings carry their length on the thumbnail. It is the one thing about a
         // capture you cannot read off the picture, and it tells the two kinds apart at a
         // glance better than a bare play badge did.
-        if isVideo {
+        // A recording carries its length; a GIF carries its format. Either way the pill
+        // says the thumbnail moves, which is the one thing the picture cannot show — and
+        // without it an exported GIF is indistinguishable from a screenshot in the grid.
+        if isVideo || isAnimated {
             durationPill.font = Theme.font(9, .semibold)
             durationPill.textColor = Theme.textPrimary
             durationPill.alignment = .center
@@ -545,12 +554,13 @@ private final class HistoryCell: NSView {
             durationPill.drawsBackground = false
             durationPill.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.65).cgColor
             durationPill.layer?.cornerRadius = Theme.radiusSmall
-            durationPill.stringValue = "–:––"
+            durationPill.stringValue = isAnimated ? "GIF" : "–:––"
             durationPill.sizeToFit()
             durationPill.frame = NSRect(x: thumbBox.bounds.maxX - 42, y: 5, width: 37, height: 14)
             durationPill.autoresizingMask = [.minXMargin]
             thumbBox.addSubview(durationPill)
-            loadDuration()
+            // Only a real movie has a readable AVAsset duration.
+            if isVideo { loadDuration() }
         }
 
         let caption = NSTextField(labelWithString: Self.caption(for: url))
@@ -700,7 +710,24 @@ private final class HistoryCell: NSView {
 
     func copyItem() {
         NSPasteboard.general.clearContents()
-        if !isVideo, let img = NSImage(contentsOf: fileURL) {
+        if isAnimated, let data = try? Data(contentsOf: fileURL) {
+            // An animated GIF has to reach the pasteboard as its own bytes. Writing the
+            // `NSImage` instead — what every other still does — puts *only* `public.tiff`
+            // on the pasteboard, holding a single frame, so the animation silently
+            // arrived as a still image.
+            //
+            // The file URL is here as well because that is what file-aware targets (Mail,
+            // Slack, Finder) take, and they keep the animation. Note macOS *derives*
+            // `public.tiff` from the GIF whichever way this is written — offering the GIF
+            // bytes alone does not suppress it — so that derived still remains the
+            // fallback for bitmap-only targets, and `NSImage(pasteboard:)` will still
+            // resolve to one frame. Nothing here can change that; what matters is that
+            // `com.compuserve.gif` is now on the pasteboard at all, where it was absent.
+            let item = NSPasteboardItem()
+            item.setData(data, forType: NSPasteboard.PasteboardType(UTType.gif.identifier))
+            item.setString(fileURL.absoluteString, forType: .fileURL)
+            NSPasteboard.general.writeObjects([item])
+        } else if !isVideo, let img = NSImage(contentsOf: fileURL) {
             NSPasteboard.general.writeObjects([img])
         } else {
             NSPasteboard.general.writeObjects([fileURL as NSURL])
@@ -709,8 +736,7 @@ private final class HistoryCell: NSView {
     }
 
     private func pinItem() {
-        guard let img = NSImage(contentsOf: fileURL), let tiff = img.tiffRepresentation,
-              let rep = NSBitmapImageRep(data: tiff) else { return }
+        guard let img = NSImage(contentsOf: fileURL) else { return }
         // Place it centered on the panel's screen at roughly half the image's point
         // size, capped so a full-screen capture doesn't pin wall-to-wall.
         let screen = hostWindow?()?.screen ?? NSScreen.main ?? NSScreen.screens[0]
@@ -719,6 +745,11 @@ private final class HistoryCell: NSView {
         let w = img.size.width * scale, h = img.size.height * scale
         let rect = CGRect(x: screen.visibleFrame.midX - w / 2,
                           y: screen.visibleFrame.midY - h / 2, width: w, height: h)
+        // A GIF pins as an animation. The still path below goes through
+        // `tiffRepresentation`, which keeps one frame — pinning a GIF used to freeze it.
+        if isAnimated, PinnedWindowController.pinGIF(url: fileURL, screenRect: rect) != nil { return }
+        guard let tiff = img.tiffRepresentation,
+              let rep = NSBitmapImageRep(data: tiff) else { return }
         _ = PinnedWindowController(rep: rep, screenRect: rect)
     }
 

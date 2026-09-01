@@ -129,7 +129,7 @@ final class HotKeyField: NSView, KeyRecorder {
 
     func refreshDisplay() {
         if recording {
-            glyphLabel.stringValue = "Type shortcut…"
+            glyphLabel.stringValue = L("Type shortcut…")
             glyphLabel.textColor = Theme.lavender
         } else {
             glyphLabel.stringValue = Settings.shared.shortcut(action).displayString
@@ -140,9 +140,9 @@ final class HotKeyField: NSView, KeyRecorder {
     override func draw(_ dirtyRect: NSRect) {
         let r = bounds.insetBy(dx: 0.5, dy: 0.5)
         let path = NSBezierPath(roundedRect: r, xRadius: Theme.radiusSmall, yRadius: Theme.radiusSmall)
-        Theme.surfaceRaised.setFill()
+        Theme.controlFill.setFill()
         path.fill()
-        (recording ? Theme.lavender : Theme.border).setStroke()
+        (recording ? Theme.lavender : Theme.controlStroke).setStroke()
         path.lineWidth = recording ? 1.5 : 1
         path.stroke()
     }
@@ -200,7 +200,7 @@ final class HotKeyField: NSView, KeyRecorder {
     /// non-modally: this runs from inside a local event monitor, where a nested
     /// `runModal` can wedge the run loop.
     private func reportConflict(_ s: Shortcut, owner: String) {
-        let message = String(format: L("%@ is already used by \"%@\". Choose a different combination."),
+        let message = String(format: L("%@ is already used by “%@”. Choose a different combination."),
                              s.displayString, owner)
         BrandAlert(title: L("Shortcut already in use"), message: message,
                    titles: [L("OK")], primary: 0, cancel: 0,

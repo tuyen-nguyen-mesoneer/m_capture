@@ -158,7 +158,31 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
   either way — it is the one shape that reads as "drag out a region", and with no action line in
   the guidance card the cursor is that instruction; a `viewfinder` glyph matched the style but
   said "aim" and lost it.
-- `Theme.swift` — brand palette + fonts; the single styling source. **One surface across the
+- `Theme.swift` — brand palette + fonts; the single styling source. **Every colour is a
+  named value from the official mesoneer guidelines** (Frontify → Guidelines → Colors,
+  mirrored in `docs/styleguide.md`) — a new shade comes off the published Primary /
+  Secondary / Accent ramps, never mixed by hand; `#432A84`, `#2A1F50`, `#120D20` and
+  `#3A2F5E` were all approximations and are gone. Two gradients, and the split matters:
+  `highlightGradient` is the brand's **Gradient 1** verbatim (45°, `#2B2049` 10% →
+  `#32245B` 40% → `#422982` 80%), which the guidelines scope to *highlighting* areas.
+  (Nothing calls it yet — it is a palette token like `lavenderEase`, not dead code. In
+  particular the brand icon does **not** use it: the official asset carries its own older
+  Deep-Trust→Night-Indigo ramp, see `Logo.swift`.) `panelGradient` is the app's general
+  surface: the same 45° axis
+  and hue family at a fraction of the strength, Deep Trust deepening the bottom-left up
+  through the two Primary tints. Don't collapse them — Gradient 1 on every panel makes
+  Signal Purple the entire app, which is the opposite of the restraint the colour system
+  asks for (tried it; Settings became unreadably loud).
+  Type is **Open Sans**, the corporate typeface, bundled as the variable roman face
+  (`Resources/Fonts/OpenSans-Variable.ttf`, SIL OFL — copied into the bundle by `build.sh`
+  and registered via `ATSApplicationFontsPath` *and* explicitly by `Theme`, because
+  `tools/shots.swift` draws with `Theme` from outside the bundle). The brand approves
+  exactly four styles (Regular, Italic, SemiBold, Bold), so `brandFace(for:)` **snaps** an
+  `NSFont.Weight` onto one of the three romans rather than letting descriptor matching
+  hand back Light or ExtraBold; italic isn't bundled because nothing here is italic.
+  `monoDigitFont` is Open Sans with tabular figures, for anything that counts up in place
+  (the recording timer, the trim range). Both fall back to the system font if the face
+  fails to register, so a missing font can't stop the app drawing. **One surface across the
   app**: `applyPanelGradient` / `stylePanel` for anything filling a window (Settings, History,
   Trim, alerts, the status-item menu), and `styleFloatingCard` for a small thing floating over a
   capture (the editor's tool cards, its inline bars) — the same `surfaceBase` + `panelGradient`
@@ -170,7 +194,28 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
   gradient. The known trade is that a panel-scaled 45° sweep is compressed on a 126 pt card, so
   a card shows a short diagonal wash rather than the full sweep; the fix, if it ever matters, is
   a gentler `panelGradient`, not a second surface.
-- `Logo.swift` — the "m." logo / menu-bar glyph, drawn in code; `menuBarImage(badged:)`
+- `Logo.swift` — the "m." brand icon / menu-bar glyph, drawn in code. The icon is a
+  **circle** — an 18x glyph inside a 34x circle, the proportion the Brand Icon guidelines
+  fix — in the two approved variations only: *dark* (Gradient 1 circle, white glyph) for
+  light backgrounds, *white* (white circle, Signal Purple glyph) for dark ones. That circle
+  is the single documented exception to the square-cornered rule below, and
+  `tools/makeicon.swift` draws the app `.icns` from **this same `Logo.image`** — `build.sh`
+  compiles it against `Logo.swift` + `Theme.swift` (copying it to `main.swift` first, since
+  swiftc only takes top-level code from a file by that name) rather than running it as a
+  standalone script, so the icon and the in-app mark are one definition and the logo can't
+  drift between them. It only adds the ~7% inset, which both gives the guidelines' clear
+  space and keeps an inscribed circle inside macOS's squircle whether or not the system
+  masks the icon.
+  **The "m." is the official vector, and must stay one.** It used to be typeset — `Theme.font`
+  at bold, rasterized and trimmed to its ink bounds — and no choice of substitute face can
+  fix that: the wordmark is **PolySans**, which the brand reserves exclusively for the logo
+  and which is commercial, so anything else is a different letterform and "never modify the
+  logo" is an explicit don't. `markPathData` is therefore the `d` string from Frontify's own
+  brand-icon SVG, parsed by a deliberately minimal `parse` (only `M m L l H h V v C c S s
+  Z z`, the commands that string uses — extend it for a new asset rather than taking a
+  dependency). Still drawn in code, no image asset, but no longer an approximation. The
+  circle's gradient and the white variation's glyph colour come off that same asset, which
+  is why they are **not** Gradient 1 / Signal Purple as you would guess from the Colors page. `menuBarImage(badged:)`
   composes the update badge into the same template image so it still tints with the menu bar.
 - `ScreenshotController.swift` — selection-overlay windows; grabs the rect
   *in-process* via ScreenCaptureKit (`SCScreenshotManager`, macOS 14+);
@@ -472,7 +517,21 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
 - `CounterFormatPicker.swift` — popover for counter numbering (Numbers / Letters / Roman).
 - `PinnedWindow.swift` — Pin to screen: a floating, always-on-top window across
   Spaces; drag / corner-drag to scale / right-click `BrandMenu`. Self-retained via
-  a static array.
+  a static array. **An animated GIF pins as an animation** (`pinGIF(url:)`, used by
+  History): `PinView` keeps the `CGImageSource` and decodes **one frame at a time** on a
+  rescheduled one-shot timer — not every frame up front, because a GIF exported from a
+  recording is 960 px at 10 fps, so a 30-second take is ~300 frames and hundreds of MB
+  for a single window. Only the per-frame delays are read eagerly (cheap, and needed for
+  timing); a 0/near-0 delay is floored at 100 ms the way browsers do it, or a pin would
+  redraw as fast as the CPU allows. The timer goes on `RunLoop.main` in **`.common`**
+  mode: a pin has to keep moving while another app is frontmost and while the user drags
+  or resizes it, and a drag runs a modal event loop that `.default` never gets a turn in.
+  It is invalidated in `viewWillMove(toWindow:)` — the block captures `self` weakly so a
+  stray timer cannot resurrect the view, but the run loop would keep firing it for the
+  rest of the launch, once per closed pin.
+  Copy and Save on an animated pin hand over the **original GIF bytes**; routing them
+  through `image()` / `Settings.encode(rep)` writes a one-frame TIFF/PNG, which is how
+  pinning and copying a GIF used to silently flatten it.
 - `Background.swift` — share-ready backgrounds: the `Background` enum (None + 10
   presets + custom solid) with padding/radius geometry; `compose(_:)` bakes the
   frame (fill + shadow + rounded image) at full res.
@@ -661,20 +720,51 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
 
 - **No external dependencies** — system frameworks only (AppKit / CoreImage / Carbon
   / Vision / ImageIO / ScreenCaptureKit). Write original code; match the surrounding Swift.
-- **All styling goes through `Theme.swift`** — never hardcode colors or fonts, and take
+- **Form controls are a translucent white veil over the panel, not a coloured slab.**
+  Popups, text fields and shortcut fields all draw `Theme.controlFill` (white 0.06) inside
+  a `Theme.controlStroke` hairline (white 0.16). Both scale with whatever is behind them,
+  so the control holds the same *relative* contrast (fill ≈1.18:1, stroke ≈1.95:1) at
+  every point of `panelGradient` — no part of the sweep can swallow it — and it matches how
+  the rest of `Theme` does neutral surfaces (`hoverFill` 0.10, `divider` 0.18,
+  `cardStroke` 0.22). Two approaches were tried and rendered before this one:
+  `surfaceRaised` + `border` (what it used to be) became **1.03:1** fill / **1.00:1**
+  border once `panelGradient` lifted to Primary 1.1 at the top-right, and the controls
+  disappeared; a Deep Trust well ringed in lavender was legible but looked like a debug
+  wireframe — near-black boxes punched into a purple panel, and it spent the brand's one
+  accent on six rows of chrome. **Lavender is reserved for focus** (an open popup, a
+  recording shortcut field), which is where an accent belongs and where it now actually
+  reads. Don't put a control's edge back on `border`; that token is for a divider on a
+  known backdrop.
+  **Disabled state is expressed in colour, never with `alphaValue`.**
+  `controlFillDisabled` / `controlStrokeDisabled` / `controlTextDisabled` /
+  `controlGlyphDisabled` keep the box present and mute its content. Alpha compounds: the
+  popup dimmed itself to 0.4 *and* `updateBackgroundDependentRowsEnabled` dimmed the whole
+  row to 0.4, so the Padding and Corner-radius controls rendered at 0.16 — they read as
+  missing, not disabled. A disabled control that loses its outline is indistinguishable
+  from empty panel.
+- **All styling goes through `Theme.swift`** — never hardcode colors or fonts (that
+  includes `NSFont.systemFont` and `NSFont.monospacedDigitSystemFont`: the app's typeface
+  is Open Sans, so go through `Theme.font` / `Theme.monoDigitFont`), and take
   corner radii from `Theme.radiusSmall` / `radiusMedium` rather than a literal. **Both are
   `0`**: the brand is square-cornered everywhere — panels, chips, badges, pills, banners,
   tool tiles, colour swatches, hover highlights, the sidebar selection, the version badge.
   A literal radius is the bug, not the value; route it through the token so the shape stays
   one decision. Three things are deliberately *not* chrome and keep their curve: the
   `Background` preset's user-configurable image corner, the editor's rounded-rectangle
-  annotation tool, and shapes that are circles by function (the recording dot). Push buttons
+  annotation tool, and shapes that are circles by function (the recording dot). A fourth
+  exception is the **brand icon**, which the official guidelines define as circular — that
+  is a brand rule, not a local judgement, so it overrides the square default (`Logo.swift`,
+  `tools/makeicon.swift`, and `.logo` in `docs/index.html`). Push buttons
   can't take a radius at all — a native `bezelStyle = .rounded` is rounded by AppKit — so
   Settings' Choose… and the About card's actions are a custom-drawn `BrandPushButton`.
   It is deliberately **not** a `PointerButton` subclass: `PointerButton` also backs the
   panel's `NSButton(checkboxWithTitle:)` checkboxes, and a fill painted in its `draw`
   lands behind the checkbox label as a purple slab. Those checkboxes are the one control
   AppKit still rounds for us.
+- **The official brand guidelines are the authority on colour, type and the logo** —
+  Frontify → *mesoneer Brand → Guidelines*, mirrored in `docs/styleguide.md` (read the
+  mirror; don't re-scrape the site). Measurements from mesoneer.io cover only what the
+  guidelines leave open: layout, spacing, hero/nav/footer metrics on the landing page.
 - **Every screen follows the mesoneer brand style** — all user-facing windows,
   dialogs, popovers and menus use the brand panel chrome (`Theme` gradient, square
   corners, a soft drop shadow, and **no border**, plus the `m.` logo and brand-styled
@@ -703,3 +793,8 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
   `en`), must wrap to 3 lines at the `.card p` column width (345 px at 15 px):
   **100-134 characters** (browser-measured; ≥139 wraps to 4 lines). A new card needs
   the `<div class="card">` block plus `feat.N.h`/`feat.N.p` in both language dicts.
+  **`N` follows display order**, and the dicts are kept in that order too (`1.h`, `1.p`,
+  `2.h`, …) — so a new card is the next number and appends at the end of each dict. The
+  numbering used to be historical: twelve cards numbered 1-4, 7-9, 13, 14, 16-18, with
+  `feat.18.p` sitting before `feat.17.p` in both dicts. Nothing user-visible, but it made
+  it easy to add one half of a pair and not notice the other was missing.

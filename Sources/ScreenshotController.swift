@@ -362,12 +362,12 @@ final class ScreenshotController {
                     Settings.shared.releaseClaim(url)
                     BrandAlert(title: L("Unable to save the capture"),
                                message: L("Saving failed. Check your save folder in Settings → Output."),
-                               titles: ["OK"], primary: 0, cancel: 0,
+                               titles: [L("OK")], primary: 0, cancel: 0,
                                icon: "exclamationmark.triangle").present()
                 } else if fellBack {
                     BrandAlert(title: L("Saved to the Desktop"),
                                message: L("The save folder was unavailable; the file was saved to the Desktop. Update it in Settings → Output."),
-                               titles: ["OK"], primary: 0, cancel: 0,
+                               titles: [L("OK")], primary: 0, cancel: 0,
                                icon: "folder.badge.questionmark").present()
                 }
             }
@@ -384,7 +384,7 @@ final class ScreenshotController {
             return
         }
         let screen = NSScreen.screens.first { $0.frame.contains(NSEvent.mouseLocation) } ?? NSScreen.main
-        BrandToast.show(L("Capture failed. Please try again."), on: screen)
+        BrandToast.show(L("Capture failed. Try again."), on: screen)
     }
 
     /// Grab an on-screen region in-process with ScreenCaptureKit, rather than

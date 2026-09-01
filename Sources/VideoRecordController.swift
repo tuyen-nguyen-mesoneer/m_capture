@@ -382,7 +382,7 @@ final class VideoRecordController {
                         // nested runModal from there can wedge the main run loop.
                         BrandAlert(title: L("Microphone access denied"),
                                    message: L("Recording will continue without mic audio."),
-                                   titles: ["OK"], primary: 0, cancel: 0,
+                                   titles: [L("OK")], primary: 0, cancel: 0,
                                    icon: "mic.slash").present { _ in
                             self?.startRecording(target: target, barScreen: barScreen, audioSource: effective)
                         }
@@ -626,7 +626,7 @@ final class VideoRecordController {
                 await MainActor.run {
                     BrandAlert(title: L("Recording not saved"),
                                message: L("Check that the save folder has free space."),
-                               titles: ["OK"], primary: 0, cancel: 0,
+                               titles: [L("OK")], primary: 0, cancel: 0,
                                icon: "exclamationmark.triangle").present()
                 }
                 return
@@ -648,7 +648,7 @@ final class VideoRecordController {
                     await MainActor.run {
                         BrandAlert(title: L("Unable to convert to GIF"),
                                    message: L("The recording was kept as an .mp4."),
-                                   titles: ["OK"], primary: 0, cancel: 0,
+                                   titles: [L("OK")], primary: 0, cancel: 0,
                                    icon: "exclamationmark.triangle").present()
                     }
                 }
@@ -772,10 +772,16 @@ final class VideoRecordController {
             await session.stop()   // flush whatever frames made it, so the file is playable
             await MainActor.run {
                 let saved = url.map { FileManager.default.fileExists(atPath: $0.path) } ?? false
-                let tail = saved ? L(" The partial recording was saved.") : ""
+                // Two whole sentences rather than a fragment concatenated onto the
+                // first: a glued-on tail makes the translation depend on a leading
+                // space surviving in every dictionary, and forbids a language from
+                // ordering the two clauses differently.
+                let message = saved
+                    ? L("The recording ended unexpectedly. The partial recording was saved.")
+                    : L("The recording ended unexpectedly.")
                 BrandAlert(title: L("Recording stopped"),
-                           message: L("The recording ended unexpectedly.") + tail,
-                           titles: ["OK"], primary: 0, cancel: 0,
+                           message: message,
+                           titles: [L("OK")], primary: 0, cancel: 0,
                            icon: "exclamationmark.triangle").present()
                 if saved, let url { NSWorkspace.shared.activateFileViewerSelecting([url]) }
             }
@@ -795,7 +801,7 @@ final class VideoRecordController {
             BrandAlert(
                 title: L("Recording failed to start"),
                 message: L("If the Screen Recording permission was reset, re-approve it in System Settings and try again."),
-                titles: ["OK"], primary: 0, cancel: 0,
+                titles: [L("OK")], primary: 0, cancel: 0,
                 icon: "exclamationmark.triangle"
             ).present()
         }

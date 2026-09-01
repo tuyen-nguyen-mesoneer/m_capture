@@ -36,7 +36,7 @@ enum L10n {
     static let german: [String: String] = [
         "Language": "Sprache",
         "System": "System",
-        "Interface language. \"System\" follows the macOS language; changes apply after a restart.":
+        "Interface language. “System” follows the macOS language; changes apply after a restart.":
             "Sprache der Oberfläche. «System» folgt der macOS-Sprache; Änderungen gelten nach einem Neustart.",
         "Language changed": "Sprache geändert",
         "Restart m_capture to apply the new language.": "m_capture neu starten, um die neue Sprache zu übernehmen.",
@@ -45,7 +45,7 @@ enum L10n {
         "History": "Verlauf",
         "HISTORY": "VERLAUF",
         "No captures yet.": "Noch keine Aufnahmen.",
-        "Screenshots and recordings you take appear here.":
+        "Screenshots and recordings appear here.":
             "Screenshots und Aufnahmen erscheinen hier.",
         "Today": "Heute",
         "Yesterday": "Gestern",
@@ -60,7 +60,7 @@ enum L10n {
         "Move to Trash?": "In den Papierkorb legen?",
         "Moved to Trash": "In den Papierkorb gelegt",
         "Copied to clipboard": "In die Zwischenablage kopiert",
-        "Capture failed. Please try again.": "Aufnahme fehlgeschlagen. Bitte versuchen Sie es erneut.",
+        "Capture failed. Try again.": "Aufnahme fehlgeschlagen. Erneut versuchen.",
         "Recording": "Aufnahme",
         "Discard Recording": "Aufnahme verwerfen",
         "Start with the recording bar minimized": "Aufnahmeleiste minimiert starten",
@@ -102,7 +102,7 @@ enum L10n {
             "GitHub drosselt derzeit die Update-Prüfungen. Bitte später erneut versuchen.",
         "Open Releases": "Releases öffnen",
         "Automatic update checks are failing — check network access to GitHub.": "Automatische Update-Prüfungen schlagen fehl — Netzwerkzugriff auf GitHub prüfen.",
-        "Updates can't be installed — move m_capture to your Applications folder.":
+        "Updates cannot be installed — move m_capture to your Applications folder.":
             "Updates können nicht installiert werden — m_capture in den Programme-Ordner verschieben.",
         "Relaunch to Finish Update": "Zum Abschluss des Updates neu starten",
         "Relaunch now?": "Jetzt neu starten?",
@@ -133,7 +133,6 @@ enum L10n {
 
         // ── Save / capture alerts ────────────────────────────────────────
         "Unable to save the capture": "Aufnahme konnte nicht gesichert werden",
-        "Unable to save the image": "Bild konnte nicht gesichert werden",
         "Saving failed. Check your save folder in Settings → Output.":
             "Sichern fehlgeschlagen. Speicherordner unter Einstellungen → Ausgabe prüfen.",
         "Saved to the Desktop": "Auf dem Schreibtisch gesichert",
@@ -157,8 +156,8 @@ enum L10n {
         "Discard recording?": "Aufnahme verwerfen?",
         "Discard recording": "Aufnahme verwerfen",
         "Shortcut already in use": "Kurzbefehl bereits vergeben",
-        "%@ is already used by \"%@\". Choose a different combination.":
-            "%@ wird bereits von \"%@\" verwendet. Bitte wählen Sie eine andere Kombination.",
+        "%@ is already used by “%@”. Choose a different combination.":
+            "%@ wird bereits von «%@» verwendet. Bitte eine andere Kombination wählen.",
         "This recording will be deleted.": "Diese Aufnahme wird gelöscht.",
         "Keep Recording": "Weiter aufnehmen",
         "Stop recording?": "Aufnahme stoppen?",
@@ -166,7 +165,8 @@ enum L10n {
         "Ask before stopping a recording": "Vor dem Stoppen fragen",
         "Recording stopped": "Aufnahme gestoppt",
         "The recording ended unexpectedly.": "Die Aufnahme wurde unerwartet beendet.",
-        " The partial recording was saved.": " Die Teilaufnahme wurde gesichert.",
+        "The recording ended unexpectedly. The partial recording was saved.":
+            "Die Aufnahme wurde unerwartet beendet. Die Teilaufnahme wurde gesichert.",
         "Recording failed to start": "Aufnahme konnte nicht starten",
         "If the Screen Recording permission was reset, re-approve it in System Settings and try again.":
             "Wurde die Bildschirmaufnahme-Berechtigung zurückgesetzt, in den Systemeinstellungen erneut erlauben und nochmals versuchen.",
@@ -185,6 +185,8 @@ enum L10n {
         "Pause": "Pause",
         "Resume": "Weiter",
         "Stop": "Stopp",
+        "Minimize to the menu bar — control from the m. menu":
+            "In die Menüleiste minimieren — Steuerung über das m.-Menü",
         "Minimize": "Minimieren",
 
         // ── Pin window menu ──────────────────────────────────────────────
@@ -251,8 +253,6 @@ enum L10n {
             "Bereich aufziehen oder Leertaste für Fenster / Bildschirm.",
         "Drag to select a region, or press Space to record a window or screen.":
             "Bereich aufziehen oder Leertaste für Fenster / Bildschirm — zum Aufnehmen.",
-        "Captures the screen under the pointer immediately, with no overlay or delay — useful for transient menus and tooltips.":
-            "Nimmt den Bildschirm unter dem Zeiger sofort auf — ohne Auswahl, ohne Verzögerung — ideal für flüchtige Menüs und Tooltips.",
         "Force-quits m_capture and any duplicate instances — use if the menu bar icon is stuck or duplicated.":
             "Beendet m_capture und doppelte Instanzen sofort — falls das Menüleisten-Symbol hängt oder doppelt erscheint.",
         "Draw on Screen": "Auf dem Bildschirm zeichnen",
@@ -274,6 +274,9 @@ enum L10n {
         "Circle": "Kreis",
         "Line": "Linie",
         "Arrow": "Pfeil",
+        "No background": "Ohne Hintergrund",
+        "Filled box": "Gefülltes Feld",
+        "Outlined box": "Umrissenes Feld",
         "Thin": "Dünn",
         "Thick": "Dick",
         "Heavy": "Sehr dick",
@@ -283,13 +286,15 @@ enum L10n {
         "Never — clear manually": "Nie — manuell löschen",
         "Color of marks drawn on screen while recording.":
             "Farbe der Markierungen, die während der Aufnahme auf den Bildschirm gezeichnet werden.",
-        "How long a finished mark stays before it fades. \"Never\" keeps marks until you clear them with ⌫.":
+        "How long a finished mark stays before it fades. “Never” keeps marks until you clear them with ⌫.":
             "Wie lange eine fertige Markierung sichtbar bleibt, bevor sie ausblendet. «Nie» behält sie, bis Sie mit ⌫ löschen.",
         "Press this key while drawing to switch to this tool. Draw mode reserves Esc to exit and ⌫ to clear.":
             "Diese Taste während des Zeichnens drücken, um zu diesem Werkzeug zu wechseln. Esc beendet den Zeichenmodus, ⌫ löscht alles.",
+        "Type shortcut…": "Kurzbefehl eingeben…",
+        "Help": "Hilfe",
         "Press a key…": "Taste drücken…",
         "Key already in use": "Taste bereits belegt",
-        "%@ is already used by \"%@\". Choose a different key.":
+        "%@ is already used by “%@”. Choose a different key.":
             "%@ wird bereits von «%@» verwendet. Bitte eine andere Taste wählen.",
         "OK": "OK",
 
@@ -327,9 +332,7 @@ enum L10n {
         "Copy to clipboard": "In Zwischenablage kopieren",
         "Record": "Aufnehmen",
         "Force Quit": "Sofort beenden",
-        "Small": "Klein",
         "Medium": "Mittel",
-        "Large": "Gross",
         "Square": "Eckig",
         "High (8 Mbps)": "Hoch (8 Mbit/s)",
         "Medium (4 Mbps)": "Mittel (4 Mbit/s)",
@@ -364,17 +367,17 @@ enum L10n {
         "Copy text / QR (OCR) — drag over text or a QR code  (⌘T)":
             "Text / QR kopieren (OCR) — über Text oder QR-Code ziehen  (⌘T)",
         "Arrow — point to an area  (A)": "Pfeil — auf einen Bereich zeigen  (A)",
-        "Line — straight line  (L)": "Linie — gerade Linie  (L)",
-        "Rectangle — box outline  (R)": "Rechteck — Rahmen  (R)",
-        "Ellipse — oval outline  (O)": "Ellipse — ovaler Rahmen  (O)",
-        "Rounded rectangle — rounded box  (U)": "Abgerundetes Rechteck  (U)",
-        "Triangle — triangle outline  (G)": "Dreieck  (G)",
-        "Diamond — diamond outline  (D)": "Raute  (D)",
-        "Star — 5-point star outline  (Y)": "Stern — 5-zackiger Stern  (Y)",
-        "Checkmark — check mark  (K)": "Häkchen  (K)",
-        "Pentagon — 5-sided outline  (5)": "Fünfeck  (5)",
-        "Hexagon — 6-sided outline  (6)": "Sechseck  (6)",
-        "Octagon — 8-sided outline  (8)": "Achteck  (8)",
+        "Line  (L)": "Linie  (L)",
+        "Rectangle  (R)": "Rechteck  (R)",
+        "Ellipse  (O)": "Ellipse  (O)",
+        "Rounded rectangle  (U)": "Abgerundetes Rechteck  (U)",
+        "Triangle  (G)": "Dreieck  (G)",
+        "Diamond  (D)": "Raute  (D)",
+        "Star  (Y)": "Stern  (Y)",
+        "Checkmark  (K)": "Häkchen  (K)",
+        "Pentagon  (5)": "Fünfeck  (5)",
+        "Hexagon  (6)": "Sechseck  (6)",
+        "Octagon  (8)": "Achteck  (8)",
         "Eyedropper — pick a color from the image  (I)": "Pipette — Farbe aus dem Bild aufnehmen  (I)",
         "%@ color": "Farbe %@",
         "Custom color — pick any hue": "Eigene Farbe — beliebigen Ton wählen",
@@ -401,8 +404,8 @@ enum L10n {
     static let vietnamese: [String: String] = [
         "Language": "Ngôn ngữ",
         "System": "Hệ thống",
-        "Interface language. \"System\" follows the macOS language; changes apply after a restart.":
-            "Ngôn ngữ giao diện. \"Hệ thống\" theo ngôn ngữ macOS; thay đổi có hiệu lực sau khi khởi động lại.",
+        "Interface language. “System” follows the macOS language; changes apply after a restart.":
+            "Ngôn ngữ giao diện. “Hệ thống” theo ngôn ngữ macOS; thay đổi có hiệu lực sau khi khởi động lại.",
         "Language changed": "Đã đổi ngôn ngữ",
         "Restart m_capture to apply the new language.": "Khởi động lại m_capture để áp dụng ngôn ngữ mới.",
         "Restart Now": "Khởi động lại ngay",
@@ -410,7 +413,7 @@ enum L10n {
         "History": "Lịch sử",
         "HISTORY": "LỊCH SỬ",
         "No captures yet.": "Chưa có ảnh chụp nào.",
-        "Screenshots and recordings you take appear here.":
+        "Screenshots and recordings appear here.":
             "Ảnh chụp và bản ghi của bạn sẽ xuất hiện ở đây.",
         "Today": "Hôm nay",
         "Yesterday": "Hôm qua",
@@ -425,7 +428,7 @@ enum L10n {
         "Move to Trash?": "Chuyển vào Thùng rác?",
         "Moved to Trash": "Đã chuyển vào Thùng rác",
         "Copied to clipboard": "Đã sao chép vào bảng nhớ tạm",
-        "Capture failed. Please try again.": "Chụp màn hình không thành công. Vui lòng thử lại.",
+        "Capture failed. Try again.": "Chụp màn hình không thành công. Vui lòng thử lại.",
         "Recording": "Bản ghi hình",
         "Discard Recording": "Huỷ bản ghi",
         "Start with the recording bar minimized": "Bắt đầu với thanh ghi hình thu nhỏ",
@@ -466,7 +469,7 @@ enum L10n {
         "GitHub is rate-limiting update checks right now. Try again later.":
             "GitHub đang giới hạn tần suất kiểm tra cập nhật. Vui lòng thử lại sau.",
         "Automatic update checks are failing — check network access to GitHub.": "Kiểm tra cập nhật tự động đang thất bại — hãy kiểm tra kết nối mạng tới GitHub.",
-        "Updates can't be installed — move m_capture to your Applications folder.":
+        "Updates cannot be installed — move m_capture to your Applications folder.":
             "Không thể cài bản cập nhật — hãy chuyển m_capture vào thư mục Applications.",
         "Relaunch to Finish Update": "Khởi động lại để hoàn tất cập nhật",
         "Relaunch now?": "Khởi động lại ngay?",
@@ -498,7 +501,6 @@ enum L10n {
 
         // ── Save / capture alerts ────────────────────────────────────────
         "Unable to save the capture": "Không thể lưu ảnh chụp",
-        "Unable to save the image": "Không thể lưu hình ảnh",
         "Saving failed. Check your save folder in Settings → Output.":
             "Lưu thất bại. Kiểm tra thư mục lưu trong Cài đặt → Xuất.",
         "Saved to the Desktop": "Đã lưu vào Desktop",
@@ -522,8 +524,8 @@ enum L10n {
         "Discard recording?": "Huỷ bản ghi?",
         "Discard recording": "Huỷ bản ghi",
         "Shortcut already in use": "Phím tắt đã được sử dụng",
-        "%@ is already used by \"%@\". Choose a different combination.":
-            "%@ đã được dùng cho \"%@\". Vui lòng chọn tổ hợp khác.",
+        "%@ is already used by “%@”. Choose a different combination.":
+            "%@ đã được dùng cho “%@”. Vui lòng chọn tổ hợp khác.",
         "This recording will be deleted.": "Bản ghi này sẽ bị xoá.",
         "Keep Recording": "Tiếp tục ghi",
         "Stop recording?": "Dừng ghi hình?",
@@ -531,7 +533,8 @@ enum L10n {
         "Ask before stopping a recording": "Hỏi trước khi dừng ghi hình",
         "Recording stopped": "Đã dừng ghi hình",
         "The recording ended unexpectedly.": "Bản ghi kết thúc ngoài dự kiến.",
-        " The partial recording was saved.": " Phần đã ghi được lưu lại.",
+        "The recording ended unexpectedly. The partial recording was saved.":
+            "Bản ghi kết thúc ngoài dự kiến. Phần đã ghi được lưu lại.",
         "Recording failed to start": "Không thể bắt đầu ghi hình",
         "If the Screen Recording permission was reset, re-approve it in System Settings and try again.":
             "Nếu quyền Ghi màn hình vừa bị đặt lại, hãy cấp lại trong Cài đặt hệ thống rồi thử lại.",
@@ -550,6 +553,8 @@ enum L10n {
         "Pause": "Tạm dừng",
         "Resume": "Tiếp tục",
         "Stop": "Dừng",
+        "Minimize to the menu bar — control from the m. menu":
+            "Thu nhỏ vào thanh menu — điều khiển từ menu m.",
         "Minimize": "Thu nhỏ",
 
         // ── Pin window menu ──────────────────────────────────────────────
@@ -616,8 +621,6 @@ enum L10n {
             "Kéo chọn vùng, hoặc bấm Space để chụp cửa sổ / màn hình.",
         "Drag to select a region, or press Space to record a window or screen.":
             "Kéo chọn vùng, hoặc bấm Space để quay cửa sổ / màn hình.",
-        "Captures the screen under the pointer immediately, with no overlay or delay — useful for transient menus and tooltips.":
-            "Chụp ngay màn hình dưới con trỏ — không lớp chọn, không trễ — hữu ích với menu và tooltip dễ biến mất.",
         "Force-quits m_capture and any duplicate instances — use if the menu bar icon is stuck or duplicated.":
             "Buộc thoát m_capture và các bản trùng lặp — dùng khi biểu tượng thanh menu bị kẹt hoặc nhân đôi.",
         "Draw on Screen": "Vẽ lên màn hình",
@@ -639,6 +642,9 @@ enum L10n {
         "Circle": "Hình tròn",
         "Line": "Đường thẳng",
         "Arrow": "Mũi tên",
+        "No background": "Không có nền",
+        "Filled box": "Khung tô đầy",
+        "Outlined box": "Khung viền",
         "Thin": "Mỏng",
         "Thick": "Dày",
         "Heavy": "Rất dày",
@@ -648,14 +654,16 @@ enum L10n {
         "Never — clear manually": "Không bao giờ — xoá thủ công",
         "Color of marks drawn on screen while recording.":
             "Màu của nét vẽ lên màn hình trong khi ghi hình.",
-        "How long a finished mark stays before it fades. \"Never\" keeps marks until you clear them with ⌫.":
-            "Thời gian một nét vẽ hiển thị trước khi mờ dần. «Không bao giờ» giữ nét cho đến khi bạn xoá bằng ⌫.",
+        "How long a finished mark stays before it fades. “Never” keeps marks until you clear them with ⌫.":
+            "Thời gian một nét vẽ hiển thị trước khi mờ dần. “Không bao giờ” giữ nét cho đến khi bạn xoá bằng ⌫.",
         "Press this key while drawing to switch to this tool. Draw mode reserves Esc to exit and ⌫ to clear.":
             "Nhấn phím này khi đang vẽ để chuyển sang công cụ này. Chế độ vẽ dành riêng Esc để thoát và ⌫ để xoá.",
+        "Type shortcut…": "Nhập phím tắt…",
+        "Help": "Trợ giúp",
         "Press a key…": "Nhấn một phím…",
         "Key already in use": "Phím đã được dùng",
-        "%@ is already used by \"%@\". Choose a different key.":
-            "%@ đã được «%@» sử dụng. Vui lòng chọn phím khác.",
+        "%@ is already used by “%@”. Choose a different key.":
+            "%@ đã được “%@” sử dụng. Vui lòng chọn phím khác.",
         "OK": "OK",
 
         "Stop Drawing": "Dừng vẽ",
@@ -692,9 +700,7 @@ enum L10n {
         "Copy to clipboard": "Sao chép vào bảng nhớ tạm",
         "Record": "Quay",
         "Force Quit": "Buộc thoát",
-        "Small": "Nhỏ",
         "Medium": "Vừa",
-        "Large": "Lớn",
         "Square": "Vuông",
         "High (8 Mbps)": "Cao (8 Mbps)",
         "Medium (4 Mbps)": "Vừa (4 Mbps)",
@@ -729,17 +735,17 @@ enum L10n {
         "Copy text / QR (OCR) — drag over text or a QR code  (⌘T)":
             "Sao chép văn bản / QR (OCR) — kéo qua văn bản hoặc mã QR  (⌘T)",
         "Arrow — point to an area  (A)": "Mũi tên — chỉ vào một vùng  (A)",
-        "Line — straight line  (L)": "Đường thẳng  (L)",
-        "Rectangle — box outline  (R)": "Chữ nhật — khung viền  (R)",
-        "Ellipse — oval outline  (O)": "Elip — viền bầu dục  (O)",
-        "Rounded rectangle — rounded box  (U)": "Chữ nhật bo góc  (U)",
-        "Triangle — triangle outline  (G)": "Tam giác  (G)",
-        "Diamond — diamond outline  (D)": "Hình thoi  (D)",
-        "Star — 5-point star outline  (Y)": "Ngôi sao 5 cánh  (Y)",
-        "Checkmark — check mark  (K)": "Dấu tích  (K)",
-        "Pentagon — 5-sided outline  (5)": "Ngũ giác  (5)",
-        "Hexagon — 6-sided outline  (6)": "Lục giác  (6)",
-        "Octagon — 8-sided outline  (8)": "Bát giác  (8)",
+        "Line  (L)": "Đường thẳng  (L)",
+        "Rectangle  (R)": "Chữ nhật  (R)",
+        "Ellipse  (O)": "Elip  (O)",
+        "Rounded rectangle  (U)": "Chữ nhật bo góc  (U)",
+        "Triangle  (G)": "Tam giác  (G)",
+        "Diamond  (D)": "Hình thoi  (D)",
+        "Star  (Y)": "Ngôi sao  (Y)",
+        "Checkmark  (K)": "Dấu tích  (K)",
+        "Pentagon  (5)": "Ngũ giác  (5)",
+        "Hexagon  (6)": "Lục giác  (6)",
+        "Octagon  (8)": "Bát giác  (8)",
         "Eyedropper — pick a color from the image  (I)": "Ống hút màu — lấy màu từ ảnh  (I)",
         "%@ color": "Màu %@",
         "Custom color — pick any hue": "Màu tuỳ chọn — chọn tông bất kỳ",

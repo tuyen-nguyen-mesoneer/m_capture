@@ -96,7 +96,7 @@ final class VideoRecordBar: NSObject {
         card.addSubview(recLabel)
 
         // Timer — monospaced digits so the width doesn't jitter each tick.
-        timerLabel.font = NSFont.monospacedDigitSystemFont(ofSize: 13, weight: .semibold)
+        timerLabel.font = Theme.monoDigitFont(13, .semibold)
         timerLabel.textColor = Theme.textPrimary
         let timerH = timerLabel.intrinsicContentSize.height
         timerLabel.frame = NSRect(x: 72, y: rowCenter - timerH / 2, width: 72, height: timerH)
@@ -121,13 +121,13 @@ final class VideoRecordBar: NSObject {
         let mini = BarIconButton()
         mini.isBordered = false
         mini.imagePosition = .imageOnly
-        mini.image = NSImage(systemSymbolName: "minus.circle", accessibilityDescription: "Minimize to menu bar")?
+        mini.image = NSImage(systemSymbolName: "minus.circle", accessibilityDescription: L("Minimize"))?
             .withSymbolConfiguration(.init(pointSize: 13, weight: .semibold))
         mini.contentTintColor = Theme.textSecondary
         mini.frame = NSRect(x: contentRight - badgeW - 10 - miniSize,
                             y: statusRowY + (statusRowH - miniSize) / 2, width: miniSize, height: miniSize)
         mini.target = self; mini.action = #selector(minimizePressed)
-        mini.toolTip = "Minimize to the menu bar — control from the m. menu"
+        mini.toolTip = L("Minimize to the menu bar — control from the m. menu")
         card.addSubview(mini)
 
         // Draw-on-screen toggle, left of the minimize button. Absent for window targets,
@@ -135,7 +135,7 @@ final class VideoRecordBar: NSObject {
         if canDraw {
             drawBtn.isBordered = false
             drawBtn.imagePosition = .imageOnly
-            drawBtn.image = NSImage(systemSymbolName: "pencil.tip", accessibilityDescription: "Draw on screen")?
+            drawBtn.image = NSImage(systemSymbolName: "pencil.tip", accessibilityDescription: L("Draw on Screen"))?
                 .withSymbolConfiguration(.init(pointSize: 13, weight: .semibold))
             drawBtn.contentTintColor = Theme.textSecondary
             drawBtn.frame = NSRect(x: contentRight - badgeW - 10 - miniSize - 8 - miniSize,
@@ -151,7 +151,7 @@ final class VideoRecordBar: NSObject {
             zoomBtn.isBordered = false
             zoomBtn.imagePosition = .imageOnly
             zoomBtn.image = NSImage(systemSymbolName: "plus.magnifyingglass",
-                                    accessibilityDescription: "Zoom while recording")?
+                                    accessibilityDescription: L("Zoom While Recording"))?
                 .withSymbolConfiguration(.init(pointSize: 13, weight: .semibold))
             zoomBtn.contentTintColor = Theme.textSecondary
             zoomBtn.frame = NSRect(x: contentRight - badgeW - 10 - miniSize - 8 - miniSize - 8 - miniSize,
@@ -189,7 +189,7 @@ final class VideoRecordBar: NSObject {
     func setZoomActive(_ active: Bool) {
         zoomBtn.contentTintColor = active ? Theme.lavender : Theme.textSecondary
         zoomBtn.image = NSImage(systemSymbolName: active ? "minus.magnifyingglass" : "plus.magnifyingglass",
-                                accessibilityDescription: "Zoom while recording")?
+                                accessibilityDescription: L("Zoom While Recording"))?
             .withSymbolConfiguration(.init(pointSize: 13, weight: .semibold))
     }
 

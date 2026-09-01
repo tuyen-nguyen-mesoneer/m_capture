@@ -5,7 +5,7 @@ set -euo pipefail
 DIR="$(cd "$(dirname "$0")" && pwd)"
 BUILD="$DIR/build"
 APP="$BUILD/m_capture.app"
-VERSION="1.7.7"
+VERSION="1.8.0"
 
 # `./build.sh --run` quits any running instance, relaunches from build/, and
 # skips the DMG — the fast dev loop. Plain `./build.sh` builds the DMG too.
@@ -60,6 +60,14 @@ if [ "$RUN" != "1" ]; then
     AUTO_INSTALL_PLIST=$'\n    <key>MCAutoInstall</key><true/>'
 fi
 
+echo "==> Bundling brand fonts"
+# Open Sans is the mesoneer corporate typeface (Theme.font). ATSApplicationFontsPath
+# registers everything in this folder at launch; Theme also registers it explicitly so
+# tools/shots.swift, which draws with Theme outside the bundle, gets the same faces.
+mkdir -p "$APP/Contents/Resources/Fonts"
+cp "$DIR/Resources/Fonts/OpenSans-Variable.ttf" "$APP/Contents/Resources/Fonts/"
+cp "$DIR/Resources/Fonts/OFL.txt" "$APP/Contents/Resources/Fonts/"
+
 echo "==> Writing Info.plist"
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -77,6 +85,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
     <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
     <key>LSMinimumSystemVersion</key><string>14.0</string>
     <key>NSHighResolutionCapable</key><true/>
+    <key>ATSApplicationFontsPath</key><string>Fonts</string>
     <key>NSScreenCaptureUsageDescription</key><string>m_capture captures your screen to take screenshots.</string>
     <key>NSHumanReadableCopyright</key><string>© 2026 mesoneer AG. MIT License.</string>${AUTO_INSTALL_PLIST}
 </dict>
@@ -84,9 +93,19 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 PLIST
 
 echo "==> Generating app icon"
-# makeicon.swift writes the multi-resolution .icns directly (no sips/iconutil,
-# which would otherwise need a system temp dir).
-swift "$DIR/tools/makeicon.swift" "$APP/Contents/Resources/m_capture.icns"
+# makeicon writes the multi-resolution .icns directly (no sips/iconutil, which would
+# otherwise need a system temp dir). It is *compiled against the app's own* Logo.swift +
+# Theme.swift rather than run as a standalone script, so the icon is the same official
+# brand vector the menu and About card draw — one definition, no copy of the logo to go
+# stale. swiftc puts top-level code only in a file called main.swift, hence the copy.
+ICONGEN="$BUILD/icongen"
+mkdir -p "$ICONGEN"
+cp "$DIR/tools/makeicon.swift" "$ICONGEN/main.swift"
+swiftc -swift-version 5 -O -o "$ICONGEN/makeicon" \
+    "$ICONGEN/main.swift" "$DIR/Sources/Logo.swift" "$DIR/Sources/Theme.swift" \
+    -framework AppKit
+"$ICONGEN/makeicon" "$APP/Contents/Resources/m_capture.icns"
+rm -rf "$ICONGEN"
 
 echo "==> Code signing"
 # A *stable* signing identity is what lets macOS keep the Screen Recording grant across
