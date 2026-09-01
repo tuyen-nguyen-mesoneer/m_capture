@@ -4,20 +4,20 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>m_capture | mesoneer screen capture</title>
-<meta name="description" content="A lightweight macOS menu-bar tool for screenshots and screen recording. Capture a region, annotate it in place, and copy or save — built in Swift with zero dependencies. By mesoneer AG.">
+<meta name="description" content="A lightweight macOS menu-bar tool for screenshots and screen recording by mesoneer AG. Press a hotkey, drag a region, annotate in place, then copy or save.">
 <meta property="og:title" content="m_capture | mesoneer screen capture">
 <meta property="og:description" content="Capture a region, annotate it in place, and copy or save. Swift + AppKit, zero dependencies. An internal tool by mesoneer AG.">
 <meta property="og:type" content="website">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='1' x2='1' y2='0'%3E%3Cstop offset='0' stop-color='%232a2048'/%3E%3Cstop offset='1' stop-color='%23412880'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='64' height='64' fill='url(%23g)'/%3E%3Ctext x='32' y='44' font-family='Open Sans,sans-serif' font-size='38' font-weight='700' fill='%23fff' text-anchor='middle'%3Em.%3C/text%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 500 500'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='73.22' y1='426.78' x2='426.78' y2='73.22' gradientUnits='userSpaceOnUse'%3E%3Cstop offset='.21' stop-color='%23191527'/%3E%3Cstop offset='.57' stop-color='%23302553'/%3E%3Cstop offset='.83' stop-color='%23191527'/%3E%3C/linearGradient%3E%3C/defs%3E%3Ccircle cx='250' cy='250' r='250' fill='url(%23g)'/%3E%3Cpath fill='%23fff' d='M322.49%20233.21V325h-35.82v-86.19c0-22.39-6.44-31.34-23.79-31.34-15.67%200-27.71%2016.79-27.71%2043.1v74.44h-35.82v-82.84c0-22.39-3.08-34.7-21.27-34.7s-30.22%2020.71-30.22%2049.25V325h-35.82V177.24h35.82v8.4c0%207.28-1.96%2011.47-4.76%2017.63-1.12%202.52-1.96%205.32.84%206.16s3.92-1.68%204.48-3.08c7.56-19.31%2021.27-31.34%2040.86-31.34s31.62%2012.03%2035.54%2029.11c.56%201.96%201.96%202.8%204.2%202.8%201.68%200%203.08-.56%203.92-2.52%208.39-18.75%2023.23-29.38%2040.86-29.38%2025.75%200%2048.69%2013.99%2048.69%2058.21Zm65.47%2051.49V325h-40.3v-40.3z'/%3E%3C/svg%3E">
 <style>
   @font-face{
-    font-family:'Open Sans';font-style:normal;font-weight:300 800;font-display:swap;
+    font-family:'Open Sans';font-style:normal;font-weight:400 700;font-display:swap;
     src:url('assets/fonts/open-sans-latin.woff2') format('woff2');
     unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
   }
   :root{
-    --base:#191528; --base2:#120d20;
-    --purple:#432a84; --lavender:#d5baff;
+    --base:#191528; --base2:#191528;
+    --purple:#422982; --lavender:#d5baff;
     --ink:#fff; --ink-dim:rgba(255,255,255,.72); --ink-mute:rgba(255,255,255,.5);
     --border:rgba(255,255,255,.12); --hairline:rgba(255,255,255,.16);
     --maxw:1424px;
@@ -54,12 +54,14 @@
   .brand{display:flex;align-items:center;gap:12px;font-weight:700;letter-spacing:-.01em}
   .nav-menu{flex:1;display:flex;justify-content:center;gap:28px}
   .nav-right{display:flex;align-items:center;gap:24px}
+  /* The mesoneer brand icon, as the official vector. The "m." is set in PolySans, which
+     the brand reserves for the logo and which we can't ship — so it has to be the real
+     outline, not a substitute face typeset in the UI font. Circular because the Brand
+     Icon guidelines define the mark that way: the one deliberate exception to the
+     square-cornered rule. White variation, because this header is dark. */
   .logo{
-    width:34px;height:34px;border-radius:0;flex:none;color:#fff;
-    background:linear-gradient(45deg,#2a2048,#412880);
-    border:1px solid rgba(255,255,255,.14);
-    display:grid;place-items:center;font-weight:700;font-size:18px;
-    box-shadow:0 4px 14px rgba(0,0,0,.35);
+    width:34px;height:34px;flex:none;display:block;
+    filter:drop-shadow(0 4px 14px rgba(0,0,0,.35));
   }
   .nav-menu a{color:rgba(255,255,255,.9);font-size:16px;font-weight:400;transition:color .15s}
   .nav-menu a:hover{color:var(--ink)}
@@ -68,7 +70,7 @@
     background:#fff;color:#191528!important;font-weight:600;letter-spacing:-.01em;line-height:20px;
     padding:10px 20px;border-radius:0;font-size:16px;transition:background .15s;
   }
-  .nav-cta:hover{background:#ececec}
+  .nav-cta:hover{background:#dadada}
   .lang{display:flex;align-items:center;gap:9px;font-size:16px;font-weight:400}
   .lang button{
     background:none;border:0;cursor:pointer;font:inherit;color:var(--ink-dim);
@@ -90,7 +92,7 @@
     transition:background .15s,border-color .15s;
   }
   .btn-primary{background:#fff;color:#191528}
-  .btn-primary:hover{background:#ececec}
+  .btn-primary:hover{background:#dadada}
   .btn-ghost{background:rgba(255,255,255,.08);color:var(--ink);border:1px solid rgba(255,255,255,.16)}
   .btn-ghost:hover{background:rgba(255,255,255,.14)}
 
@@ -98,12 +100,12 @@
   .hero{position:relative;padding:64px 0 80px;text-align:center;overflow:hidden}
   .hero .eyebrow{margin-bottom:32px}
   /* matches mesoneer.io's hero: a flat base with a single soft purple glow on
-     the upper-right (brand peak ≈#432a84 at ~90%/32%), deepening toward the
+     the upper-right (brand peak ≈#422982 at ~90%/32%), deepening toward the
      bottom — not a diagonal wash, and no second glow on the left. */
   .hero::before{
     content:"";position:absolute;inset:0;z-index:-1;
     background:
-      radial-gradient(780px 600px at 90% 32%, rgba(67,42,132,.5), transparent 60%),
+      radial-gradient(780px 600px at 90% 32%, rgba(66,41,130,.5), transparent 60%),
       linear-gradient(180deg, var(--base) 62%, var(--base2));
   }
   .hero h1{font-size:clamp(28px,5.2vw,56px);letter-spacing:-.03em;line-height:1.15;max-width:900px;margin:0 auto 22px;white-space:nowrap}
@@ -115,10 +117,15 @@
   .lede{max-width:720px;margin:0 auto 36px;font-size:16px;line-height:1.5;color:rgba(255,255,255,.9);text-wrap:balance}
   .cta-row{position:relative;display:flex;align-items:center;gap:14px;justify-content:center;flex-wrap:wrap;margin-bottom:32px}
   /* brand accent anchored far-left, vertically level with the CTA buttons (mesoneer.io) */
+  /* The brand's Gradient 3 — Signal Purple → Lavender Ease → Vibrant Coral, horizontal.
+     The guidelines reserve it "exclusively for lines", and this decorative rule is the
+     one line on the page, so it is the element that should carry it. The transparent
+     lead-in is kept so the bar fades in from the page edge rather than starting on a
+     hard stop; the three brand stops occupy the rest. */
   .accent-bar{
     position:absolute;left:0;top:70%;transform:translateY(-50%);
     width:280px;height:20px;border-radius:0;
-    background:linear-gradient(90deg,transparent,var(--purple) 22%,var(--lavender));
+    background:linear-gradient(90deg,transparent,#422982 22%,#c39cff 61%,#ff6d6a);
   }
   /* hide once the centered buttons would collide with the left-anchored bar */
   @media(max-width:1200px){.accent-bar{display:none}}
@@ -131,8 +138,8 @@
   /* ---------- hero product shot (anchored in the hero, mesoneer-style) ---------- */
   .hero-shot{
     position:relative;margin:56px auto 0;overflow:hidden;
-    border:1px solid var(--hairline);background:var(--base2);
-    box-shadow:0 30px 80px -24px rgba(0,0,0,.8), 0 0 110px -16px rgba(123,82,205,.32);
+    border:1px solid var(--hairline);background:#2b2049;
+    box-shadow:0 30px 80px -24px rgba(0,0,0,.8), 0 0 110px -16px rgba(195,156,255,.32);
   }
   .hero-shot img{width:100%;display:block}
 
@@ -140,24 +147,24 @@
   section{padding:92px 0;position:relative}
   @media(max-width:560px){section{padding:58px 0}}
   .glow-r::before,.glow-l::before{content:"";position:absolute;inset:0;z-index:-1;pointer-events:none}
-  .glow-r::before{background:radial-gradient(560px 420px at 88% 16%,rgba(83,58,163,.34),transparent 60%)}
-  .glow-l::before{background:radial-gradient(560px 420px at 12% 16%,rgba(67,42,132,.3),transparent 60%)}
+  .glow-r::before{background:radial-gradient(560px 420px at 88% 16%,rgba(85,62,143,.34),transparent 60%)}
+  .glow-l::before{background:radial-gradient(560px 420px at 12% 16%,rgba(66,41,130,.3),transparent 60%)}
   /* alternating light sections (pale mesoneer panels) between the purple ones, so the
      page reads as light / purple / light / purple, separated by strong contrast */
-  .light{background:#eceaf3;color:#1b1430}
-  .light .eyebrow{color:#6e6781}
-  .light .sec-head p{color:#5b556a}
+  .light{background:#eceaf3;color:#191528}
+  .light .eyebrow{color:rgba(25,21,40,.6)}
+  .light .sec-head p{color:rgba(25,21,40,.72)}
   /* install steps: dark text + purple number badges; the command block stays dark */
-  .light .istep p{color:#5b556a}
-  .light .istep .n{background:linear-gradient(145deg,rgba(67,42,132,.12),rgba(67,42,132,.03));border-color:rgba(67,42,132,.22);color:#432a84}
+  .light .istep p{color:rgba(25,21,40,.72)}
+  .light .istep .n{background:linear-gradient(145deg,rgba(66,41,130,.12),rgba(66,41,130,.03));border-color:rgba(66,41,130,.22);color:#422982}
   /* the pale panel needs its own hover: the dark side's lavender → #fff would
      land white text on a #eceaf3 background, i.e. an invisible link */
-  .light .istep a{color:#432a84}
-  .light .istep a:hover{color:#1b1430}
-  .light .istep strong{color:#1b1430}
-  .light .istep p code{color:#432a84;background:rgba(67,42,132,.08);border-color:rgba(67,42,132,.18)}
-  .light .istep .route{color:#1b1430}
-  .light .route-alt{border-top-color:rgba(67,42,132,.14)}
+  .light .istep a{color:#422982}
+  .light .istep a:hover{color:#191528}
+  .light .istep strong{color:#191528}
+  .light .istep p code{color:#422982;background:rgba(66,41,130,.08);border-color:rgba(66,41,130,.18)}
+  .light .istep .route{color:#191528}
+  .light .route-alt{border-top-color:rgba(66,41,130,.14)}
   .sec-head{text-align:center;max-width:660px;margin:0 auto 58px}
   .sec-head h2{font-size:clamp(30px,4.4vw,46px);line-height:1.2;margin-bottom:16px}
   .sec-head p{color:var(--ink-dim);font-size:18px}
@@ -170,33 +177,37 @@
     position:relative;overflow:hidden;
     background:linear-gradient(180deg,rgba(48,35,85,.5),rgba(25,21,40,.35));
     border:1px solid var(--border);border-radius:0;padding:36px 32px;
-    transition:transform .18s,border-color .18s,box-shadow .18s,background .18s;
+    transition:border-color .18s,box-shadow .18s,background .18s;
   }
   /* lavender accent rule that wipes in on hover (corners stay square) */
   .card::before{content:"";position:absolute;left:0;right:0;top:0;height:3px;
     background:linear-gradient(90deg,var(--lavender),var(--purple));
     transform:scaleX(0);transform-origin:left;transition:transform .25s ease}
-  .card:hover{transform:translateY(-4px);border-color:rgba(213,186,255,.45);
-    background:linear-gradient(180deg,rgba(58,42,103,.55),rgba(25,21,40,.4));
+  /* Hover changes colour and depth but NOT position: the cards sit on a grid, and lifting
+     one used to shift it out of line with its row neighbours. The accent rule wiping in,
+     the lavender border, the lighter fill, the shadow and the icon glow are the hover
+     affordance — don't reintroduce a translate here. */
+  .card:hover{border-color:rgba(213,186,255,.45);
+    background:linear-gradient(180deg,rgba(50,36,91,.55),rgba(25,21,40,.4));
     box-shadow:0 24px 50px -28px rgba(0,0,0,.7)}
   .card:hover::before{transform:scaleX(1)}
   /* glowing circular node, matching the How-it-works steps and mesoneer's OFFERING */
   .ic{
     width:60px;height:60px;border-radius:50%;display:grid;place-items:center;margin-bottom:24px;color:var(--lavender);
-    background:radial-gradient(circle at 50% 38%,#2a2048,#120d20);
+    background:radial-gradient(circle at 50% 38%,#2b2049,#191528);
     border:1px solid rgba(213,186,255,.4);
     box-shadow:0 0 30px rgba(213,186,255,.22),inset 0 0 16px rgba(213,186,255,.12);
     transition:background .18s,border-color .18s,box-shadow .18s;
   }
   .card:hover .ic{border-color:rgba(213,186,255,.6);box-shadow:0 0 42px rgba(213,186,255,.4),inset 0 0 16px rgba(213,186,255,.18);
-    background:radial-gradient(circle at 50% 38%,#33265f,#15102a)}
+    background:radial-gradient(circle at 50% 38%,#32245b,#191528)}
   .ic svg{width:28px;height:28px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
   .card h3{font-size:18px;margin-bottom:10px;letter-spacing:-.01em}
   .card p{color:var(--ink-dim);font-size:15px;line-height:1.62}
   /* "What's inside" header: larger heading + more breathing room (lavender eyebrow from base) */
   #features .sec-head{margin-bottom:64px}
   #features .sec-head h2{font-size:clamp(32px,4.8vw,50px)}
-  @media(prefers-reduced-motion:reduce){.card,.card::before,.ic{transition:none}.card:hover{transform:none}}
+  @media(prefers-reduced-motion:reduce){.card,.card::before,.ic{transition:none}}
 
   /* how it works — vertical journey with a curved glowing connector (mesoneer.io offering style) */
   /* padding-top gives the lead-in sweep room to fall from the centered heading
@@ -213,7 +224,7 @@
   @media(max-width:760px){.step{grid-template-columns:1fr;min-height:0;text-align:center}}
   .step .node{
     justify-self:center;width:72px;height:72px;border-radius:50%;display:grid;place-items:center;color:var(--lavender);
-    background:radial-gradient(circle at 50% 38%,#2a2048,#120d20);
+    background:radial-gradient(circle at 50% 38%,#2b2049,#191528);
     border:1px solid rgba(213,186,255,.4);
     box-shadow:0 0 36px rgba(213,186,255,.32),inset 0 0 18px rgba(213,186,255,.12);
   }
@@ -226,7 +237,7 @@
   .step p{color:var(--ink-dim);font-size:15px;line-height:1.55}
   kbd{
     font-family:var(--font);font-size:12.5px;font-weight:700;color:var(--lavender);
-    background:rgba(213,186,255,.1);border:1px solid rgba(213,186,255,.3);border-radius:2px;padding:2px 7px;white-space:nowrap;
+    background:rgba(213,186,255,.1);border:1px solid rgba(213,186,255,.3);border-radius:0;padding:2px 7px;white-space:nowrap;
   }
 
   /* install — numbered setup steps with a copyable Terminal command */
@@ -245,17 +256,17 @@
   .istep strong{color:var(--ink);font-weight:600}
   .istep p code{
     font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.88em;color:var(--lavender);
-    background:rgba(213,186,255,.1);border:1px solid rgba(213,186,255,.22);border-radius:2px;padding:1px 6px;white-space:nowrap;
+    background:rgba(213,186,255,.1);border:1px solid rgba(213,186,255,.22);border-radius:0;padding:1px 6px;white-space:nowrap;
   }
   /* installing is one step with two routes: each route gets a label, and a rule
      divides them, so a reader who ran the brew command can see the rest of the step
      is the alternative rather than a continuation of it */
   .istep .route{font-weight:700;color:var(--ink)}
   .route-alt{margin-top:24px;padding-top:22px;border-top:1px solid var(--hairline)}
-  .cmd{display:flex;align-items:center;gap:12px;margin-top:14px;background:#0d0a18;border:1px solid var(--hairline);padding:11px 12px 11px 16px}
+  .cmd{display:flex;align-items:center;gap:12px;margin-top:14px;background:#191528;border:1px solid var(--hairline);padding:11px 12px 11px 16px}
   .cmd code{
     flex:1;min-width:0;overflow-x:auto;white-space:nowrap;
-    font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;color:#e8e2f5;
+    font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;color:#eceaf3;
   }
   .cmd button{
     flex:none;cursor:pointer;font:inherit;font-size:12.5px;font-weight:600;letter-spacing:.01em;
@@ -303,20 +314,20 @@
   /* feedback — light CTA panel (mesoneer.io "Join us" style): a pale lavender
      band with left-aligned copy and a code-drawn idea mark on the right, sitting
      between the dark releases section and the dark footer for the same rhythm */
-  .feedback{padding:0;background:#eceaf3;color:#1b1430}
+  .feedback{padding:0;background:#eceaf3;color:#191528}
   .feedback .wrap{
     display:grid;grid-template-columns:1fr 1fr;gap:56px;align-items:center;
     max-width:1080px;padding-top:100px;padding-bottom:100px;
   }
   .feedback .fb-copy{max-width:440px;justify-self:end}
-  .feedback .eyebrow{color:#6e6781;margin-bottom:16px}
-  .feedback h2{font-size:clamp(28px,3.4vw,40px);line-height:1.18;letter-spacing:-.02em;color:#1b1430;margin-bottom:18px}
-  .feedback p{color:#5b556a;font-size:16px;line-height:1.6;margin-bottom:28px}
+  .feedback .eyebrow{color:rgba(25,21,40,.6);margin-bottom:16px}
+  .feedback h2{font-size:clamp(28px,3.4vw,40px);line-height:1.18;letter-spacing:-.02em;color:#191528;margin-bottom:18px}
+  .feedback p{color:rgba(25,21,40,.72);font-size:16px;line-height:1.6;margin-bottom:28px}
   .btn-dark{
     display:inline-flex;align-items:center;gap:8px;padding:12px 22px;border-radius:0;
-    background:linear-gradient(45deg,#2a2048,#412880);color:#fff;
+    background:linear-gradient(45deg,#2b2049 10%,#32245b 40%,#422982 80%);color:#fff;
     border:1px solid rgba(255,255,255,.14);font-weight:600;font-size:16px;letter-spacing:-.01em;line-height:20px;
-    box-shadow:0 12px 26px -12px rgba(42,32,72,.65);transition:filter .15s;
+    box-shadow:0 12px 26px -12px rgba(43,32,73,.65);transition:filter .15s;
   }
   .btn-dark:hover{filter:brightness(1.14)}
   .fb-art{justify-self:center;width:100%;max-width:300px}
@@ -328,26 +339,26 @@
   }
 
   /* FAQ — native <details> accordion on the light panel, purple +/− toggle */
-  .faq-list{max-width:760px;margin:0 auto;border-top:1px solid rgba(67,42,132,.14)}
-  .faq-list details{border-bottom:1px solid rgba(67,42,132,.14)}
+  .faq-list{max-width:760px;margin:0 auto;border-top:1px solid rgba(66,41,130,.14)}
+  .faq-list details{border-bottom:1px solid rgba(66,41,130,.14)}
   .faq-list summary{
     list-style:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:24px;
-    padding:22px 2px;font-size:17px;font-weight:600;color:#1b1430;letter-spacing:-.01em;
+    padding:22px 2px;font-size:17px;font-weight:600;color:#191528;letter-spacing:-.01em;
   }
   .faq-list summary::-webkit-details-marker{display:none}
   .faq-list summary .pm{flex:none;position:relative;width:18px;height:18px;margin-top:3px}
-  .faq-list summary .pm::before,.faq-list summary .pm::after{content:"";position:absolute;background:#432a84;transition:transform .2s,opacity .2s}
+  .faq-list summary .pm::before,.faq-list summary .pm::after{content:"";position:absolute;background:#422982;transition:transform .2s,opacity .2s}
   .faq-list summary .pm::before{left:0;right:0;top:8px;height:2px}
   .faq-list summary .pm::after{top:0;bottom:0;left:8px;width:2px}
   .faq-list details[open] summary .pm::after{transform:scaleY(0);opacity:0}
-  .faq-list p{color:#5b556a;font-size:15px;line-height:1.62;padding:0 2px 24px;max-width:660px}
-  .faq-list a{color:#432a84;font-weight:600;transition:color .15s}
-  .faq-list a:hover{color:#1b1430}
+  .faq-list p{color:rgba(25,21,40,.72);font-size:15px;line-height:1.62;padding:0 2px 24px;max-width:660px}
+  .faq-list a{color:#422982;font-weight:600;transition:color .15s}
+  .faq-list a:hover{color:#191528}
   @media(prefers-reduced-motion:reduce){.faq-list summary .pm::before,.faq-list summary .pm::after{transition:none}}
 
   /* footer */
   footer{position:relative;overflow:hidden;border-top:1px solid var(--border);padding:80px 0 80px;background:var(--base)}
-  footer::before{content:"";position:absolute;inset:0;z-index:0;background:radial-gradient(700px 420px at 92% 40%,rgba(67,42,132,.45),transparent 60%)}
+  footer::before{content:"";position:absolute;inset:0;z-index:0;background:radial-gradient(700px 420px at 92% 40%,rgba(66,41,130,.45),transparent 60%)}
   footer .wrap{position:relative;z-index:1}
   .foot-top{display:flex;gap:72px;flex-wrap:wrap;margin-bottom:123px}
   .foot-col h4{font-size:16px;font-weight:600;color:#fff;margin-bottom:18px}
@@ -370,7 +381,7 @@
 
 <nav>
   <div class="wrap">
-    <a class="brand" href="#top"><span class="logo">m.</span> <span class="brand-name">m_capture</span></a>
+    <a class="brand" href="#top"><svg class="logo" viewBox="0 0 500 500" aria-hidden="true"><circle cx="250" cy="250" r="250" fill="#fff"/><path fill="#302655" d="M322.49 233.21V325h-35.82v-86.19c0-22.39-6.44-31.34-23.79-31.34-15.67 0-27.71 16.79-27.71 43.1v74.44h-35.82v-82.84c0-22.39-3.08-34.7-21.27-34.7s-30.22 20.71-30.22 49.25V325h-35.82V177.24h35.82v8.4c0 7.28-1.96 11.47-4.76 17.63-1.12 2.52-1.96 5.32.84 6.16s3.92-1.68 4.48-3.08c7.56-19.31 21.27-31.34 40.86-31.34s31.62 12.03 35.54 29.11c.56 1.96 1.96 2.8 4.2 2.8 1.68 0 3.08-.56 3.92-2.52 8.39-18.75 23.23-29.38 40.86-29.38 25.75 0 48.69 13.99 48.69 58.21Zm65.47 51.49V325h-40.3v-40.3z"/></svg> <span class="brand-name">m_capture</span></a>
     <div class="nav-menu">
       <a href="#features" data-i18n="nav.features">Features</a>
       <a href="#install" data-i18n="nav.install">Install</a>
@@ -433,76 +444,76 @@
 
       <div class="card">
         <div class="ic"><svg viewBox="0 0 24 24"><path d="M3 8V6a3 3 0 0 1 3-3h2M16 3h2a3 3 0 0 1 3 3v2M21 16v2a3 3 0 0 1-3 3h-2M8 21H6a3 3 0 0 1-3-3v-2"/><rect x="9" y="9" width="6" height="6" rx="1"/></svg></div>
-        <h3 data-i18n="feat.7.h">Instant capture</h3>
-        <p data-i18n="feat.7.p">Drag any region with a live size readout, or press Space for a whole window or screen — hotkey-driven, multi-monitor aware.</p>
+        <h3 data-i18n="feat.1.h">Instant capture</h3>
+        <p data-i18n="feat.1.p">Drag any region with a live size readout, or press Space for a whole window or screen — hotkey-driven, multi-monitor aware.</p>
       </div>
 
       <div class="card">
         <div class="ic"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M12 8v8M8 12h8"/><path d="M3 21h18" opacity=".45"/></svg></div>
-        <h3 data-i18n="feat.16.h">Freeze-frame capture</h3>
-        <p data-i18n="feat.16.p">The screen freezes the moment you press the hotkey, so tooltips, hover menus and popovers stay exactly as they were.</p>
+        <h3 data-i18n="feat.2.h">Freeze-frame capture</h3>
+        <p data-i18n="feat.2.p">The screen freezes the moment you press the hotkey, so tooltips, hover menus and popovers stay exactly as they were.</p>
       </div>
 
       <div class="card">
         <div class="ic"><svg viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4"/><circle cx="12" cy="10.5" r="2.6"/></svg></div>
-        <h3 data-i18n="feat.8.h">Screen recording</h3>
-        <p data-i18n="feat.8.p">Record a region, a window, or the whole screen to MP4 at 30 or 60 fps — with a start countdown, visualized clicks, and optional audio.</p>
+        <h3 data-i18n="feat.3.h">Screen recording</h3>
+        <p data-i18n="feat.3.p">Record a region, a window, or the whole screen to MP4 at 30 or 60 fps — with a start countdown, visualized clicks, and optional audio.</p>
       </div>
 
       <div class="card">
         <div class="ic"><svg viewBox="0 0 24 24"><path d="M4 20h4L20 8a2.83 2.83 0 0 0-4-4L4 16v4z"/><path d="M14.5 5.5l4 4" opacity=".45"/></svg></div>
-        <h3 data-i18n="feat.17.h">Draw on screen</h3>
-        <p data-i18n="feat.17.p">Sketch on screen while recording — freehand, rectangle, circle, line or arrow. Marks fade on their own, or stay until cleared.</p>
+        <h3 data-i18n="feat.4.h">Draw on screen</h3>
+        <p data-i18n="feat.4.p">Sketch on screen while recording — freehand, rectangle, circle, line or arrow. Marks fade on their own, or stay until cleared.</p>
       </div>
 
       <div class="card">
         <div class="ic"><svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.4 15.4L21 21"/><path d="M10.5 7.5v6M7.5 10.5h6" opacity=".45"/></svg></div>
-        <h3 data-i18n="feat.18.h">Zoom while recording</h3>
-        <p data-i18n="feat.18.p">Press one key to zoom the video in on your cursor and back out — the view glides after you, and only the recording zooms.</p>
+        <h3 data-i18n="feat.5.h">Zoom while recording</h3>
+        <p data-i18n="feat.5.p">Press one key to zoom the video in on your cursor and back out — the view glides after you, and only the recording zooms.</p>
       </div>
 
       <div class="card">
         <div class="ic"><svg viewBox="0 0 24 24"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M8.1 8.1L20 20M8.1 15.9L20 4M14.5 14.5l1 1"/></svg></div>
-        <h3 data-i18n="feat.13.h">Trim &amp; GIF export</h3>
-        <p data-i18n="feat.13.p">Stop a recording straight into a lossless trimmer with live preview, or export it as a looping GIF — with no extra tools required.</p>
+        <h3 data-i18n="feat.6.h">Trim &amp; GIF export</h3>
+        <p data-i18n="feat.6.p">Stop a recording straight into a lossless trimmer with live preview, or export it as a looping GIF — with no extra tools required.</p>
       </div>
 
       <div class="card">
         <div class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg></div>
-        <h3 data-i18n="feat.14.h">Capture history</h3>
-        <p data-i18n="feat.14.p">Every capture and recording lands in a built-in History panel — copy, pin, trim, reveal, or delete without leaving the app.</p>
+        <h3 data-i18n="feat.7.h">Capture history</h3>
+        <p data-i18n="feat.7.p">Every capture and recording lands in a built-in History panel — copy, pin, trim, reveal, or delete without leaving the app.</p>
       </div>
 
       <div class="card">
         <div class="ic"><svg viewBox="0 0 24 24"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg></div>
-        <h3 data-i18n="feat.1.h">Annotate in place</h3>
-        <p data-i18n="feat.1.p">The editor opens directly over your capture — pencil, marker, arrows, shapes, text, numbered steps, blur, and spotlight.</p>
+        <h3 data-i18n="feat.8.h">Annotate in place</h3>
+        <p data-i18n="feat.8.p">The editor opens directly over your capture — pencil, marker, arrows, shapes, text, numbered steps, blur, and spotlight.</p>
       </div>
 
 
       <div class="card">
         <div class="ic"><svg viewBox="0 0 24 24"><path d="M9 4v6l-2 4v2h10v-2l-2-4V4"/><path d="M12 16v5"/><path d="M8 4h8"/></svg></div>
-        <h3 data-i18n="feat.2.h">Pin to screen</h3>
-        <p data-i18n="feat.2.p">Float any capture above every app and across Spaces. Drag to reposition or resize from a corner — ideal for reference while you work.</p>
+        <h3 data-i18n="feat.9.h">Pin to screen</h3>
+        <p data-i18n="feat.9.p">Float any capture above every app and across Spaces. Drag to reposition or resize from a corner — ideal for reference while you work.</p>
       </div>
 
       <div class="card">
         <div class="ic"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3m4 4v-7h-7v7h3"/></svg></div>
-        <h3 data-i18n="feat.3.h">Copy text &amp; QR</h3>
-        <p data-i18n="feat.3.p">Extract selectable text or decode a QR code directly from any screenshot, using on-device OCR powered by Apple Vision.</p>
+        <h3 data-i18n="feat.10.h">Copy text &amp; QR</h3>
+        <p data-i18n="feat.10.p">Extract selectable text or decode a QR code directly from any screenshot, using on-device OCR powered by Apple Vision.</p>
       </div>
 
       <div class="card">
         <div class="ic"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><rect x="7" y="7" width="10" height="10" rx="2"/></svg></div>
-        <h3 data-i18n="feat.4.h">Share-ready backgrounds</h3>
-        <p data-i18n="feat.4.p">Place your capture on a padded frame with shadow and rounded corners — ten presets or a custom color, rendered at full resolution.</p>
+        <h3 data-i18n="feat.11.h">Share-ready backgrounds</h3>
+        <p data-i18n="feat.11.p">Place your capture on a padded frame with shadow and rounded corners — ten presets or a custom color, rendered at full resolution.</p>
       </div>
 
 
       <div class="card">
         <div class="ic"><svg viewBox="0 0 24 24"><path d="M12 3l7 3v5.5c0 4.4-3 7.3-7 8.5-4-1.2-7-4.1-7-8.5V6l7-3z"/><path d="M9 12l2 2 4-4"/></svg></div>
-        <h3 data-i18n="feat.9.h">Private &amp; lightweight</h3>
-        <p data-i18n="feat.9.p">No accounts, no cloud, no telemetry — everything stays on your Mac. Swift, zero dependencies, quiet in the menu bar.</p>
+        <h3 data-i18n="feat.12.h">Private &amp; lightweight</h3>
+        <p data-i18n="feat.12.p">No accounts, no cloud, no telemetry — everything stays on your Mac. Swift, zero dependencies, quiet in the menu bar.</p>
       </div>
 
     </div>
@@ -573,7 +584,7 @@
           <linearGradient id="cline" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0" stop-color="#d5baff" stop-opacity="0"/>
             <stop offset=".1" stop-color="#d5baff"/>
-            <stop offset="1" stop-color="#533aa3"/>
+            <stop offset="1" stop-color="#553e8f"/>
           </linearGradient>
         </defs>
         <path d="M380 0 C 380 110, 380 175, 250 215 C 110 255, 60 270, 60 389 C 48 490, 72 560, 60 642 C 48 740, 72 815, 60 895 L 60 1000"
@@ -628,18 +639,18 @@
     </div>
     <div class="fb-art" aria-hidden="true">
       <svg viewBox="0 -18 240 240" fill="none">
-        <circle cx="120" cy="102" r="88" fill="#432a84" fill-opacity=".06"/>
-        <g stroke="#9b7fd4" stroke-width="3.4" stroke-linecap="round">
+        <circle cx="120" cy="102" r="88" fill="#422982" fill-opacity=".06"/>
+        <g stroke="#8e7fb4" stroke-width="3.4" stroke-linecap="round">
           <path d="M120 14v16"/>
           <path d="M188 42l-11 11"/>
           <path d="M52 42l11 11"/>
           <path d="M206 102h-16"/>
           <path d="M34 102h16"/>
         </g>
-        <circle cx="120" cy="102" r="46" fill="#fff" stroke="#432a84" stroke-width="5"/>
-        <path d="M108 114l12-18 12 18" stroke="#7a5cc0" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
-        <path d="M106 150h28v16a6 6 0 0 1-6 6h-16a6 6 0 0 1-6-6z" fill="#fff" stroke="#432a84" stroke-width="5" stroke-linejoin="round"/>
-        <path d="M110 160h20M112 168h16" stroke="#432a84" stroke-width="3.6" stroke-linecap="round"/>
+        <circle cx="120" cy="102" r="46" fill="#fff" stroke="#422982" stroke-width="5"/>
+        <path d="M108 114l12-18 12 18" stroke="#7b69a8" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M106 150h28v16a6 6 0 0 1-6 6h-16a6 6 0 0 1-6-6z" fill="#fff" stroke="#422982" stroke-width="5" stroke-linejoin="round"/>
+        <path d="M110 160h20M112 168h16" stroke="#422982" stroke-width="3.6" stroke-linecap="round"/>
       </svg>
     </div>
   </div>
@@ -1208,7 +1219,7 @@
   var I18N = {
     en: {
       "meta.title": "m_capture | mesoneer screen capture",
-      "meta.desc": "A lightweight macOS menu-bar tool for screenshots and screen recording. Capture a region, annotate it in place, and copy or save — built in Swift with zero dependencies. By mesoneer AG.",
+      "meta.desc": "A lightweight macOS menu-bar tool for screenshots and screen recording by mesoneer AG. Press a hotkey, drag a region, annotate in place, then copy or save.",
       "nav.features": "Features",
       "nav.how": "How it works",
       "nav.install": "Install",
@@ -1228,30 +1239,30 @@
       "feat.eyebrow": "What's inside",
       "feat.h2": "Everything you need to<br>capture and annotate",
       "feat.p": "A complete annotation toolkit with share-ready output, running entirely on your Mac — no accounts, no cloud, and nothing leaves your device.",
-      "feat.1.h": "Annotate in place",
-      "feat.1.p": "The editor opens directly over your capture — pencil, marker, arrows, shapes, text, numbered steps, blur, and spotlight.",
-      "feat.2.h": "Pin to screen",
-      "feat.2.p": "Float any capture above every app and across Spaces. Drag to reposition or resize from a corner — ideal for reference while you work.",
-      "feat.3.h": "Copy text & QR",
-      "feat.3.p": "Extract selectable text or decode a QR code directly from any screenshot, using on-device OCR powered by Apple Vision.",
-      "feat.4.h": "Share-ready backgrounds",
-      "feat.4.p": "Place your capture on a padded frame with shadow and rounded corners — ten presets or a custom color, rendered at full resolution.",
-      "feat.7.h": "Instant capture",
-      "feat.7.p": "Drag any region with a live size readout, or press Space for a whole window or screen — hotkey-driven, multi-monitor aware.",
-      "feat.8.h": "Screen recording",
-      "feat.17.h": "Draw on screen",
-      "feat.18.h": "Zoom while recording",
-      "feat.18.p": "Press one key to zoom the video in on your cursor and back out — the view glides after you, and only the recording zooms.",
-      "feat.17.p": "Sketch on screen while recording — freehand, rectangle, circle, line or arrow. Marks fade on their own, or stay until cleared.",
-      "feat.8.p": "Record a region, a window, or the whole screen to MP4 at 30 or 60 fps — with a start countdown, visualized clicks, and optional audio.",
-      "feat.13.h": "Trim & GIF export",
-      "feat.13.p": "Stop a recording straight into a lossless trimmer with live preview, or export it as a looping GIF — with no extra tools required.",
-      "feat.14.h": "Capture history",
-      "feat.14.p": "Every capture and recording lands in a built-in History panel — copy, pin, trim, reveal, or delete without leaving the app.",
-      "feat.16.h": "Freeze-frame capture",
-      "feat.16.p": "The screen freezes the moment you press the hotkey, so tooltips, hover menus and popovers stay exactly as they were.",
-      "feat.9.h": "Private & lightweight",
-      "feat.9.p": "No accounts, no cloud, no telemetry — everything stays on your Mac. Swift, zero dependencies, quiet in the menu bar.",
+      "feat.1.h": "Instant capture",
+      "feat.1.p": "Drag any region with a live size readout, or press Space for a whole window or screen — hotkey-driven, multi-monitor aware.",
+      "feat.2.h": "Freeze-frame capture",
+      "feat.2.p": "The screen freezes the moment you press the hotkey, so tooltips, hover menus and popovers stay exactly as they were.",
+      "feat.3.h": "Screen recording",
+      "feat.3.p": "Record a region, a window, or the whole screen to MP4 at 30 or 60 fps — with a start countdown, visualized clicks, and optional audio.",
+      "feat.4.h": "Draw on screen",
+      "feat.4.p": "Sketch on screen while recording — freehand, rectangle, circle, line or arrow. Marks fade on their own, or stay until cleared.",
+      "feat.5.h": "Zoom while recording",
+      "feat.5.p": "Press one key to zoom the video in on your cursor and back out — the view glides after you, and only the recording zooms.",
+      "feat.6.h": "Trim & GIF export",
+      "feat.6.p": "Stop a recording straight into a lossless trimmer with live preview, or export it as a looping GIF — with no extra tools required.",
+      "feat.7.h": "Capture history",
+      "feat.7.p": "Every capture and recording lands in a built-in History panel — copy, pin, trim, reveal, or delete without leaving the app.",
+      "feat.8.h": "Annotate in place",
+      "feat.8.p": "The editor opens directly over your capture — pencil, marker, arrows, shapes, text, numbered steps, blur, and spotlight.",
+      "feat.9.h": "Pin to screen",
+      "feat.9.p": "Float any capture above every app and across Spaces. Drag to reposition or resize from a corner — ideal for reference while you work.",
+      "feat.10.h": "Copy text & QR",
+      "feat.10.p": "Extract selectable text or decode a QR code directly from any screenshot, using on-device OCR powered by Apple Vision.",
+      "feat.11.h": "Share-ready backgrounds",
+      "feat.11.p": "Place your capture on a padded frame with shadow and rounded corners — ten presets or a custom color, rendered at full resolution.",
+      "feat.12.h": "Private & lightweight",
+      "feat.12.p": "No accounts, no cloud, no telemetry — everything stays on your Mac. Swift, zero dependencies, quiet in the menu bar.",
       "how.eyebrow": "How it works",
       "how.h2": "From a hotkey to your<br>clipboard in a few seconds",
       "how.1.h": "Press a hotkey",
@@ -1384,7 +1395,7 @@
     },
     de: {
       "meta.title": "m_capture | mesoneer Bildschirm erfassen",
-      "meta.desc": "Ein schlankes macOS-Menüleisten-Tool für Screenshots und Bildschirmaufnahmen. Bereich aufnehmen, direkt annotieren und kopieren oder speichern — in Swift gebaut, ohne Abhängigkeiten. Von mesoneer AG.",
+      "meta.desc": "Ein schlankes macOS-Menüleisten-Tool für Screenshots und Bildschirmaufnahmen von mesoneer AG. Hotkey drücken, Bereich aufziehen, annotieren, kopieren, speichern.",
       "nav.features": "Funktionen",
       "nav.how": "So funktioniert's",
       "nav.install": "Installation",
@@ -1404,30 +1415,30 @@
       "feat.eyebrow": "Was drinsteckt",
       "feat.h2": "Alles, was Sie brauchen —<br>Aufnahme und Annotation",
       "feat.p": "Ein komplettes Annotations-Toolkit mit teilbaren Ergebnissen — läuft vollständig lokal auf Ihrem Mac. Kein Konto, keine Cloud, und nichts verlässt Ihr Gerät.",
-      "feat.1.h": "Direkt annotieren",
-      "feat.1.p": "Der Editor öffnet sich direkt über der Aufnahme — mit Stift, Marker, Pfeilen, Formen, Text, Nummerierung, Weichzeichner und Spotlight.",
-      "feat.2.h": "Am Bildschirm anheften",
-      "feat.2.p": "Jede Aufnahme über allen Apps und Spaces anheften. Ziehen zum Verschieben, an Ecken skalieren — ideal als Referenz.",
-      "feat.3.h": "Text & QR kopieren",
-      "feat.3.p": "Text extrahieren oder QR-Codes decodieren, direkt aus jedem Screenshot — mit On-Device-OCR auf Basis von Apple Vision.",
-      "feat.4.h": "Teilbare Hintergründe",
-      "feat.4.p": "Die Aufnahme auf einem Rahmen mit Schatten und runden Ecken platzieren — zehn Vorlagen oder eine eigene Farbe, in voller Auflösung.",
-      "feat.7.h": "Sofort aufnehmen",
-      "feat.7.p": "Einen Bereich mit Live-Grössenanzeige aufziehen oder per Leertaste Fenster bzw. Bildschirm wählen — per Hotkey, auf allen Monitoren.",
-      "feat.8.h": "Bildschirmaufnahme",
-      "feat.17.h": "Auf dem Bildschirm zeichnen",
-      "feat.18.h": "Während der Aufnahme zoomen",
-      "feat.18.p": "Mit einer Taste das Video auf den Zeiger ein- und auszoomen — die Ansicht gleitet sanft mit, nur die Aufnahme zoomt.",
-      "feat.17.p": "Während der Aufnahme auf den Bildschirm zeichnen — freihand, Rechteck, Kreis, Linie oder Pfeil. Markierungen blenden selbst aus.",
-      "feat.8.p": "Bereich, Fenster oder Bildschirm als MP4 mit 30 oder 60 fps aufnehmen — mit Start-Countdown, sichtbaren Klicks und optionalem Audio.",
-      "feat.13.h": "Schneiden & GIF-Export",
-      "feat.13.p": "Eine Aufnahme direkt im verlustfreien Schnittwerkzeug beenden oder als GIF-Schleife exportieren — ganz ohne zusätzliche Werkzeuge.",
-      "feat.14.h": "Aufnahmeverlauf",
-      "feat.14.p": "Jede Aufnahme landet im Verlaufspanel — kopieren, anpinnen, schneiden, zeigen oder löschen, ohne die App zu verlassen.",
-      "feat.16.h": "Standbild-Aufnahme",
-      "feat.16.p": "Der Bildschirm friert beim Tastendruck ein, sodass Tooltips, Hover-Menüs und Popover genau so erhalten bleiben.",
-      "feat.9.h": "Privat & schlank",
-      "feat.9.p": "Kein Konto, keine Cloud, keine Telemetrie — alles bleibt auf dem Mac. In Swift gebaut, ohne Abhängigkeiten, still in der Menüleiste.",
+      "feat.1.h": "Sofort aufnehmen",
+      "feat.1.p": "Einen Bereich mit Live-Grössenanzeige aufziehen oder per Leertaste Fenster bzw. Bildschirm wählen — per Hotkey, auf allen Monitoren.",
+      "feat.2.h": "Standbild-Aufnahme",
+      "feat.2.p": "Der Bildschirm friert beim Tastendruck ein, sodass Tooltips, Hover-Menüs und Popover genau so erhalten bleiben.",
+      "feat.3.h": "Bildschirmaufnahme",
+      "feat.3.p": "Bereich, Fenster oder Bildschirm als MP4 mit 30 oder 60 fps aufnehmen — mit Start-Countdown, sichtbaren Klicks und optionalem Audio.",
+      "feat.4.h": "Auf dem Bildschirm zeichnen",
+      "feat.4.p": "Während der Aufnahme auf den Bildschirm zeichnen — freihand, Rechteck, Kreis, Linie oder Pfeil. Markierungen blenden selbst aus.",
+      "feat.5.h": "Während der Aufnahme zoomen",
+      "feat.5.p": "Mit einer Taste das Video auf den Zeiger ein- und auszoomen — die Ansicht gleitet sanft mit, nur die Aufnahme zoomt.",
+      "feat.6.h": "Schneiden & GIF-Export",
+      "feat.6.p": "Eine Aufnahme direkt im verlustfreien Schnittwerkzeug beenden oder als GIF-Schleife exportieren — ganz ohne zusätzliche Werkzeuge.",
+      "feat.7.h": "Aufnahmeverlauf",
+      "feat.7.p": "Jede Aufnahme landet im Verlaufspanel — kopieren, anpinnen, schneiden, zeigen oder löschen, ohne die App zu verlassen.",
+      "feat.8.h": "Direkt annotieren",
+      "feat.8.p": "Der Editor öffnet sich direkt über der Aufnahme — mit Stift, Marker, Pfeilen, Formen, Text, Nummerierung, Weichzeichner und Spotlight.",
+      "feat.9.h": "Am Bildschirm anheften",
+      "feat.9.p": "Jede Aufnahme über allen Apps und Spaces anheften. Ziehen zum Verschieben, an Ecken skalieren — ideal als Referenz.",
+      "feat.10.h": "Text & QR kopieren",
+      "feat.10.p": "Text extrahieren oder QR-Codes decodieren, direkt aus jedem Screenshot — mit On-Device-OCR auf Basis von Apple Vision.",
+      "feat.11.h": "Teilbare Hintergründe",
+      "feat.11.p": "Die Aufnahme auf einem Rahmen mit Schatten und runden Ecken platzieren — zehn Vorlagen oder eine eigene Farbe, in voller Auflösung.",
+      "feat.12.h": "Privat & schlank",
+      "feat.12.p": "Kein Konto, keine Cloud, keine Telemetrie — alles bleibt auf dem Mac. In Swift gebaut, ohne Abhängigkeiten, still in der Menüleiste.",
       "how.eyebrow": "So funktioniert's",
       "how.h2": "Von einem Hotkey bis in die<br>Zwischenablage in Sekunden",
       "how.1.h": "Hotkey drücken",

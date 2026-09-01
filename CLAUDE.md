@@ -793,3 +793,8 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
   `en`), must wrap to 3 lines at the `.card p` column width (345 px at 15 px):
   **100-134 characters** (browser-measured; ≥139 wraps to 4 lines). A new card needs
   the `<div class="card">` block plus `feat.N.h`/`feat.N.p` in both language dicts.
+  **`N` follows display order**, and the dicts are kept in that order too (`1.h`, `1.p`,
+  `2.h`, …) — so a new card is the next number and appends at the end of each dict. The
+  numbering used to be historical: twelve cards numbered 1-4, 7-9, 13, 14, 16-18, with
+  `feat.18.p` sitting before `feat.17.p` in both dicts. Nothing user-visible, but it made
+  it easy to add one half of a pair and not notice the other was missing.
