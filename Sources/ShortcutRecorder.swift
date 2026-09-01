@@ -140,9 +140,9 @@ final class HotKeyField: NSView, KeyRecorder {
     override func draw(_ dirtyRect: NSRect) {
         let r = bounds.insetBy(dx: 0.5, dy: 0.5)
         let path = NSBezierPath(roundedRect: r, xRadius: Theme.radiusSmall, yRadius: Theme.radiusSmall)
-        Theme.surfaceRaised.setFill()
+        Theme.controlFill.setFill()
         path.fill()
-        (recording ? Theme.lavender : Theme.border).setStroke()
+        (recording ? Theme.lavender : Theme.controlStroke).setStroke()
         path.lineWidth = recording ? 1.5 : 1
         path.stroke()
     }

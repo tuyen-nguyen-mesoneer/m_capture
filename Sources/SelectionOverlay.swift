@@ -862,7 +862,7 @@ final class SelectionView: NSView {
         Theme.surfaceBase.setFill(); path.fill()
         ctx.restoreGState()
 
-        if let gradient = NSGradient(colors: [Theme.gradientTop, Theme.surfaceRaised]) {
+        if let gradient = NSGradient(colors: [Theme.primary12, Theme.surfaceRaised]) {
             gradient.draw(in: path, angle: 90)
         }
         Theme.lavender.withAlphaComponent(0.5).setStroke()

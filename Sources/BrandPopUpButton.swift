@@ -47,10 +47,17 @@ final class BrandPopUpButton: NSPopUpButton {
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
     /// `NSControl.isEnabled` has no built-in effect here since `mouseDown` is fully
-    /// overridden below — dim the whole control (title, bezel, chevron together) and
-    /// block interaction explicitly.
+    /// overridden below, so the disabled look is drawn explicitly.
+    ///
+    /// Deliberately **not** `alphaValue = 0.4`, which is what this used to do: the caller
+    /// often dims the whole row too, and 0.4 × 0.4 left the control at 0.16 — the Padding
+    /// and Corner-radius popups were invisible rather than disabled. Colour tokens don't
+    /// compound.
     override var isEnabled: Bool {
-        didSet { alphaValue = isEnabled ? 1 : 0.4 }
+        didSet {
+            titleLabel.textColor = isEnabled ? Theme.textPrimary : Theme.controlTextDisabled
+            needsDisplay = true
+        }
     }
 
     override func resetCursorRects() {
@@ -93,14 +100,15 @@ final class BrandPopUpButton: NSPopUpButton {
 
 private final class BrandPopUpCell: NSPopUpButtonCell {
     override func drawBezel(withFrame frame: NSRect, in controlView: NSView) {
+        let on = (controlView as? NSControl)?.isEnabled ?? true
         let r = frame.insetBy(dx: 0.5, dy: 0.5)
         let path = NSBezierPath(roundedRect: r, xRadius: Theme.radiusSmall, yRadius: Theme.radiusSmall)
-        Theme.surfaceRaised.setFill()
+        (on ? Theme.controlFill : Theme.controlFillDisabled).setFill()
         path.fill()
-        Theme.border.setStroke()
+        (on ? Theme.controlStroke : Theme.controlStrokeDisabled).setStroke()
         path.lineWidth = 1
         path.stroke()
-        drawChevron(in: r)
+        drawChevron(in: r, enabled: on)
     }
 
     override func drawInterior(withFrame cellFrame: NSRect, in controlView: NSView) {}
@@ -108,7 +116,7 @@ private final class BrandPopUpCell: NSPopUpButtonCell {
 
 /// A downward lavender chevron on the closed button (the cell draws in a flipped
 /// context, so the apex sits below the shoulders here).
-private func drawChevron(in r: NSRect) {
+private func drawChevron(in r: NSRect, enabled: Bool = true) {
     let cx = r.maxX - 13, cy = r.midY
     let chev = NSBezierPath()
     chev.move(to: NSPoint(x: cx - 4, y: cy - 2.5))
@@ -117,7 +125,7 @@ private func drawChevron(in r: NSRect) {
     chev.lineWidth = 1.5
     chev.lineCapStyle = .round
     chev.lineJoinStyle = .round
-    Theme.lavender.setStroke()
+    (enabled ? Theme.lavender : Theme.controlGlyphDisabled).setStroke()
     chev.stroke()
 }
 

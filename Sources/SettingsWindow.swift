@@ -351,10 +351,10 @@ final class SettingsWindowController: NSObject {
         t.isBordered = false
         t.focusRingType = .none
         t.wantsLayer = true
-        t.layer?.backgroundColor = Theme.surfaceRaised.cgColor
+        t.layer?.backgroundColor = Theme.controlFill.cgColor
         t.layer?.cornerRadius = Theme.radiusSmall
         t.layer?.borderWidth = 1
-        t.layer?.borderColor = Theme.border.cgColor
+        t.layer?.borderColor = Theme.controlStroke.cgColor
         t.target = self; t.action = action
         t.translatesAutoresizingMaskIntoConstraints = false
         t.heightAnchor.constraint(equalToConstant: 24).isActive = true
@@ -757,12 +757,18 @@ final class SettingsWindowController: NSObject {
     }
 
     /// Padding and corner radius only have an effect when a background frame is
-    /// selected — grey out and disable both rows (and their controls) when the
-    /// default background is "None".
+    /// selected — mute both rows and disable their controls when the default
+    /// background is "None".
+    ///
+    /// The row's `alphaValue` is deliberately left alone. It used to drop to 0.4, and the
+    /// popup's own disabled state dropped it another 0.4 on top: the control ended up at
+    /// 0.16 and read as missing rather than disabled. Dim the label by colour, and let the
+    /// control draw its own disabled state — neither compounds with the other.
     private func updateBackgroundDependentRowsEnabled() {
         let enabled = !bgPresets[defaultBGPopup.indexOfSelectedItem].isNone
         for (row, popup) in [(paddingRow, paddingPopup), (radiusRow, radiusPopup)] {
-            row?.alphaValue = enabled ? 1 : 0.4
+            row?.subviews.compactMap { $0 as? NSTextField }.first?.textColor =
+                enabled ? Theme.textPrimary : Theme.controlTextDisabled
             popup?.isEnabled = enabled
         }
     }
@@ -853,7 +859,7 @@ final class SettingsWindowController: NSObject {
         card.translatesAutoresizingMaskIntoConstraints = false
 
         let logo = NSImageView()
-        logo.image = Logo.image(size: 56)
+        logo.image = Logo.image(size: 56, onDark: true)
         logo.translatesAutoresizingMaskIntoConstraints = false
 
         // "m_capture 1.6.7" on one line: the name carries the weight and the version
@@ -1410,8 +1416,8 @@ private final class DrawKeyField: NSView, KeyRecorder {
     override func draw(_ dirtyRect: NSRect) {
         let r = bounds.insetBy(dx: 0.5, dy: 0.5)
         let path = NSBezierPath(roundedRect: r, xRadius: Theme.radiusSmall, yRadius: Theme.radiusSmall)
-        Theme.surfaceRaised.setFill(); path.fill()
-        (recording ? Theme.lavender : Theme.border).setStroke()
+        Theme.controlFill.setFill(); path.fill()
+        (recording ? Theme.lavender : Theme.controlStroke).setStroke()
         path.lineWidth = recording ? 1.5 : 1
         path.stroke()
     }

@@ -171,7 +171,7 @@ private final class HeaderView: NSView {
         super.init(frame: NSRect(x: 0, y: 0, width: width, height: 34))
 
         let logo = NSImageView(frame: NSRect(x: pad + 8, y: (34 - logoSize) / 2, width: logoSize, height: logoSize))
-        logo.image = Logo.image(size: logoSize)
+        logo.image = Logo.image(size: logoSize, onDark: true)
         logo.imageScaling = .scaleProportionallyUpOrDown
         addSubview(logo)
 
