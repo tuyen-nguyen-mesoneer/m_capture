@@ -290,7 +290,7 @@ final class EditorWindowController: NSObject {
     /// the current width. `widthDisplay` is the on-tile bar thickness for each preset.
     private let widths: [CGFloat] = [3, 6, 11]
     private let widthDisplay: [CGFloat] = [2, 4, 7]
-    private let widthLabels = ["Thin", "Medium", "Thick"]
+    private let widthLabels = [L("Thin"), L("Medium"), L("Thick")]
     private weak var widthButton: ToolButton?
     private var currentWidth = 1   // 6 pt — matches the editor's default stroke
     private weak var plusButton: ToolButton?
@@ -314,7 +314,7 @@ final class EditorWindowController: NSObject {
     private var lastTextFocusToken: ObjectIdentifier?
     private let textFontSizes: [CGFloat] = [12, 14, 18, 24, 32, 48, 64]
     private let textBackgrounds: [TextBackground] = [.none, .filled, .outlined]
-    private let textBackgroundNames = ["No background", "Filled box", "Outlined box"]
+    private let textBackgroundNames = [L("No background"), L("Filled box"), L("Outlined box")]
     private var emojiPicker: EmojiPickerPanel?
     private var formatPicker: CounterFormatPicker?
 
@@ -652,17 +652,17 @@ final class EditorWindowController: NSObject {
             actionButton("text.viewfinder", L("Copy text / QR (OCR) — drag over text or a QR code  (⌘T)"), key: "t", mods: [.command], #selector(copyTextPressed))], perRow: 4)
         let shapes = makeCluster(L("Shape"), [
             toolButton(.arrow, "arrow.up.right", L("Arrow — point to an area  (A)")),
-            toolButton(.line, "line.diagonal", L("Line — straight line  (L)")),
-            toolButton(.rect, "rectangle", L("Rectangle — box outline  (R)")),
-            toolButton(.ellipse, "circle", L("Ellipse — oval outline  (O)")),
-            toolButton(.roundedRect, .roundedSquare, L("Rounded rectangle — rounded box  (U)")),
-            toolButton(.triangle, "triangle", L("Triangle — triangle outline  (G)")),
-            toolButton(.diamond, "diamond", L("Diamond — diamond outline  (D)")),
-            toolButton(.star, "star", L("Star — 5-point star outline  (Y)")),
-            toolButton(.checkmark, "checkmark", L("Checkmark — check mark  (K)")),
-            toolButton(.pentagon, "pentagon", L("Pentagon — 5-sided outline  (5)")),
-            toolButton(.hexagon, "hexagon", L("Hexagon — 6-sided outline  (6)")),
-            toolButton(.octagon, "octagon", L("Octagon — 8-sided outline  (8)"))], perRow: 4)
+            toolButton(.line, "line.diagonal", L("Line  (L)")),
+            toolButton(.rect, "rectangle", L("Rectangle  (R)")),
+            toolButton(.ellipse, "circle", L("Ellipse  (O)")),
+            toolButton(.roundedRect, .roundedSquare, L("Rounded rectangle  (U)")),
+            toolButton(.triangle, "triangle", L("Triangle  (G)")),
+            toolButton(.diamond, "diamond", L("Diamond  (D)")),
+            toolButton(.star, "star", L("Star  (Y)")),
+            toolButton(.checkmark, "checkmark", L("Checkmark  (K)")),
+            toolButton(.pentagon, "pentagon", L("Pentagon  (5)")),
+            toolButton(.hexagon, "hexagon", L("Hexagon  (6)")),
+            toolButton(.octagon, "octagon", L("Octagon  (8)"))], perRow: 4)
 
         let colorR: CGFloat = 14
         let eyedropper = ToolButton(style: .tool("eyedropper"), radius: colorR,
@@ -1168,7 +1168,7 @@ final class EditorWindowController: NSObject {
                     if fellBack {
                         BrandAlert(title: L("Saved to the Desktop"),
                                    message: L("The save folder was unavailable; the file was saved to the Desktop. Update it in Settings → Output."),
-                                   titles: ["OK"], primary: 0, cancel: 0,
+                                   titles: [L("OK")], primary: 0, cancel: 0,
                                    icon: "folder.badge.questionmark").present()
                     }
                     onSuccess()
@@ -1178,7 +1178,7 @@ final class EditorWindowController: NSObject {
                     Settings.shared.releaseClaim(url)
                     BrandAlert(title: L("Unable to save the capture"),
                                message: L("Saving failed. The capture remains open — try Save As."),
-                               titles: ["OK"], primary: 0, cancel: 0,
+                               titles: [L("OK")], primary: 0, cancel: 0,
                                icon: "exclamationmark.triangle").present()
                 }
             }

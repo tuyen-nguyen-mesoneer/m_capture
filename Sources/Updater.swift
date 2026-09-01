@@ -243,7 +243,7 @@ enum Updater {
         case .rateLimited:
             return L("GitHub is rate-limiting update checks right now. Try again later.")
         case .cantInstall:
-            return L("Updates can't be installed — move m_capture to your Applications folder.")
+            return L("Updates cannot be installed — move m_capture to your Applications folder.")
         default:
             return L("Automatic update checks are failing — check network access to GitHub.")
         }
@@ -931,7 +931,7 @@ enum Updater {
     private static func presentUpToDateAlert() {
         BrandAlert(title: L("Up to date"),
                    message: String(format: L("m_capture %@ is the latest version."), effectiveCurrentVersion),
-                   titles: ["OK"], primary: 0, cancel: 0).present()
+                   titles: [L("OK")], primary: 0, cancel: 0).present()
     }
 
     private static func presentErrorAlert(_ reason: CheckError = .network) {

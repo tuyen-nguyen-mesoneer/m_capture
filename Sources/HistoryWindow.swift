@@ -260,7 +260,7 @@ final class HistoryWindowController {
         title.alignment = .center
         title.preferredMaxLayoutWidth = maxW
 
-        let hint = NSTextField(wrappingLabelWithString: L("Screenshots and recordings you take appear here."))
+        let hint = NSTextField(wrappingLabelWithString: L("Screenshots and recordings appear here."))
         hint.font = Theme.font(11)
         hint.textColor = Theme.textMuted
         hint.alignment = .center

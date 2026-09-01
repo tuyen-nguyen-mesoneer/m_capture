@@ -140,7 +140,7 @@ final class SettingsWindowController: NSObject {
                     tip: L("Color of marks drawn on screen while recording.")),
                 row(L("Thickness"), drawStrokePopup),
                 row(L("Fade after"), drawFadePopup,
-                    tip: L("How long a finished mark stays before it fades. \"Never\" keeps marks until you clear them with ⌫.")),
+                    tip: L("How long a finished mark stays before it fades. “Never” keeps marks until you clear them with ⌫.")),
                 groupHeading(L("Drawing keys"), firstInSection: false),
             ] + zip(DrawTool.allCases, drawKeyFields).map { tool, field in
                 row(tool.label, field,
@@ -157,7 +157,7 @@ final class SettingsWindowController: NSObject {
                 checkRow(loginCheck),
                 checkRow(dockCheck),
                 row(L("Language"), languagePopup,
-                    tip: L("Interface language. \"System\" follows the macOS language; changes apply after a restart.")),
+                    tip: L("Interface language. “System” follows the macOS language; changes apply after a restart.")),
                 row(L("Capture delay"), delayPopup,
                     tip: L("Delay before the selection overlay appears — time to open menus or prepare the screen.")),
                 row(L("After capture"), behaviorPopup,
@@ -1227,7 +1227,7 @@ private final class InfoDot: NSImageView {
     init() {
         super.init(frame: NSRect(x: 0, y: 0, width: 14, height: 14))
         let cfg = NSImage.SymbolConfiguration(pointSize: 12, weight: .regular)
-        image = NSImage(systemSymbolName: "info.circle", accessibilityDescription: "Help")?
+        image = NSImage(systemSymbolName: "info.circle", accessibilityDescription: L("Help"))?
             .withSymbolConfiguration(cfg)
         contentTintColor = Theme.lavender.withAlphaComponent(0.9)
         imageScaling = .scaleProportionallyDown
@@ -1463,7 +1463,7 @@ private final class DrawKeyField: NSView, KeyRecorder {
     /// can wedge the run loop (same reason `HotKeyField` presents this way).
     private func reportConflict(_ key: String, owner: String) {
         BrandAlert(title: L("Key already in use"),
-                   message: String(format: L("%@ is already used by \"%@\". Choose a different key."), key, owner),
+                   message: String(format: L("%@ is already used by “%@”. Choose a different key."), key, owner),
                    titles: [L("OK")], primary: 0, cancel: 0,
                    icon: "exclamationmark.triangle").present()
     }

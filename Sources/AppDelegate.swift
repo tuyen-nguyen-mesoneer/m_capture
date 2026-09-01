@@ -62,7 +62,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let button = self?.statusItem.button else { return }
             if exporting {
                 button.image = nil
-                button.font = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .semibold)
+                button.font = Theme.monoDigitFont(11, .semibold)
                 button.title = " GIF… "
             } else {
                 self?.refreshStatusIcon()
@@ -417,7 +417,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let button = statusItem?.button else { return }
         if installingUpdate {
             button.image = nil
-            button.font = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .semibold)
+            button.font = Theme.monoDigitFont(11, .semibold)
             button.title = " " + L("Updating…") + " "
             return
         }

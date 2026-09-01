@@ -71,7 +71,7 @@ final class TrimWindowController: NSObject {
         playButton.target = self; playButton.action = #selector(togglePlay)
         content.addSubview(playButton)
 
-        rangeLabel.font = NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .medium)
+        rangeLabel.font = Theme.monoDigitFont(12, .medium)
         rangeLabel.textColor = Theme.textSecondary
         rangeLabel.frame = NSRect(x: side, y: 66, width: size.width - side * 2, height: 18)
         rangeLabel.alignment = .center
@@ -201,7 +201,7 @@ final class TrimWindowController: NSObject {
                     try? FileManager.default.removeItem(at: tmp)
                     BrandAlert(title: L("Unable to trim the recording"),
                                message: L("The full recording was kept unchanged."),
-                               titles: ["OK"], primary: 0, cancel: 0,
+                               titles: [L("OK")], primary: 0, cancel: 0,
                                icon: "exclamationmark.triangle").present()
                 }
             }
