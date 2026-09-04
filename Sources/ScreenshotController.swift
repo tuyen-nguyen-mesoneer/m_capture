@@ -313,11 +313,17 @@ final class ScreenshotController {
     /// `captureScale` is the exact pixels-per-point density `image` was captured at —
     /// only the editor needs it, to size its live canvas without introducing rounding
     /// error (see `EditorWindowController.init`).
-    static func deliver(_ image: NSImage, selectionRect: CGRect, screen: NSScreen, captureScale: CGFloat = 1) {
+    /// `still` is the frozen full-display grab the capture was cut out of, with the
+    /// capture's own pixel rect inside it — the editor keeps it so its resize handles can
+    /// uncover screen the selection left out, not just crop back into what was taken. Only
+    /// the frozen path has one; a window grab or the live fallback passes nil and the editor
+    /// falls back to the capture itself.
+    static func deliver(_ image: NSImage, selectionRect: CGRect, screen: NSScreen, captureScale: CGFloat = 1,
+                        still: (cg: CGImage, pixelRect: CGRect)? = nil) {
         switch Settings.shared.captureBehavior {
         case .editor:
             _ = EditorWindowController(image: image, selectionRect: selectionRect, screen: screen,
-                                      captureScale: captureScale)
+                                      captureScale: captureScale, still: still)
         case .save:
             saveToDisk(image)
             if Settings.shared.autoCopyOnSave { copyToPasteboard(image) }
@@ -481,14 +487,19 @@ final class ScreenshotController {
     /// a cropped still and a live grab of the same region produce identical pixels.
     /// Rounding matches the live path's, and the rect is clamped to the image so a
     /// selection touching the display edge can't fail on an out-of-bounds crop.
-    private static func crop(_ cg: CGImage, to sourceRect: CGRect, scale: CGFloat) -> CGImage? {
+    /// The pixel rect returned alongside the crop is where the capture sits *within* the
+    /// still, which the editor needs to grow the region back out again (see
+    /// `EditorWindowController.CaptureSource`).
+    private static func crop(_ cg: CGImage, to sourceRect: CGRect,
+                             scale: CGFloat) -> (cg: CGImage, pixelRect: CGRect)? {
         let px = CGRect(x: (sourceRect.minX * scale).rounded(),
                         y: (sourceRect.minY * scale).rounded(),
                         width: (sourceRect.width * scale).rounded(),
                         height: (sourceRect.height * scale).rounded())
         let clamped = px.intersection(CGRect(x: 0, y: 0, width: cg.width, height: cg.height))
-        guard !clamped.isNull, clamped.width >= 1, clamped.height >= 1 else { return nil }
-        return cg.cropping(to: clamped)
+        guard !clamped.isNull, clamped.width >= 1, clamped.height >= 1,
+              let cropped = cg.cropping(to: clamped) else { return nil }
+        return (cropped, clamped)
     }
 
     /// Wrap a captured CGImage as a pixel-sized NSImage (scale 1), so the editor's
@@ -601,8 +612,9 @@ final class ScreenshotController {
         // grab, no delay and no chance of the overlay's fade-out being caught in the shot.
         if let still, let cropped = ScreenshotController.crop(still.cg, to: sourceRect, scale: still.scale) {
             ScreenshotController.playCaptureSoundIfEnabled()
-            ScreenshotController.deliver(ScreenshotController.image(from: cropped),
-                                        selectionRect: global, screen: screen, captureScale: still.scale)
+            ScreenshotController.deliver(ScreenshotController.image(from: cropped.cg),
+                                        selectionRect: global, screen: screen, captureScale: still.scale,
+                                        still: (still.cg, cropped.pixelRect))
             ScreenshotController.warmUp()
             return
         }

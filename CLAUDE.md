@@ -458,41 +458,45 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
   stays **1 whenever the cards already fit**, because an inexact scale makes CoreGraphics
   resample the whole canvas on every redraw (see the `init` note; hence
   `interpolationQuality = .high` in `CanvasView.draw`).
-  Those two only pick the **opening** scale. From then on **the eight resize knobs stretch the
-  picture freely** (`resizeDragged`, `resizeEnded`): each drags only the edge(s) it sits on,
-  holding the opposite one fixed, bounded per side by `minCanvasEdge` / `maxCanvasScreens` and
-  by **nothing else** — no screen clamp, no aspect lock, no centre anchor. Those last two were
-  tried and are wrong here: locking the aspect makes an edge knob change the height too, and
-  anchoring on the centre makes it move the opposite edge, so no knob feels like it belongs to
-  the side it sits on. The cost is that a non-uniform stretch distorts the screenshot; Rotate /
-  Flip / Crop are the actions that stay rigid. Committing writes `canvas.scaleX` / `scaleY`
-  through **`snapScale`**, then sizes the frame from those scales rather than from the raw drag.
-  That quantising is not cosmetic: a trackpad reports fractional deltas, so a stretch that looks
-  like exactly 2x used to commit as 1.9987x, putting the image's edges between device pixels and
-  resampling the whole canvas on every redraw — the user dragged the picture bigger to see it
-  better and got a softer one. `relayout` had long rounded the canvas *origin* for precisely
-  this reason; the size simply never got the same treatment. Near a whole step the scale snaps
-  to it (which also earns `CanvasView.draw`'s nearest-neighbour path, so an integer zoom of a
-  screenshot keeps hard glyph edges); anywhere else it is nudged onto the pixel grid, so the
-  stretch stays free. **It is presentational only** — annotations live in
-  image space and `exportRep` flattens the image, so what gets saved is identical at any
-  stretch. A quarter turn swaps the two scales with the axes, so a stretched box comes back on
-  its side instead of snapping square.
-  This replaced a **display re-grab**: dragging a knob used to re-capture a larger rectangle
-  from the screen (an async ScreenCaptureKit round trip that could fail, and that stitched
-  now-pixels around then-pixels). It could only ever reach the display's own edge, and once the
-  capture was centred that edge was invisible — a shot taken 10 pt from the screen's left grew
-  10 pt left while sitting mid-screen looking like it had 500 pt of room, so the knob read as
-  broken. A stretch has no such limit, and `viewScale` / `shownRegion` / `regionRect` /
-  `contentRect` / `resizeLimit` / `ScreenshotController.recaptureRegion` went with it — as did
-  the rotate/flip incoherence, which only existed because a re-grab assumed the image still
-  matched the screen's orientation.
-  `relayout` **centres** a frame too big to fit rather than pinning it into a corner, which
-  only matters because a hand zoom can now exceed the screen.
+  Those two only pick the **opening** scale, and it is the only scale there is. From then on
+  **the eight resize knobs change the captured region** (`resizeDragged`, `resizeEnded`): each
+  drags only the edge(s) it sits on, holding the opposite one fixed — no aspect lock, no centre
+  anchor. Those two were tried and are wrong here: locking the aspect makes an edge knob change
+  the height too, and anchoring on the centre makes it move the opposite edge, so no knob feels
+  like it belongs to the side it sits on.
+  What makes "out" possible is `CaptureSource` — the `CGImage` the canvas is a window onto plus
+  `rect`, the part of it currently shown, in **source pixels with a top-left origin**.
+  `ScreenshotController.finish` already held the whole-display freeze and threw it away one line
+  later; it now hands it to the editor along with the capture's pixel rect inside it, so
+  dragging out uncovers screen the selection left behind, from *the same instant* as the shot.
+  A window grab, the live fallback and `AppDelegate`'s direct hand-off pass none, and the source
+  falls back to the capture itself — one code path either way, differing only in reach.
+  Since the scale never moves, a point dragged is a point of screen gained or given up, and the
+  committed region is **rounded to whole source pixels** so the crop never resamples. Rotate and
+  flip leave the image no longer aligned with the display, so they `rebaseSource()` onto the
+  transformed canvas: the knobs keep working, they just crop and un-crop from there. A crop-tool
+  crop is still a sub-rect, so it only offsets `rect` and keeps the full reach.
+  The region is real, not presentational: `applyTransform` swaps the image and carries the
+  annotations, dropping marks the new region no longer contains exactly as the crop tool does.
+  This is the **display re-grab**, done right. The old one re-captured a larger rectangle *from
+  the screen* on every knob drag — an async ScreenCaptureKit round trip that could fail, and
+  that stitched now-pixels around then-pixels. Cropping a still taken at the hotkey has neither
+  problem. What it does inherit is the old one's one real flaw: the reach stops at the display's
+  edge, and once the capture is centred that edge is invisible, so a shot taken 10 pt from the
+  screen's left stops after 10 pt while looking like it has 500 pt of room. If that bites, draw
+  the boundary during the drag — don't go back to stretching.
+  The **free stretch** that sat here in between is gone with it, along with `snapScale`,
+  `scaleSnap` and `maxCanvasScreens`. It let a knob zoom the picture without limit, which is
+  genuinely useful for a small capture and is why `magnification` still exists — but it
+  distorted the screenshot on a non-uniform drag, and it meant the knobs did something other
+  than what dragging a selection edge does everywhere else in the app. If hand zoom is ever
+  wanted back it belongs on a modifier (⌥-drag), not on the bare knob.
+  `relayout` **centres** a frame too big to fit rather than pinning it into a corner, which now
+  matters when a region is grown out to the whole display.
 - `CanvasView.swift` — the annotation canvas: `Tool` enum, undo/redo, Gaussian blur,
   crop/rotate/flip transforms (`applyTransform` shifts annotations when the region
-  changes), and live edit state. Scale is **two `var`s, `scaleX` / `scaleY`** — the editor's
-  resize knobs drag each edge independently, so the picture stretches — and whoever writes them
+  changes), and live edit state. Scale is **two `var`s, `scaleX` / `scaleY`** — a leftover of
+  the editor's old free stretch, so they are equal in practice now — and whoever writes them
   owns resizing the view to match. **Coordinate conversions must use both axes**; the scalar
   `displayScale` (`min` of the two) is for *tolerances* only — hit radii, knob sizes, minimum
   drag extents, which are circles in view space and so have no axis. `endTextEditing()` exists

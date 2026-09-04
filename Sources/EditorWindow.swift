@@ -181,7 +181,7 @@ private final class BackgroundView: NSView {
 private final class ResizeHandle: NSView {
     enum Edge: CaseIterable {
         case topLeft, top, topRight, right, bottomRight, bottom, bottomLeft, left
-        /// Corners resize both axes; the four midpoints stretch one. A canvas too small for
+        /// Corners move both edges; the four midpoints move one. A canvas too small for
         /// all eight keeps only these.
         var isCorner: Bool {
             switch self {
@@ -333,6 +333,26 @@ final class EditorWindowController: NSObject {
     private var resizePreview: NSView?
     private var resizeBaseFrame: NSRect = .zero
     private var activeResizeEdge: ResizeHandle.Edge = .bottomRight
+
+    /// The pixels the canvas is a window onto, and which part of them it currently shows.
+    ///
+    /// This is what makes the resize handles move the *selection* rather than stretch the
+    /// picture: dragging an edge in crops, dragging it out uncovers more of `cg`. For a
+    /// frozen capture `cg` is the whole display as it looked at the instant of the hotkey,
+    /// so "out" reaches everything the drag left behind; for a window grab or an image the
+    /// editor was handed directly it is the capture itself, so "out" only undoes a crop.
+    /// Either way there is one code path — the source only differs in how far it extends.
+    ///
+    /// `rect` is in `cg` pixels with a top-left origin (CoreGraphics'), while annotations
+    /// live in bottom-left image space; `regionResized` is the one place the two meet.
+    private struct CaptureSource {
+        let cg: CGImage
+        var rect: CGRect
+    }
+    private var source: CaptureSource?
+    /// `source.rect` as the active drag began — the clamps are measured against it, and it
+    /// must not move until the drag commits.
+    private var resizeBaseRegion: CGRect = .zero
     private weak var bgPlusButton: ToolButton?
     private var bgColorPicker: ColorPickerPanel?
     private var bgView: BackgroundView?
@@ -362,12 +382,21 @@ final class EditorWindowController: NSObject {
     ///   exact integers/halves, and that sub-percent error forces CoreGraphics to
     ///   bilinear-resample the *entire* image on every redraw — invisible on a dense
     ///   Retina panel, visibly soft on a 1x external display.
-    init(image: NSImage, selectionRect: CGRect, screen: NSScreen, captureScale: CGFloat = 1) {
+    /// - Parameter still: The frozen full-display grab this capture was cut from, with the
+    ///   capture's pixel rect inside it. Supplying it lets the resize handles grow the
+    ///   region past what was selected; without it they can only crop (see `CaptureSource`).
+    init(image: NSImage, selectionRect: CGRect, screen: NSScreen, captureScale: CGFloat = 1,
+         still: (cg: CGImage, pixelRect: CGRect)? = nil) {
         let inset = EditorWindowController.onScreenScale(selection: selectionRect, screen: screen,
                                                         captureScale: captureScale)
         let scale = (captureScale > 0 ? 1 / captureScale : 1) * inset
         canvas = CanvasView(image: image, displayScale: scale)
         captureScreen = screen
+        if let still {
+            source = CaptureSource(cg: still.cg, rect: still.pixelRect)
+        } else if let cg = image.cgImage(forProposedRect: nil, context: nil, hints: nil) {
+            source = CaptureSource(cg: cg, rect: CGRect(x: 0, y: 0, width: cg.width, height: cg.height))
+        }
         window = KeyableWindow(contentRect: screen.frame, styleMask: .borderless,
                                backing: .buffered, defer: false)
         super.init()
@@ -401,8 +430,8 @@ final class EditorWindowController: NSObject {
         // large enough to need scaling the middle is the *only* place that leaves a gutter on
         // both sides. Its size comes from the canvas, which sized itself from the image and
         // `displayScale`, so the ring and the gap measurements line up with the pixels
-        // actually on screen. From here on the resize handles are a free zoom, so the canvas
-        // frame is only ever `image.size * canvas.displayScale`.
+        // actually on screen. The resize handles only ever change which region is shown, so
+        // the canvas frame stays `image.size * canvas.displayScale` for the editor's life.
         let local = NSRect(x: ((screen.frame.width - canvas.frame.width) / 2).rounded(),
                            y: ((screen.frame.height - canvas.frame.height) / 2).rounded(),
                            width: canvas.frame.width, height: canvas.frame.height)
@@ -489,16 +518,12 @@ final class EditorWindowController: NSObject {
     /// allows for free (see `magnification`).
     private static let workableEdge: CGFloat = 120
     /// Ceiling on that magnification — past this a capture is more pixel blocks than picture.
-    /// Only the *opening* scale is capped; the resize handles zoom without limit.
+    /// The magnification set here is the only one there is: the resize handles change the
+    /// captured *region*, so they never rescale what is already on the canvas.
     private static let maxMagnification: CGFloat = 4
-    /// How close a dragged scale must come to a whole number to be committed as exactly that.
-    /// Kept small — the stretch is meant to be free, and this only absorbs drift a hand cannot
-    /// avoid (see `snapScale`).
-    private static let scaleSnap: CGFloat = 0.04
-    /// Floor on either edge of a hand-dragged canvas, so a knob can't collapse it to nothing.
+    /// Floor on either edge of a hand-dragged canvas, so a knob can't collapse the region
+    /// to nothing. There is no ceiling — the source image is the ceiling.
     private static let minCanvasEdge: CGFloat = 40
-    /// Ceiling on either edge of a hand-dragged canvas, in screens.
-    private static let maxCanvasScreens: CGFloat = 8
 
     /// Horizontal room a card column needs beside the capture: its own width, plus the gap
     /// and margin `measureGaps` adds, plus slack. Both `insetScale` and the resize clamp
@@ -1464,10 +1489,11 @@ final class EditorWindowController: NSObject {
         let sx = canvas.scaleX, sy = canvas.scaleY
         let center = CGPoint(x: canvas.frame.midX, y: canvas.frame.midY)
         cancelCrop()
-        // A quarter turn turns the stretch with it: the axes swap, so the scales do too, and
-        // the box the user dragged comes back on its side rather than snapping square.
+        // A quarter turn swaps the axes, so the two scales swap with them — they are equal
+        // now that nothing stretches the canvas, but the pairing has to stay honest.
         canvas.scaleX = sy; canvas.scaleY = sx
         canvas.applyTransform(newImage: newImg, remap: remap)
+        rebaseSource()
         let newSize = NSSize(width: newImg.size.width * sy, height: newImg.size.height * sx)
         relayout(canvasFrame: NSRect(x: center.x - newSize.width / 2,
                                      y: center.y - newSize.height / 2,
@@ -1486,10 +1512,21 @@ final class EditorWindowController: NSObject {
         let center = CGPoint(x: canvas.frame.midX, y: canvas.frame.midY)
         cancelCrop()
         canvas.applyTransform(newImage: newImg, remap: remap)
+        rebaseSource()
         let newSize = NSSize(width: newImg.size.width * sx, height: newImg.size.height * sy)
         relayout(canvasFrame: NSRect(x: center.x - newSize.width / 2,
                                      y: center.y - newSize.height / 2,
                                      width: newSize.width, height: newSize.height))
+    }
+
+    /// Point `source` at the canvas as it now stands. Rotate and flip leave the image no
+    /// longer aligned with the display it came off, so the frozen still can't be mapped into
+    /// any more — the handles keep working, they just can only crop and un-crop from here.
+    private func rebaseSource() {
+        guard let cg = canvas.image.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
+            source = nil; return
+        }
+        source = CaptureSource(cg: cg, rect: CGRect(x: 0, y: 0, width: cg.width, height: cg.height))
     }
 
     @objc private func applyCropPressed()  { applyCrop() }
@@ -1501,6 +1538,12 @@ final class EditorWindowController: NSObject {
         let sx = canvas.scaleX, sy = canvas.scaleY
         let oldOrigin = canvas.frame.origin
         canvas.applyTransform(newImage: newImg) { CGPoint(x: $0.x - pc.minX, y: $0.y - pc.minY) }
+        // A crop is still a sub-rect of the same source, so the handles keep their reach:
+        // `pc` is bottom-left image space, the region top-left source pixels.
+        if let r = source?.rect {
+            source?.rect = CGRect(x: r.minX + pc.minX, y: r.maxY - pc.minY - pc.height,
+                                  width: pc.width, height: pc.height)
+        }
         hideCropConfirm()
         relayout(canvasFrame: NSRect(x: oldOrigin.x + pc.minX * sx,
                                      y: oldOrigin.y + pc.minY * sy,
@@ -1522,7 +1565,7 @@ final class EditorWindowController: NSObject {
         var fr = canvasFrame
         // A frame bigger than the screen can't be clamped inside it — centre the overflow
         // rather than pinning it into one corner, which is what the old `max(8 + pad, …)`
-        // floor did. Reachable now that the resize handles zoom without a limit.
+        // floor did. Reachable once a resize grows the region out to the whole display.
         let m = 8 + pad
         let fitsX = content.bounds.width - fr.width - m >= m
         let fitsY = content.bounds.height - fr.height - m >= m
@@ -1606,6 +1649,7 @@ final class EditorWindowController: NSObject {
         guard let content = window.contentView else { return }
         activeResizeEdge = edge
         resizeBaseFrame = canvas.frame
+        resizeBaseRegion = source?.rect ?? .zero
         let p = NSView(frame: canvas.frame)
         p.wantsLayer = true
         p.layer?.borderColor = Theme.lavender.cgColor
@@ -1619,90 +1663,85 @@ final class EditorWindowController: NSObject {
     }
 
     /// Drag the grabbed edge(s), holding the opposite edge(s) fixed — each knob moves only
-    /// what it is attached to, so the picture stretches freely.
+    /// the side it sits on, so the drag reframes the capture the way the selection overlay
+    /// framed it in the first place.
     ///
     /// Deliberately **not** aspect locked and **not** anchored on the centre: locking the
     /// aspect made an edge knob change the height too, and centre-anchoring made it move the
-    /// opposite edge as well, so no knob felt like it belonged to the side it sat on. The
-    /// picture is a screenshot, so a non-uniform stretch does distort it — that is the cost of
-    /// the freedom, and the Rotate / Flip / Crop actions are the ones that stay rigid.
+    /// opposite edge as well, so no knob felt like it belonged to the side it sat on.
     ///
-    /// Bounded only by `minCanvasEdge` and `maxCanvasScreens`, per side, so a drag can neither
-    /// collapse an edge to nothing nor run away past anything drawable. There is no clamp to
-    /// the screen: the pixels were fixed at capture time, so this is a zoom, not a re-grab, and
-    /// a zoom has no natural stop.
+    /// The scale never changes, so a point dragged is a point of screen gained or given up.
+    /// Each edge stops where it runs out of `source` — its own edge inwards, `minCanvasEdge`
+    /// against the opposite side. On a frozen capture that limit is the display's edge, which
+    /// is invisible once the capture is centred; the preview simply stops there.
     private func resizeDragged(_ d: CGSize) {
-        guard let p = resizePreview, resizeBaseFrame.width > 0, resizeBaseFrame.height > 0
+        guard let p = resizePreview, resizeBaseFrame.width > 0, resizeBaseFrame.height > 0,
+              let src = source, canvas.scaleX > 0, canvas.scaleY > 0
         else { return }
-        let b = resizeBaseFrame, edge = activeResizeEdge
+        let b = resizeBaseFrame, edge = activeResizeEdge, r0 = resizeBaseRegion
+        let sx = canvas.scaleX, sy = canvas.scaleY
         let lo = Self.minCanvasEdge
-        let hi = max(captureScreen.frame.width, captureScreen.frame.height) * Self.maxCanvasScreens
+        let srcW = CGFloat(src.cg.width), srcH = CGFloat(src.cg.height)
         var minX = b.minX, maxX = b.maxX, minY = b.minY, maxY = b.maxY
         switch edge {
         case .topLeft, .left, .bottomLeft:
-            minX = min(max(b.maxX - hi, b.minX + d.width), maxX - lo)
+            minX = min(max(b.minX - r0.minX * sx, b.minX + d.width), maxX - lo)
         case .topRight, .right, .bottomRight:
-            maxX = max(min(b.minX + hi, b.maxX + d.width), minX + lo)
+            maxX = max(min(b.maxX + (srcW - r0.maxX) * sx, b.maxX + d.width), minX + lo)
         case .top, .bottom: break
         }
+        // The source's y runs down from its top, the view's up from its bottom: the canvas's
+        // top edge is bounded by `r0.minY` and its bottom by what is left below `r0.maxY`.
         switch edge {
         case .topLeft, .top, .topRight:
-            maxY = max(min(b.minY + hi, b.maxY + d.height), minY + lo)
+            maxY = max(min(b.maxY + r0.minY * sy, b.maxY + d.height), minY + lo)
         case .bottomLeft, .bottom, .bottomRight:
-            minY = min(max(b.maxY - hi, b.minY + d.height), maxY - lo)
+            minY = min(max(b.minY - (srcH - r0.maxY) * sy, b.minY + d.height), maxY - lo)
         case .left, .right: break
         }
         p.frame = NSRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
         repositionResizeHandles(around: p.frame)
     }
 
-    /// Commit the stretch: the two scales and a relayout, nothing more. The image is untouched
-    /// and annotations live in image space, so there is nothing to fetch and nothing async —
-    /// the old re-grab needed a ScreenCaptureKit round trip and could fail.
+    /// Commit the reframe: cut the new region out of `source` and swap it in.
+    ///
+    /// Nothing is scaled and nothing is fetched — the pixels have been in hand since the
+    /// freeze, so unlike the display re-grab this replaced there is no round trip to fail and
+    /// no chance of stitching now-pixels around then-pixels. `applyTransform` carries the
+    /// annotations across; marks the new region no longer contains are dropped by it, exactly
+    /// as the crop tool drops them.
     private func resizeEnded() {
         guard let p = resizePreview, resizeBaseFrame.width > 0, resizeBaseFrame.height > 0
         else { return }
         let b = resizeBaseFrame, pf = p.frame
         p.removeFromSuperview(); resizePreview = nil
-        let imgW = canvas.image.size.width, imgH = canvas.image.size.height
-        // A drag that didn't change anything, or an image with no size, is a no-op.
-        guard imgW > 0, imgH > 0, abs(pf.width - b.width) >= 1 || abs(pf.height - b.height) >= 1
+        guard let src = source, canvas.scaleX > 0, canvas.scaleY > 0,
+              abs(pf.width - b.width) >= 1 || abs(pf.height - b.height) >= 1
+        else { relayout(canvasFrame: b); return }
+        let sx = canvas.scaleX, sy = canvas.scaleY, r0 = resizeBaseRegion
+        // View points back into source pixels. Rounding here (not at each edge as it was
+        // dragged) keeps the region on whole pixels, so the crop never resamples.
+        let region = CGRect(x: r0.minX + ((pf.minX - b.minX) / sx).rounded(),
+                            y: r0.minY - ((pf.maxY - b.maxY) / sy).rounded(),
+                            width: (pf.width / sx).rounded(),
+                            height: (pf.height / sy).rounded())
+            .intersection(CGRect(x: 0, y: 0, width: CGFloat(src.cg.width), height: CGFloat(src.cg.height)))
+        guard !region.isNull, region.width >= 1, region.height >= 1, region != r0,
+              let cropped = src.cg.cropping(to: region)
         else { relayout(canvasFrame: b); return }
         canvas.endTextEditing()
         cancelCrop()
-        // Quantise what the hand dragged before committing it. `relayout` already rounds the
-        // canvas *origin* onto the device-pixel grid because a fractional one resamples the
-        // whole canvas; the size needs the same treatment and never got it, so every stretch
-        // softened the very picture the user enlarged to look at.
-        let backing = max(1, window.backingScaleFactor)
-        canvas.scaleX = Self.snapScale(pf.width / imgW, imageEdge: imgW, backing: backing)
-        canvas.scaleY = Self.snapScale(pf.height / imgH, imageEdge: imgH, backing: backing)
-        // Size the frame from the committed scales, so the canvas stays exactly
-        // `image.size × (scaleX, scaleY)` and the image can't land a fraction off its own view.
-        var committed = pf
-        committed.size = CGSize(width: imgW * canvas.scaleX, height: imgH * canvas.scaleY)
-        relayout(canvasFrame: committed)
-    }
-
-    /// Quantise a dragged scale so the stretched canvas lands on whole device pixels.
-    ///
-    /// A drag arrives in fractional points — a trackpad reports sub-pixel deltas — so a stretch
-    /// that looks like exactly 2× commits as 1.9987×. Both axes are then fractional, the image's
-    /// edges fall between device pixels, and CoreGraphics resamples the entire canvas on every
-    /// redraw. That is pure loss: the user dragged the picture *bigger* to see it better and got
-    /// a softer one, worst on a 1× display where there is no spare density to hide it.
-    ///
-    /// Near a whole step the scale snaps to it, which also lets `CanvasView.draw` take its
-    /// nearest-neighbour path so an integer zoom of a screenshot keeps its glyph edges hard.
-    /// Anywhere else the scale is kept but nudged onto the pixel grid — the sharpest an
-    /// arbitrary ratio can be — leaving the free stretch free.
-    private static func snapScale(_ s: CGFloat, imageEdge: CGFloat, backing: CGFloat) -> CGFloat {
-        guard s > 0, imageEdge > 0, backing > 0 else { return s }
-        let whole = s.rounded()
-        if whole >= 1, abs(s - whole) <= scaleSnap { return whole }
-        let px = (imageEdge * s * backing).rounded()
-        guard px >= 1 else { return s }
-        return px / (imageEdge * backing)
+        // Annotations are in bottom-left image space, so the shift comes off the region's
+        // left edge and its *bottom* (`maxY` in the source's downward y).
+        let dx = r0.minX - region.minX, dy = region.maxY - r0.maxY
+        source?.rect = region
+        canvas.applyTransform(newImage: NSImage(cgImage: cropped, size: NSSize(width: cropped.width,
+                                                                              height: cropped.height))) {
+            CGPoint(x: $0.x + dx, y: $0.y + dy)
+        }
+        relayout(canvasFrame: NSRect(x: b.minX + (region.minX - r0.minX) * sx,
+                                     y: b.minY - (region.maxY - r0.maxY) * sy,
+                                     width: region.width * sx, height: region.height * sy))
     }
 
     private func showCropConfirm() {
