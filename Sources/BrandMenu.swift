@@ -253,7 +253,11 @@ private final class MenuRowView: NSView {
         let name = NSTextField(labelWithString: title)
         name.font = Theme.font(13, .medium); name.textColor = textColor
         name.alphaValue = enabled ? 1 : 0.5
-        name.frame = NSRect(x: textX, y: (height - 18) / 2, width: width - textX - 60, height: 18)
+        // Only a row that *has* a shortcut pays for the shortcut column; reserving those
+        // 48 pt on every row clipped the longer titles (and their translations, which run
+        // longer still) against a gutter with nothing in it.
+        let trailing: CGFloat = shortcut == nil ? 12 : 60
+        name.frame = NSRect(x: textX, y: (height - 18) / 2, width: width - textX - trailing, height: 18)
         addSubview(name)
 
         if let shortcut {
