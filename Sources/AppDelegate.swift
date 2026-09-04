@@ -206,12 +206,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // taken. Omitted while recording — relaunching mid-capture would lose the take.
         switch Updater.pendingAction {
         case .relaunch:
-            entries.append(.item(title: L("Relaunch to Finish Update"), symbol: "arrow.clockwise",
+            entries.append(.item(title: L("Relaunch to Update"), symbol: "arrow.clockwise",
                                  shortcut: nil) { Updater.relaunchFromMenu() })
             entries.append(.separator)
         case .install:
-            entries.append(.item(title: L("Install Update…"), symbol: "arrow.down.circle.fill",
-                                 shortcut: nil) { Updater.showPending() })
+            // Once Install has been clicked the row reports the work instead of offering
+            // it again: the download is agreed to and running, and a second click would
+            // only re-ask the same question and start a duplicate download.
+            if Updater.isInstalling {
+                entries.append(.item(title: L("Updating…"), symbol: "arrow.down.circle.fill",
+                                     shortcut: nil, enabled: false) {})
+            } else {
+                entries.append(.item(title: L("Install Update…"), symbol: "arrow.down.circle.fill",
+                                     shortcut: nil) { Updater.showPending() })
+            }
             entries.append(.separator)
         case nil:
             break

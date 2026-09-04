@@ -94,6 +94,14 @@ enum Updater {
     /// nothing happen at all, people reasonably conclude the app is broken.
     static var onInstallProgress: ((Bool) -> Void)?
 
+    /// True from the moment Install is clicked until the swap succeeds or fails. The
+    /// offer has been answered by then, but `pendingAction` still reports `.install`
+    /// (nothing is staged yet), so without this the menu would keep handing out a live
+    /// "Install Update…" row and a second click would re-open the offer — and agreeing
+    /// to it again fires a second download that the installer can only discard as
+    /// `.alreadyRunning`. The menu shows the work instead, and offers nothing to press.
+    private(set) static var isInstalling = false
+
     /// What prompted a check, and therefore how much of the gate it may skip.
     enum Trigger {
         /// The heartbeat — the full background cadence.
@@ -422,7 +430,9 @@ enum Updater {
     /// - Parameter force: for an explicitly requested check, where staying silent would
     ///   read as the app ignoring the click.
     private static func offerPending(force: Bool = false) {
-        guard let action = pendingAction, !alertShowing else { return }
+        // An install already under way has been agreed to; re-offering it would ask the
+        // same question twice and let the user start the download again.
+        guard let action = pendingAction, !alertShowing, !isInstalling else { return }
         if !force {
             guard relaunchWaitTimer == nil, !isSnoozed(action.version) else { return }
             guard !isUserBusy() else { waitForIdleThenOffer(); return }
@@ -433,18 +443,28 @@ enum Updater {
         }
     }
 
+    /// One owner of the in-flight flag: the menu bar shows the work (`onInstallProgress`)
+    /// and the status menu drops the row that would start it again (`onPendingChange`),
+    /// so the two can't disagree about whether an install is running.
+    private static func setInstalling(_ running: Bool) {
+        isInstalling = running
+        onInstallProgress?(running)
+        onPendingChange?()
+    }
+
     /// Download and swap in the available release. Only ever reached from an explicit
     /// Install, which is why — unlike the old unattended path — a failure is reported
     /// rather than swallowed: someone is sitting there waiting on it.
     private static func install() {
+        guard !isInstalling else { return }
         guard let tag = availableTag, let dmg = dmgURL(for: tag) else {
             presentInstallFailedAlert()
             return
         }
         let version = normalize(tag)
-        onInstallProgress?(true)
+        setInstalling(true)
         UpdateInstaller.install(dmgURL: dmg, expectedVersion: version) { outcome in
-            onInstallProgress?(false)
+            setInstalling(false)
             switch outcome {
             case .success:
                 clearFailures()
@@ -580,7 +600,7 @@ enum Updater {
     /// The status menu's update item: show whatever is outstanding, right now.
     static func showPending() { offerPending(force: true) }
 
-    /// Relaunch on the user's explicit say-so — the "Relaunch to Finish Update" menu
+    /// Relaunch on the user's explicit say-so — the "Relaunch to Update" menu
     /// item. Pins hold captures that were never saved anywhere, so closing them warrants
     /// a confirm; but only when there is actually something to lose, since the ordinary
     /// case deserves a single click rather than a dialog nobody needed. The staged build

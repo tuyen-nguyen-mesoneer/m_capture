@@ -104,7 +104,7 @@ enum L10n {
         "Automatic update checks are failing — check network access to GitHub.": "Automatische Update-Prüfungen schlagen fehl — Netzwerkzugriff auf GitHub prüfen.",
         "Updates cannot be installed — move m_capture to your Applications folder.":
             "Updates können nicht installiert werden — m_capture in den Programme-Ordner verschieben.",
-        "Relaunch to Finish Update": "Zum Abschluss des Updates neu starten",
+        "Relaunch to Update": "Zum Update neu starten",
         "Relaunch now?": "Jetzt neu starten?",
         "Relaunch": "Neu starten",
         "Pinned windows will close.": "Angeheftete Fenster werden geschlossen.",
@@ -471,7 +471,7 @@ enum L10n {
         "Automatic update checks are failing — check network access to GitHub.": "Kiểm tra cập nhật tự động đang thất bại — hãy kiểm tra kết nối mạng tới GitHub.",
         "Updates cannot be installed — move m_capture to your Applications folder.":
             "Không thể cài bản cập nhật — hãy chuyển m_capture vào thư mục Applications.",
-        "Relaunch to Finish Update": "Khởi động lại để hoàn tất cập nhật",
+        "Relaunch to Update": "Mở lại để cập nhật",
         "Relaunch now?": "Khởi động lại ngay?",
         "Relaunch": "Khởi động lại",
         "Pinned windows will close.": "Các cửa sổ đã ghim sẽ đóng lại.",
