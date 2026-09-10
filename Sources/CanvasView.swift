@@ -1005,7 +1005,7 @@ final class CanvasView: NSView, NSTextViewDelegate {
         tv.isRichText = true
         tv.isHorizontallyResizable = false
         tv.isVerticallyResizable = false
-        tv.textContainerInset = NSSize(width: 4, height: 3)
+        tv.textContainerInset = textEditorInset(screenFontSize: font.pointSize)
         tv.textContainer?.lineFragmentPadding = 0
         tv.textContainer?.widthTracksTextView = true
         tv.textContainer?.heightTracksTextView = true
@@ -1042,6 +1042,21 @@ final class CanvasView: NSView, NSTextViewDelegate {
             tv.layer?.borderColor = textBackgroundColor.cgColor
             tv.layer?.borderWidth = 2
         }
+    }
+
+    /// Padding inside the live text box, in view points. The committed mark keeps this
+    /// box verbatim (`commitText`) while `TextAnnotation.draw` takes `backgroundPad`
+    /// (`fontSize * 0.28`) back out of it, so the box has to reserve exactly that much or
+    /// the drawn text wraps *narrower* than it was typed — at 48pt and up a one-line chip
+    /// re-wrapped to two and spilled out of its own background. Floored at the bare
+    /// editing inset so a small font (and `.none`, which draws no chip) still keeps the
+    /// caret off the edge; being wider than the draw pad only ever adds slack.
+    private static let bareTextInset = NSSize(width: 4, height: 3)
+    private func textEditorInset(screenFontSize: CGFloat) -> NSSize {
+        guard textBackground != .none else { return Self.bareTextInset }
+        let pad = screenFontSize * 0.28
+        return NSSize(width: max(Self.bareTextInset.width, pad),
+                      height: max(Self.bareTextInset.height, pad))
     }
 
     /// The editor font at a given on-screen point size, honoring the current family and
@@ -1093,7 +1108,10 @@ final class CanvasView: NSView, NSTextViewDelegate {
         tv.selectAll(nil)
         textView = tv
         textImageFont = mark.fontSize
-        textLockedWidth = mark.maxWidth * scale
+        // The lock is the *container* width, which `fitTextView` pads back out to the box
+        // width — locking the box width instead re-added the inset on every re-open, so a
+        // mark grew wider each time it was edited.
+        textLockedWidth = max(1, mark.maxWidth * scale - tv.textContainerInset.width * 2)
         fitTextView(tv)
         redoStack.removeAll(); onChange?(); needsDisplay = true
         onTextStyleChange?()
@@ -1137,6 +1155,14 @@ final class CanvasView: NSView, NSTextViewDelegate {
         let height = ceil(max(font.ascender - font.descender, measured)) + inset.height * 2
         let top = tv.frame.maxY
         tv.frame = NSRect(x: tv.frame.minX, y: top - height, width: width + inset.width * 2, height: height)
+    }
+
+    /// Hand key status and the caret back to the live text box. A brand pop-up opens its
+    /// list in its own key window, so a format change made mid-typing would otherwise
+    /// leave the editor keyless and the box uneditable until it was clicked again.
+    func restoreTextFocus() {
+        window?.makeKeyAndOrderFront(nil)
+        window?.makeFirstResponder(textView ?? self)
     }
 
     /// Commit any in-progress text box. The editor calls this before rescaling: the live
@@ -1220,6 +1246,7 @@ final class CanvasView: NSView, NSTextViewDelegate {
                 store.addAttribute(.font, value: font, range: NSRange(location: 0, length: store.length))
             }
             textImageFont = textFontSize
+            reinset(tv)
             fitTextView(tv)
         } else if let m = targetTextMark {
             let ratio = m.fontSize > 0 ? textFontSize / m.fontSize : 1
@@ -1231,9 +1258,23 @@ final class CanvasView: NSView, NSTextViewDelegate {
         needsDisplay = true
     }
 
+    /// Re-apply the container inset after a font-size or background change and keep the
+    /// locked container width the same box the user sees, so the padding the chip needs
+    /// grows and shrinks with it instead of only being right at the moment of creation.
+    private func reinset(_ tv: AnnotationTextView) {
+        let inset = textEditorInset(screenFontSize: (tv.font ?? .systemFont(ofSize: 14)).pointSize)
+        guard inset != tv.textContainerInset else { return }
+        if let locked = textLockedWidth {
+            textLockedWidth = max(1, locked + (tv.textContainerInset.width - inset.width) * 2)
+        }
+        tv.textContainerInset = inset
+    }
+
     private func applyBackgroundStyle() {
         if let tv = textView {
             styleTextViewBackground(tv)
+            reinset(tv)
+            fitTextView(tv)
         } else if let m = targetTextMark {
             m.background = textBackground; m.backgroundColor = textBackgroundColor
             onChange?()

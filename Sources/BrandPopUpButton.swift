@@ -179,7 +179,12 @@ final class BrandPopUpList {
         let win = PopUpListWindow(contentRect: NSRect(x: 0, y: 0, width: width, height: total),
                                   styleMask: .borderless, backing: .buffered, defer: false)
         Theme.styleOverlayWindow(win)
-        win.level = .popUpMenu
+        // Clear whatever window owns the button rather than pinning a constant: in
+        // Settings that is a `.normal` window, but the annotation editor sits at
+        // `.screenSaver` (1000), so a fixed `.popUpMenu` (101) opened the list *under*
+        // the capture — the dropdown read as a dead control because nothing appeared.
+        win.level = NSWindow.Level(rawValue: max(NSWindow.Level.popUpMenu.rawValue,
+                                                 bwin.level.rawValue + 1))
         win.contentView = container
 
         let onScreen = bwin.convertToScreen(button.convert(button.bounds, to: nil))

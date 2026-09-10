@@ -1956,6 +1956,7 @@ final class EditorWindowController: NSObject {
         guard idx >= 0, idx < textFontSizes.count else { return }
         canvas.setTextFontSize(textFontSizes[idx])
         positionTextFormatBar()
+        canvas.restoreTextFocus()
     }
 
     @objc private func textBoldPressed() {
@@ -1976,6 +1977,7 @@ final class EditorWindowController: NSObject {
         guard idx >= 0, idx < textBackgrounds.count else { return }
         canvas.setTextBackground(textBackgrounds[idx])
         positionTextFormatBar()
+        canvas.restoreTextFocus()
     }
 
     /// Custom color for the text **box's** background — picking one while the
