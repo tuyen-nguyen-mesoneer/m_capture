@@ -111,11 +111,13 @@ jobs:
         run: |
           # The cask in tuyen-nguyen-mesoneer/homebrew-tap pins the version and the DMG's
           # sha256, so it has to move with every release or `brew install --cask m_capture`
-          # keeps handing out the previous build. A missing token only warns: the release
-          # itself is already published and correct, so it must not fail the run.
+          # keeps handing out the previous build. This step runs *after* the release is
+          # published, so failing it costs nothing already shipped — and a lagging cask is
+          # the one way `brew upgrade --greedy` can put an older build over a newer one the
+          # app installed itself, so it must be loud rather than a warning nobody reads.
           if [ -z "${TAP_GITHUB_TOKEN:-}" ]; then
-            echo "::warning::TAP_GITHUB_TOKEN is not set — the Homebrew cask was NOT bumped. Update Casks/m_capture.rb in tuyen-nguyen-mesoneer/homebrew-tap by hand (see CONTRIBUTING.md > Releasing)."
-            exit 0
+            echo "::error::TAP_GITHUB_TOKEN is not set — the Homebrew cask was NOT bumped. The release itself is published; update Casks/m_capture.rb in tuyen-nguyen-mesoneer/homebrew-tap by hand (see CONTRIBUTING.md > Releasing), then re-run this job."
+            exit 1
           fi
 
           VERSION="${TAG#v}"

@@ -78,6 +78,12 @@ enum UpdateInstaller {
         }
 
         _ = try fm.replaceItemAt(Bundle.main.bundleURL, withItemAt: staged)
+
+        // Homebrew installs this same bundle and has no way of learning that we replaced
+        // it, so its receipt would keep naming the version it installed. Strictly
+        // bookkeeping, and deliberately after the swap: the update has already succeeded
+        // by here and nothing this does may throw it away.
+        HomebrewReceipt.restamp(to: stagedVersion)
     }
 
     /// `hdiutil attach … -plist` and pull the mounted volume's path out of the plist.

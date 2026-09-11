@@ -359,7 +359,23 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
   doesn't re-trigger Gatekeeper. The staged bundle must be **both** newer than current
   *and* the exact version that was offered (`expectedVersion`): the caller records that
   string as what is now staged and the relaunch prompt names it, so a mismatched asset
-  would have the app claim a version it isn't running.
+  would have the app claim a version it isn't running. After the swap it calls
+  `HomebrewReceipt.restamp(to:)`.
+- `HomebrewReceipt.swift` — tells Homebrew what the app just did to the bundle Homebrew
+  installed. The cask's install target is `~/Applications/m_capture.app`, the very bundle
+  `UpdateInstaller` replaces, and nothing informs brew — so its receipt named the
+  install-time version forever, and `brew upgrade --greedy` (which ignores the cask's
+  `auto_updates true`) re-downloaded a DMG the user already had. Homebrew derives the
+  installed version from the `<version>` **path segment** of
+  `.metadata/<version>/<timestamp>/Casks/<token>.json` (`Cask#installed_version`), not from
+  `INSTALL_RECEIPT.json`, while uninstall/upgrade work off the sibling
+  `Caskroom/<token>/<version>` directory — so both directories are renamed and the
+  receipt's own `source.version` rewritten to match. The recorded version is **read off
+  disk, never assumed to be the running build**: the app may have self-updated several
+  times since the cask was installed. Every step is best-effort and silent — this is
+  another tool's private layout, so an unfamiliar shape (no symlink to *this* bundle, more
+  than one recorded version, a destination that already exists) leaves it untouched rather
+  than guessing, and an update must never fail because the bookkeeping after it did.
 - `HistoryWindow.swift` — the History panel: newest captures from the save folder as
   thumbnail cards (adaptive grid) with Copy / Pin / Trim / Reveal / Trash actions; rebuilt
   from the folder on every open, and on every filter change. Cards group under **day
