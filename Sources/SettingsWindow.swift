@@ -466,15 +466,20 @@ final class SettingsWindowController: NSObject {
         func rows(_ actions: [ShortcutAction]) -> [NSView] {
             actions.compactMap { a in fields[a].map { row(a.label, $0, tip: Self.shortcutTip(a)) } }
         }
-        return [groupHeading(L("Capture"), firstInSection: true)]
-            + rows(capture)
-            + [groupHeading(L("While selecting"), firstInSection: false),
-               row(L("Last Region"), lastRegionKeyField,
-                   tip: L("Re-captures the region of your previous capture, without dragging a new one. Press it on the selection overlay, in Region mode."))]
-            + [groupHeading(L("While recording"), firstInSection: false)]
-            + rows(recording)
-            + [groupHeading(L("App"), firstInSection: false)]
-            + rows([.forceQuit])
+        // Appended step by step, never built as one `+` chain: as a single expression this
+        // is a mix of array literals and `compactMap` results that the type checker gives
+        // up on ("unable to type-check in reasonable time") — on CI's slower runner, while
+        // still compiling locally.
+        var out: [NSView] = [groupHeading(L("Capture"), firstInSection: true)]
+        out += rows(capture)
+        out.append(groupHeading(L("While selecting"), firstInSection: false))
+        out.append(row(L("Last Region"), lastRegionKeyField,
+                       tip: L("Re-captures the region of your previous capture, without dragging a new one. Press it on the selection overlay, in Region mode.")))
+        out.append(groupHeading(L("While recording"), firstInSection: false))
+        out += rows(recording)
+        out.append(groupHeading(L("App"), firstInSection: false))
+        out += rows([.forceQuit])
+        return out
     }
 
     /// A quiet small-caps heading inside a section: the section eyebrow's little
