@@ -506,9 +506,9 @@ final class SelectionView: NSView {
 
     override func keyDown(with event: NSEvent) {
         if event.keyCode == 53 { onCancel?(); return }
-        // Return / keypad-Enter re-captures the previous region (region mode, no
-        // drag in progress).
-        if event.keyCode == 36 || event.keyCode == 76,
+        // The last-region key (Return / Enter unless rebound in Settings → Shortcuts)
+        // re-captures the previous region — region mode, no drag in progress.
+        if Settings.shared.lastRegionKey.matches(UInt16(event.keyCode)),
            captureMode == .region, startPoint == nil, let prev = previousRect {
             onComplete?(prev.integral)
             return
@@ -705,7 +705,11 @@ final class SelectionView: NSView {
             shortcuts.append(keyHint("Press %@ to switch mode", key: "Space"))
         }
         if captureMode == .region, previousRect != nil {
-            shortcuts.append(keyHint("Press %@ for last region", key: "Return"))
+            // Whatever the key is actually bound to, named the way the reader's keyboard
+            // names it — "Return / Enter" for the default, since Apple's own keyboards
+            // label that key Return and most third-party and non-US ones label it Enter.
+            shortcuts.append(keyHint("Press %@ for last region",
+                                     key: Settings.shared.lastRegionKey.label))
         }
 
         let modes = availableModes

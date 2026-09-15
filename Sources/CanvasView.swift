@@ -29,6 +29,23 @@ final class CanvasView: NSView, NSTextViewDelegate {
     /// comes out smaller on screen than it reads in image space.
     var displayScale: CGFloat { min(scaleX, scaleY) }
 
+    /// Drawn radius of an edit handle, in view points — every knob the editor puts on a
+    /// mark (shape / text box / overlay boxes, curve and ruler endpoints, the zoom
+    /// callout's corner) is this size, so no tool's handles read differently from
+    /// another's. Divide by `displayScale` at the call site: the canvas draws in image
+    /// space, so a knob has to be specified in points and converted, or it would grow
+    /// and shrink with the picture.
+    static let handleRadius: CGFloat = 3
+    /// Grab radius for the same knobs — deliberately larger than what is drawn, and
+    /// **not** shrunk alongside it. The dot is a target you aim at with a pointer, so the
+    /// forgiving catchment is what makes the handles usable; tying the two together would
+    /// mean every visual refinement quietly made them harder to hit.
+    static let handleGrabRadius: CGFloat = 12
+    /// Stroke on a handle's ring, in view points. Thinner than the 1.5 pt selection
+    /// outline: at this radius a 1.5 pt ring eats most of the white body, so the knob
+    /// reads as a coloured blob instead of a white dot.
+    static let handleStroke: CGFloat = 1
+
     var tool: Tool = .arrow {
         didSet {
             if tool != .text { commitText(); editingText = nil; textDrag = .none }
@@ -128,7 +145,7 @@ final class CanvasView: NSView, NSTextViewDelegate {
     }
     /// The endpoint handle under `p` (start or end), or nil.
     private func measureHandle(_ m: MeasureAnnotation, at p: CGPoint) -> MeasureHandle? {
-        let hr = 12 / displayScale
+        let hr = Self.handleGrabRadius / displayScale
         let candidates: [(MeasureHandle, CGPoint)] = [(.start, m.start), (.end, m.end)]
         return candidates
             .map { ($0.0, hypot($0.1.x - p.x, $0.1.y - p.y)) }
@@ -190,6 +207,9 @@ final class CanvasView: NSView, NSTextViewDelegate {
     /// Called whenever the text style/selection changes so the editor can refresh the
     /// contextual format popover's controls.
     var onTextStyleChange: (() -> Void)?
+    /// Called when Esc ends the text interaction outright, so the editor can take the
+    /// format bar down with the box it belongs to.
+    var onTextDismiss: (() -> Void)?
     /// While editing an existing mark, the wrap width is locked to its original so
     /// the text keeps wrapping the same way; nil lets a new field grow to fit.
     private var textLockedWidth: CGFloat?
@@ -385,12 +405,23 @@ final class CanvasView: NSView, NSTextViewDelegate {
         case .line, .arrow, .rect, .roundedRect, .ellipse, .triangle, .diamond,
              .star, .checkmark, .pentagon, .hexagon, .octagon,
              .blur, .spotlight, .ruler, .crop: return "plus"
-        case .text:        return "character.textbox"
+        // Text points with a bare I-beam, the one pointer every reader already knows as
+        // "text goes here", and the narrowest glyph here — it covers almost none of the
+        // corner the new box starts at. `character.textbox` was a filled rounded box
+        // that sat as an opaque slab over that corner and read as "a text box exists
+        // here" rather than "click to write"; `character.cursor.ibeam` fixed the meaning
+        // but carried an "A" alongside the beam, so it was wide again.
+        case .text:        return "text.cursor"
         case .counter:     return "number.circle.fill"
         case .eyedropper:  return "eyedropper.full"
         case .eraser:      return "eraser.fill"
         case .ocr:         return "text.viewfinder"
-        case .zoom:        return "plus.magnifyingglass"
+        // Zoom drags out a region like the shape family does, so it takes the same
+        // crosshair rather than its own glyph: `plus.magnifyingglass` was a dense filled
+        // lens parked over the exact corner the drag starts from — the one thing the
+        // comment above says not to do — and it named the tool, which the selected tile
+        // already does.
+        case .zoom:        return "plus"
         case .emoji:       return "face.smiling.inverse"
         case .overlay:     return "photo.fill"
         case .select:      return nil
@@ -439,7 +470,7 @@ final class CanvasView: NSView, NSTextViewDelegate {
             if measureHandle(em, at: p) != nil || em.hit(p) { NSCursor.openHand.set(); return }
         }
         if tool == .zoom {
-            let p = imagePoint(event), hr = 12 / displayScale
+            let p = imagePoint(event), hr = Self.handleGrabRadius / displayScale
             let ez = editingZoom ?? annotations.reversed().compactMap { $0 as? ZoomAnnotation }
                 .first { $0.dest.contains(p) || $0.source.contains(p) }
             if let ez {
@@ -499,7 +530,13 @@ final class CanvasView: NSView, NSTextViewDelegate {
     }
 
     override func keyDown(with event: NSEvent) {
-        if event.keyCode == 53 { onCancel?(); return }
+        // Esc unwinds one level at a time: a just-placed text box (still showing its
+        // handles, with the format bar on it) is dismissed first, and only Esc with
+        // nothing live cancels the whole editor.
+        if event.keyCode == 53 {
+            if tool == .text, textView == nil, editingText != nil { dismissTextEditing(); return }
+            onCancel?(); return
+        }
         if pendingCrop != nil, event.keyCode == 36 || event.keyCode == 76 {
             onCropConfirm?(); return
         }
@@ -624,7 +661,7 @@ final class CanvasView: NSView, NSTextViewDelegate {
             let target = editingZoom ?? annotations.reversed().compactMap { $0 as? ZoomAnnotation }
                 .first { $0.dest.contains(p) || $0.source.contains(p) }
             if let ez = target {
-                let hr = 12 / displayScale
+                let hr = Self.handleGrabRadius / displayScale
                 let knob = CGPoint(x: ez.dest.maxX, y: ez.dest.minY)
                 if hypot(knob.x - p.x, knob.y - p.y) < hr {
                     editingZoom = ez
@@ -766,7 +803,6 @@ final class CanvasView: NSView, NSTextViewDelegate {
             let x = max(0, min(W - ez.source.width, p.x - zoomDragOffset.x))
             let y = max(0, min(H - ez.source.height, p.y - zoomDragOffset.y))
             ez.source.origin = CGPoint(x: x, y: y)
-            ez.patch = croppedCGImage(rect: ez.source)
             needsDisplay = true; return
         }
         if overlayDrag == .move, let eo = editingOverlay {
@@ -874,7 +910,6 @@ final class CanvasView: NSView, NSTextViewDelegate {
         }
         if selectDrag != .none {
             refreshObscurePatch(selected)
-            if let z = selected as? ZoomAnnotation { z.patch = croppedCGImage(rect: z.source) }
             selectDrag = .none; NSCursor.pop()
             onChange?(); needsDisplay = true; return
         }
@@ -882,7 +917,8 @@ final class CanvasView: NSView, NSTextViewDelegate {
             zoomStart = nil
             if let s = zoomRect, s.width >= 8, s.height >= 8 {
                 let dest = zoomDestination(for: s)
-                let z = ZoomAnnotation(source: s, dest: dest, patch: croppedCGImage(rect: s), style: style)
+                let z = ZoomAnnotation(source: s, dest: dest, style: style)
+                bindZoomScene(z)
                 annotations.append(z); redoStack.removeAll(); editingZoom = z; onChange?()
             }
             zoomRect = nil; needsDisplay = true; return
@@ -1121,15 +1157,34 @@ final class CanvasView: NSView, NSTextViewDelegate {
         if let tv = textView { fitTextView(tv) }
     }
 
-    /// Return commits; Shift-Return inserts a line break; Esc commits too (matching
-    /// clicking away). Anything else falls through to normal text editing.
+    /// Return commits and keeps the box current (its handles stay up, the format bar
+    /// stays on it); Shift-Return inserts a line break. Esc commits too — matching
+    /// clicking away — but then *ends* the interaction, so the format bar goes with it
+    /// rather than floating over a box nothing is editing any more. Anything else falls
+    /// through to normal text editing.
     func textView(_ tv: NSTextView, doCommandBy selector: Selector) -> Bool {
-        if selector == #selector(NSResponder.insertNewline(_:))
-            || selector == #selector(NSResponder.cancelOperation(_:)) {
+        if selector == #selector(NSResponder.insertNewline(_:)) {
             commitText()
             return true
         }
+        if selector == #selector(NSResponder.cancelOperation(_:)) {
+            dismissTextEditing()
+            return true
+        }
         return false
+    }
+
+    /// End the text interaction: commit whatever is being typed, then drop the current
+    /// text target so nothing is left focused. The editor hides the format bar on this,
+    /// which is why Esc has to route here and not to a bare `commitText()`.
+    func dismissTextEditing() {
+        commitText()
+        editingText = nil
+        if selected is TextAnnotation { selected = nil; selectDrag = .none }
+        textDrag = .none
+        window?.makeFirstResponder(self)
+        needsDisplay = true
+        onTextDismiss?()
     }
 
     /// Size the live editor to its content, capped at the canvas edge, so long text
@@ -1419,7 +1474,7 @@ final class CanvasView: NSView, NSTextViewDelegate {
     /// The curve handle under `p` (whichever knob is nearest within grab range), or
     /// nil. Endpoints and apex share the reshape gesture for arrows and lines.
     private func curveHandle(_ c: CurvedAnnotation, at p: CGPoint) -> CurveHandle? {
-        let hr = 12 / displayScale
+        let hr = Self.handleGrabRadius / displayScale
         let candidates: [(CurveHandle, CGPoint)] = [(.start, c.start), (.end, c.end), (.apex, c.apex)]
         return candidates
             .map { ($0.0, hypot($0.1.x - p.x, $0.1.y - p.y)) }
@@ -1440,7 +1495,7 @@ final class CanvasView: NSView, NSTextViewDelegate {
     /// corner knobs sits under `p`, or nil. Lets any corner drag the shape's size.
     private func resizeAnchor(for s: Annotation, at p: CGPoint) -> CGPoint? {
         guard s.resizable else { return nil }
-        let hr = 12 / displayScale
+        let hr = Self.handleGrabRadius / displayScale
         return cornerAnchors(s.bounds)
             .map { ($0.anchor, hypot($0.corner.x - p.x, $0.corner.y - p.y)) }
             .filter { $0.1 < hr }
@@ -1468,7 +1523,7 @@ final class CanvasView: NSView, NSTextViewDelegate {
     /// Which of `b`'s eight box knobs sits under `p` (nearest within grab range), or nil.
     /// Shared by shapes and the image overlay so both get the same 8-handle affordance.
     private func boxHandle(inRect b: CGRect, at p: CGPoint) -> BoxHandle? {
-        let hr = 12 / displayScale
+        let hr = Self.handleGrabRadius / displayScale
         return boxHandlePoints(b)
             .map { ($0.handle, hypot($0.point.x - p.x, $0.point.y - p.y)) }
             .filter { $0.1 < hr }
@@ -1542,7 +1597,8 @@ final class CanvasView: NSView, NSTextViewDelegate {
         // single axis); other resizable marks scale uniformly, so only four corners show.
         let eightHandles = s is TwoPointAnnotation || s is TextAnnotation
         let pts = eightHandles ? boxHandlePoints(b).map(\.point) : cornerAnchors(b).map(\.corner)
-        let r = 6 / displayScale
+        let r = Self.handleRadius / displayScale
+        ctx.setLineWidth(Self.handleStroke / displayScale)
         for c in pts {
             let knob = CGRect(x: c.x - r, y: c.y - r, width: r * 2, height: r * 2)
             ctx.setFillColor(NSColor(white: 1, alpha: 0.95).cgColor); ctx.fillEllipse(in: knob)
@@ -1550,11 +1606,30 @@ final class CanvasView: NSView, NSTextViewDelegate {
         }
     }
 
+    /// Hand a zoom callout the scene it magnifies. Every callout needs this — one
+    /// without it draws a grey block — and only `mouseUp` makes them, so this is the
+    /// single place it has to happen.
+    private func bindZoomScene(_ z: ZoomAnnotation) {
+        z.renderScene = { [weak self] ctx in self?.drawZoomScene(in: ctx) }
+    }
+
+    /// The capture plus every mark on it, in image coordinates: what a zoom callout
+    /// magnifies, so a counter, an arrow or a label inside the source region shows up
+    /// enlarged instead of being cut out of the picture.
+    ///
+    /// Other callouts are skipped, which is also what keeps this from recursing — and a
+    /// callout rendering a shrunken copy of its neighbour says nothing anyway.
+    private func drawZoomScene(in ctx: CGContext) {
+        image.draw(in: CGRect(origin: .zero, size: image.size))
+        for a in annotations where !(a is ZoomAnnotation) { a.draw(in: ctx) }
+        if let l = live, !(l is ZoomAnnotation) { l.draw(in: ctx) }
+    }
+
     /// Draw a curve's three reshape knobs (start, end, apex) as white dots ringed in
     /// `tint`, matching the other editor handles.
     private func drawCurveHandles(_ c: CurvedAnnotation, in ctx: CGContext, tint: NSColor) {
-        let r = 6 / displayScale
-        ctx.setLineWidth(1.5 / displayScale)
+        let r = Self.handleRadius / displayScale
+        ctx.setLineWidth(Self.handleStroke / displayScale)
         for pt in [c.start, c.end, c.apex] {
             let box = CGRect(x: pt.x - r, y: pt.y - r, width: r * 2, height: r * 2)
             ctx.setFillColor(NSColor(white: 1, alpha: 0.95).cgColor); ctx.fillEllipse(in: box)
@@ -1566,8 +1641,8 @@ final class CanvasView: NSView, NSTextViewDelegate {
     /// same idiom as `drawCurveHandles`, minus the bend/apex knob (a ruler stays
     /// straight so its distance label always matches what's drawn).
     private func drawMeasureHandles(_ m: MeasureAnnotation, in ctx: CGContext, tint: NSColor) {
-        let r = 6 / displayScale
-        ctx.setLineWidth(1.5 / displayScale)
+        let r = Self.handleRadius / displayScale
+        ctx.setLineWidth(Self.handleStroke / displayScale)
         for pt in [m.start, m.end] {
             let box = CGRect(x: pt.x - r, y: pt.y - r, width: r * 2, height: r * 2)
             ctx.setFillColor(NSColor(white: 1, alpha: 0.95).cgColor); ctx.fillEllipse(in: box)
@@ -1599,8 +1674,8 @@ final class CanvasView: NSView, NSTextViewDelegate {
         ctx.interpolationQuality = .high
         for a in annotations { a.draw(in: ctx) }
         live?.draw(in: ctx)
-        if let pc = pendingCrop { drawCropOverlay(pc, in: ctx) }
-        if let o = ocrRect { drawCropOverlay(o, in: ctx) }
+        if let pc = pendingCrop { drawCropOverlay(pc, in: ctx, sizing: cropStart != nil) }
+        if let o = ocrRect { drawCropOverlay(o, in: ctx, sizing: ocrStart != nil) }
         if let z = zoomRect {
             ctx.setStrokeColor(style.color.cgColor)
             ctx.setLineWidth(1.5 / displayScale)
@@ -1613,17 +1688,18 @@ final class CanvasView: NSView, NSTextViewDelegate {
             drawMeasureHandles(em, in: ctx, tint: style.color)
         }
         if tool == .zoom, let ez = editingZoom {
-            let r = 6 / displayScale
+            let r = Self.handleRadius / displayScale
             let knob = CGRect(x: ez.dest.maxX - r, y: ez.dest.minY - r, width: r * 2, height: r * 2)
             ctx.setFillColor(NSColor(white: 1, alpha: 0.95).cgColor); ctx.fillEllipse(in: knob)
-            ctx.setStrokeColor(style.color.cgColor); ctx.setLineWidth(1.5 / displayScale); ctx.strokeEllipse(in: knob)
+            ctx.setStrokeColor(style.color.cgColor); ctx.setLineWidth(Self.handleStroke / displayScale); ctx.strokeEllipse(in: knob)
         }
         if tool == .overlay, let eo = editingOverlay {
             ctx.setStrokeColor(Theme.lavender.cgColor); ctx.setLineWidth(1.5 / displayScale)
             ctx.stroke(eo.rect)
             // Eight knobs (four corners + four edge midpoints) — edges stretch a single
             // axis, corners both, matching the shape resize box.
-            let r = 6 / displayScale
+            let r = Self.handleRadius / displayScale
+            ctx.setLineWidth(Self.handleStroke / displayScale)
             for pt in boxHandlePoints(eo.rect).map(\.point) {
                 let knob = CGRect(x: pt.x - r, y: pt.y - r, width: r * 2, height: r * 2)
                 ctx.setFillColor(NSColor(white: 1, alpha: 0.95).cgColor); ctx.fillEllipse(in: knob)
@@ -1654,7 +1730,10 @@ final class CanvasView: NSView, NSTextViewDelegate {
 
     /// Dim everything outside the pending crop region and outline it, so the
     /// user can see what "Apply crop" will keep. Drawn in image space.
-    private func drawCropOverlay(_ r: CGRect, in ctx: CGContext) {
+    /// `sizing` is on only while the region is still being dragged out: once the crop is
+    /// committed the confirm bar takes over, and a chip left sitting on the region is a
+    /// number about a decision already made, printed over the picture it is about.
+    private func drawCropOverlay(_ r: CGRect, in ctx: CGContext, sizing: Bool) {
         let W = image.size.width, H = image.size.height
         ctx.setFillColor(NSColor(white: 0, alpha: 0.5).cgColor)
         ctx.fill(CGRect(x: 0, y: r.maxY, width: W, height: H - r.maxY))
@@ -1664,6 +1743,32 @@ final class CanvasView: NSView, NSTextViewDelegate {
         ctx.setStrokeColor(Theme.lavender.cgColor)
         ctx.setLineWidth(1.5 / displayScale)
         ctx.stroke(r.insetBy(dx: 0.75 / displayScale, dy: 0.75 / displayScale))
+        if sizing { drawSizeReadout(for: r, in: ctx) }
+    }
+
+    /// The live "W × H px" readout on a crop drag — the same fact the capture overlay
+    /// gives you while selecting a region, which the editor's own crop had to be
+    /// committed to before you could learn it.
+    ///
+    /// Sized in *screen* points (hence every measurement divided by `displayScale`): this
+    /// is chrome, not a mark, so it must stay one size whether the canvas is magnified or
+    /// shrunk. It rides just inside the top-left corner of the region, and flips below
+    /// that edge when the region is too short to hold it.
+    private func drawSizeReadout(for r: CGRect, in ctx: CGContext) {
+        let s = NSAttributedString(string: EditorWindowController.cropSize(r), attributes: [
+            .font: Theme.monoDigitFont(11 / displayScale, .medium),
+            .foregroundColor: NSColor.white,
+        ])
+        let sz = s.size()
+        let padX = 6 / displayScale, padY = 3 / displayScale, inset = 6 / displayScale
+        let boxW = sz.width + padX * 2, boxH = sz.height + padY * 2
+        guard r.width > boxW + inset * 2 else { return }
+        let insideTop = r.maxY - inset - boxH
+        let y = insideTop > r.minY ? insideTop : r.maxY + inset
+        let box = CGRect(x: r.minX + inset, y: y, width: boxW, height: boxH)
+        ctx.setFillColor(NSColor(white: 0, alpha: 0.75).cgColor)
+        ctx.fill(box)   // square-cornered, like every other chip in the app
+        s.draw(at: CGPoint(x: box.minX + padX, y: box.minY + padY))
     }
 
     /// Swap in a transformed base image and move every annotation through `remap`
@@ -1688,7 +1793,6 @@ final class CanvasView: NSView, NSTextViewDelegate {
         for a in annotations + redoStack {
             if let s = a as? SpotlightAnnotation { s.fullSize = image.size }
             refreshObscurePatch(a)
-            if let z = a as? ZoomAnnotation { z.patch = croppedCGImage(rect: z.source) }
         }
         live = nil
         editingCurve = nil; curveDrag = nil; boxDrag = nil; editingShape = nil; editingShapeTool = nil

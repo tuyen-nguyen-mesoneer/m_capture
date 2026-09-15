@@ -39,7 +39,8 @@ final class SettingsWindowController: NSObject {
     private var drawColorRow: DrawColorRow!
     private var drawStrokePopup: NSPopUpButton!
     private var drawFadePopup: NSPopUpButton!
-    private var drawKeyFields: [DrawKeyField] = []
+    private var drawKeyFields: [KeyField] = []
+    private var lastRegionKeyField: KeyField!
     private var shortcutFields: [HotKeyField] = []
     private var toast: NSWindow?
 
@@ -116,7 +117,28 @@ final class SettingsWindowController: NSObject {
         drawColorRow = DrawColorRow()
         drawStrokePopup = popup(DrawStroke.allCases.map { $0.label }, #selector(drawStrokeChanged))
         drawFadePopup = popup(DrawFade.allCases.map { $0.label }, #selector(drawFadeChanged))
-        drawKeyFields = DrawTool.allCases.map { DrawKeyField(tool: $0) }
+        drawKeyFields = DrawTool.allCases.map { tool in
+            KeyField(current: { Settings.shared.drawKey(tool) }) { ev in
+                guard let raw = ev.charactersIgnoringModifiers?.uppercased(), raw.count == 1,
+                      let ch = raw.unicodeScalars.first,
+                      CharacterSet.alphanumerics.contains(ch) else {
+                    // Draw mode keeps ⌫ for Clear and Esc for leaving, and reads its tool
+                    // keys as plain letters — so this one stays narrower than `OverlayKey`.
+                    return .refused(L("Choose a letter or a digit."))
+                }
+                if let owner = Settings.shared.drawKeyConflict(raw, excluding: tool) {
+                    return .conflict(owner)
+                }
+                Settings.shared.setDrawKey(raw, for: tool)
+                return .stored
+            }
+        }
+        lastRegionKeyField = KeyField(current: { Settings.shared.lastRegionKey.label }) { ev in
+            if let why = OverlayKey.refusal(for: ev) { return .refused(why) }
+            guard let key = OverlayKey(event: ev) else { return .refused(L("Choose a letter, a digit, a punctuation key, or Return.")) }
+            Settings.shared.lastRegionKey = key
+            return .stored
+        }
 
         videoSubRows = [
             [
@@ -431,19 +453,28 @@ final class SettingsWindowController: NSObject {
     /// nothing outside a recording, and a heading says that once instead of every label
     /// repeating it — which is also what lets those labels stay inside the label column:
     /// spelled out, "Zoom While Recording" was clipped in all three languages.
+    ///
+    /// "While selecting" is the same idea for a key that isn't a global hotkey at all:
+    /// the selection overlay owns the keyboard while it is up, so its last-region key
+    /// needs no system-wide claim (see `OverlayKey`) — but it is still a shortcut the
+    /// user can rebind, so hiding it from the Shortcuts tab would be the wrong kind of
+    /// tidiness.
     private func shortcutRows() -> [NSView] {
         let fields = Dictionary(uniqueKeysWithValues: zip(ShortcutAction.allCases, shortcutFields))
-        let groups: [(String, [ShortcutAction])] = [
-            (L("Capture"), [.screenshot, .record]),
-            (L("While recording"), [.stop, .draw, .zoom]),
-            (L("App"), [.forceQuit]),
-        ]
-        return groups.enumerated().flatMap { index, group -> [NSView] in
-            [groupHeading(group.0, firstInSection: index == 0)]
-                + group.1.compactMap { action in
-                    fields[action].map { row(action.label, $0, tip: Self.shortcutTip(action)) }
-                }
+        let capture: [ShortcutAction] = [.screenshot, .record]
+        let recording: [ShortcutAction] = [.stop, .draw, .zoom]
+        func rows(_ actions: [ShortcutAction]) -> [NSView] {
+            actions.compactMap { a in fields[a].map { row(a.label, $0, tip: Self.shortcutTip(a)) } }
         }
+        return [groupHeading(L("Capture"), firstInSection: true)]
+            + rows(capture)
+            + [groupHeading(L("While selecting"), firstInSection: false),
+               row(L("Last Region"), lastRegionKeyField,
+                   tip: L("Re-captures the region of your previous capture, without dragging a new one. Press it on the selection overlay, in Region mode."))]
+            + [groupHeading(L("While recording"), firstInSection: false)]
+            + rows(recording)
+            + [groupHeading(L("App"), firstInSection: false)]
+            + rows([.forceQuit])
     }
 
     /// A quiet small-caps heading inside a section: the section eyebrow's little
@@ -605,6 +636,7 @@ final class SettingsWindowController: NSObject {
         delayPopup.selectItem(at: CaptureDelay.allCases.firstIndex(of: s.captureDelay) ?? 0)
         behaviorPopup.selectItem(at: CaptureBehavior.allCases.firstIndex(of: s.captureBehavior) ?? 0)
         shortcutFields.forEach { $0.refreshDisplay() }
+        lastRegionKeyField.refreshDisplay()
         pathLabel.stringValue = (s.saveDirectory.path as NSString).abbreviatingWithTildeInPath
         prefixField.stringValue = s.filenamePrefix
         formatPopup.selectItem(at: ImageFormat.allCases.firstIndex(of: s.format) ?? 0)
@@ -1167,8 +1199,15 @@ private final class PointerButton: NSButton {
 /// Deliberately *not* a `PointerButton` subclass: `PointerButton` also backs the panel's
 /// checkboxes (`NSButton(checkboxWithTitle:)`), and a fill painted in its `draw` lands
 /// behind the checkbox label as a purple slab.
-private final class BrandPushButton: NSButton {
+/// The app's push button: AppKit rounds a native `bezelStyle = .rounded` for us, and the
+/// brand is square-cornered, so every push button in the app is drawn here instead.
+/// Shared with the editor's crop bar — one button, one look.
+final class BrandPushButton: NSButton {
     private var hovering = false { didSet { if hovering != oldValue { needsDisplay = true } } }
+    /// A filled accent button for the action a panel is *for*; `false` is the quiet
+    /// companion (the same translucent veil the form controls use), so a pair like
+    /// Cancel / Crop says which one is the point without spelling it out.
+    var prominent = true { didSet { if prominent != oldValue { needsDisplay = true } } }
 
     init(title: String, target: AnyObject?, action: Selector) {
         super.init(frame: .zero)
@@ -1206,12 +1245,11 @@ private final class BrandPushButton: NSButton {
     }
 
     override func draw(_ dirtyRect: NSRect) {
-        let fill = hovering
-            ? Theme.accentPurple.blended(withFraction: 0.18, of: .white) ?? Theme.accentPurple
-            : Theme.accentPurple
+        let base = prominent ? Theme.accentPurple : Theme.controlFill
+        let fill = hovering ? (base.blended(withFraction: 0.18, of: .white) ?? base) : base
         fill.setFill()
         NSBezierPath(rect: bounds).fill()
-        Theme.border.setStroke()
+        (prominent ? Theme.border : Theme.controlStroke).setStroke()
         let border = NSBezierPath(rect: bounds.insetBy(dx: 0.5, dy: 0.5))
         border.lineWidth = 1
         border.stroke()
@@ -1380,19 +1418,36 @@ private final class DrawColorRow: NSView {
     }
 }
 
-/// A brand-styled field that records the single letter which selects one drawing tool.
-/// Click to arm, then press a letter or digit. Unlike `HotKeyField` these are not global
-/// hotkeys — the draw overlay owns the keyboard while it is up — so nothing is registered
-/// with Carbon and no modifiers are involved.
-private final class DrawKeyField: NSView, KeyRecorder {
-    private let tool: DrawTool
+/// What a `KeyField` did with the key that was pressed.
+private enum KeyFieldOutcome {
+    case stored
+    /// Another binding already owns it; its name, for the alert.
+    case conflict(String)
+    /// This binding can't take that key — the reason, said out loud. A recorder that
+    /// swallows a key it won't accept reads as a broken field: it stays armed, nothing
+    /// changes, and the user is left pressing keys at a control that looks stuck.
+    case refused(String)
+}
+
+/// A brand-styled field that records one plain keystroke for a binding that some
+/// *overlay* owns while it is up — a drawing tool's letter, the selection overlay's
+/// last-region key. Click to arm, then press the key. Unlike `HotKeyField` nothing is
+/// registered with Carbon and no modifiers are involved, which is the whole point: the
+/// surface owning the keyboard needs no system-wide claim.
+///
+/// It knows nothing about what it is binding — `current` renders the value and `apply`
+/// decides what a keystroke means — so a new overlay key is a call site, not a subclass.
+private final class KeyField: NSView, KeyRecorder {
+    private let current: () -> String
+    private let apply: (NSEvent) -> KeyFieldOutcome
     private let keyLabel = NSTextField(labelWithString: "")
     private var monitor: Any?
     private var resignObserver: Any?
     private var recording = false { didSet { needsDisplay = true; refreshDisplay() } }
 
-    init(tool: DrawTool) {
-        self.tool = tool
+    init(current: @escaping () -> String, apply: @escaping (NSEvent) -> KeyFieldOutcome) {
+        self.current = current
+        self.apply = apply
         super.init(frame: NSRect(x: 0, y: 0, width: 120, height: 24))
         wantsLayer = true
         keyLabel.font = Theme.font(12, .semibold)
@@ -1409,7 +1464,7 @@ private final class DrawKeyField: NSView, KeyRecorder {
     required init?(coder: NSCoder) { fatalError() }
 
     func refreshDisplay() {
-        keyLabel.stringValue = recording ? L("Press a key…") : Settings.shared.drawKey(tool)
+        keyLabel.stringValue = recording ? L("Press a key…") : current()
         keyLabel.textColor = recording ? Theme.lavender : Theme.textPrimary
     }
 
@@ -1441,29 +1496,29 @@ private final class DrawKeyField: NSView, KeyRecorder {
         monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown]) { [weak self] ev in
             guard let self, self.recording else { return ev }
             if ev.keyCode == 53 { self.stopRecording(); return nil }        // Esc cancels
-            guard let raw = ev.charactersIgnoringModifiers?.uppercased(), raw.count == 1,
-                  let ch = raw.unicodeScalars.first,
-                  CharacterSet.alphanumerics.contains(ch) else {
-                // Anything that isn't a plain letter or digit would be unreachable or
-                // ambiguous as a tool key — ignore it rather than storing it.
-                return nil
-            }
-            if let owner = Settings.shared.drawKeyConflict(raw, excluding: self.tool) {
+            switch self.apply(ev) {
+            case .refused(let why):
                 self.stopRecording()
-                self.reportConflict(raw, owner: owner)
+                self.report(title: L("That key can't be used"), message: why)
+                return nil
+            case .conflict(let owner):
+                let key = ev.charactersIgnoringModifiers?.uppercased() ?? ""
+                self.stopRecording()
+                self.report(title: L("Key already in use"),
+                            message: String(format: L("%@ is already used by “%@”. Choose a different key."),
+                                            key, owner))
+                return nil
+            case .stored:
+                self.stopRecording()
                 return nil
             }
-            Settings.shared.setDrawKey(raw, for: self.tool)
-            self.stopRecording()
-            return nil
         }
     }
 
     /// Non-modal: this runs from inside a local event monitor, where a nested `runModal`
     /// can wedge the run loop (same reason `HotKeyField` presents this way).
-    private func reportConflict(_ key: String, owner: String) {
-        BrandAlert(title: L("Key already in use"),
-                   message: String(format: L("%@ is already used by “%@”. Choose a different key."), key, owner),
+    private func report(title: String, message: String) {
+        BrandAlert(title: title, message: message,
                    titles: [L("OK")], primary: 0, cancel: 0,
                    icon: "exclamationmark.triangle").present()
     }
