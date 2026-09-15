@@ -102,15 +102,23 @@ a separate repo holding one file, `Casks/m_capture.rb`. It pins the version and 
 That step needs one secret, `TAP_GITHUB_TOKEN`: a fine-grained personal access token scoped to
 **that repo only**, with **Contents: read and write** (the release job's own `github.token`
 cannot reach another repository). Add it under **Settings → Secrets and variables → Actions**.
-Without it the release still publishes and the step only warns — the cask then lags a version
-until someone edits it by hand.
+Without it the step **fails the run** — the release itself is already published by then, so
+nothing shipped is lost, but the red job is the signal to edit `Casks/m_capture.rb` by hand and
+re-run. It is deliberately not a warning: a cask that lags a release is the one way
+`brew upgrade --greedy` can put an *older* build over a newer one the app installed itself.
 
 The cask deliberately installs into `~/Applications` and declares `auto_updates true`: the app's
 `Relocator` moves itself there on first launch anyway, so a `/Applications` install would leave
 Homebrew tracking a stale duplicate, and the in-app updater — not `brew upgrade` — owns updates.
-It also strips the download quarantine in a `postflight`, which is what removes the manual
-`xattr -dr` step from the README. A tap can do that; the official homebrew-cask repo could not
-(and would reject the cask anyway on notability grounds — it wants 75 stars, 30 forks, or 30
+Because both write the *same* bundle, `HomebrewReceipt.restamp(to:)` moves Homebrew's receipt to
+the new version after every successful self-update, so `brew list --cask --versions` stays
+truthful and `--greedy` finds nothing to do. It is best-effort by design — it reaches into
+Homebrew's private Caskroom layout, so it gives up silently rather than guess, and an update
+never fails because of it.
+
+It also strips the download quarantine in a `postflight_steps` block, which is what removes the
+manual `xattr -dr` step from the README. A tap can do that; the official homebrew-cask repo could
+not (and would reject the cask anyway on notability grounds — it wants 75 stars, 30 forks, or 30
 watchers).
 
 ## Conventions

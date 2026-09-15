@@ -50,7 +50,11 @@ enum Updater {
     /// How stale a check may be when the user is demonstrably at the machine (launch,
     /// activation, opening the menu). Shorter than `checkInterval` because those are the
     /// moments someone would have reached for "Check for Updates" themselves.
-    private static let presenceInterval: TimeInterval = 60 * 60
+    ///
+    /// Matched to `retryInterval`, which already floors how often a request can leave at
+    /// all, so this is as short as it can usefully be — an hour was long enough that a
+    /// Homebrew user reliably got a release from `brew upgrade` before the app had looked.
+    private static let presenceInterval: TimeInterval = 15 * 60
     /// The heartbeat period, and the floor between two attempts — one value doing both
     /// jobs: a failed attempt is retried at the next beat, while a successful one is held
     /// off by `checkInterval` instead. Replaces the old one-shot retry timer.

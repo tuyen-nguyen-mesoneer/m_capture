@@ -588,9 +588,15 @@ final class MeasureAnnotation: Annotation {
     }
     func recolor(_ c: NSColor) { style.color = c }
     func restroke(_ width: CGFloat) { style.lineWidth = width }
-    /// Length in the image's logical points — i.e. on-screen pixels. The capture's
-    /// point space is 1:1 with screen coordinates, so no Retina scaling is applied
-    /// (a Retina grab's device pixels are 2× this).
+    /// Length in the capture's own **device pixels** — the same pixels the saved file
+    /// has, so a ruler reading 200 px spans 200 px of the exported PNG.
+    ///
+    /// That falls out of the capture being wrapped pixel-sized at scale 1
+    /// (`ScreenshotController.image(from:)`), which makes annotation space pixel space
+    /// and the canvas's `displayScale` the reciprocal of the display's density. So on a
+    /// Retina panel a drag across 100 screen points crosses — and reports — 200 captured
+    /// pixels, which is the honest answer for an image measurement even though the
+    /// element measures 100 pt in AppKit/CSS terms.
     var pixels: Int { Int(hypot(end.x - start.x, end.y - start.y).rounded()) }
     private var labelAttrs: [NSAttributedString.Key: Any] {
         [.font: Theme.font(12, .semibold), .foregroundColor: NSColor.white]
@@ -670,27 +676,70 @@ final class ImageOverlayAnnotation: Annotation {
 final class ZoomAnnotation: Annotation {
     var source: CGRect
     var dest: CGRect
-    var patch: CGImage?
+    /// Draws the scene the callout magnifies — the capture **with the other marks on
+    /// it** — in image coordinates, so the callout can render it through a transform.
+    ///
+    /// It used to hold a `CGImage` patch cropped out of the bare capture instead, which
+    /// meant a callout could only ever magnify the untouched screenshot: aim one at a
+    /// counter, an arrow or a label and the magnified view showed the pixels *under* the
+    /// mark, with the mark itself missing — the one thing a callout is usually pointing
+    /// at. Rendering live also retires the cache entirely, so nothing can go stale when
+    /// something under the source region is edited, and marks come out sharp at the
+    /// callout's scale rather than pixel-doubled along with the capture.
+    var renderScene: ((CGContext) -> Void)?
     let style: DrawStyle
-    init(source: CGRect, dest: CGRect, patch: CGImage?, style: DrawStyle) {
-        self.source = source; self.dest = dest; self.patch = patch; self.style = style
+    init(source: CGRect, dest: CGRect, style: DrawStyle) {
+        self.source = source; self.dest = dest; self.style = style
     }
+    /// Where the centre-to-centre line leaves `r` on its way to `p` — the point on `r`'s
+    /// own edge that faces the other box.
+    private func edgePoint(of r: CGRect, facing p: CGPoint) -> CGPoint {
+        let c = CGPoint(x: r.midX, y: r.midY)
+        let dx = p.x - c.x, dy = p.y - c.y
+        guard dx != 0 || dy != 0 else { return c }
+        let tx = dx == 0 ? CGFloat.greatestFiniteMagnitude : (r.width / 2) / abs(dx)
+        let ty = dy == 0 ? CGFloat.greatestFiniteMagnitude : (r.height / 2) / abs(dy)
+        let t = min(tx, ty)
+        return CGPoint(x: c.x + dx * t, y: c.y + dy * t)
+    }
+
     func draw(in ctx: CGContext) {
         let lw = max(1.5, style.lineWidth)
-        ctx.setStrokeColor(style.color.withAlphaComponent(0.6).cgColor)
-        ctx.setLineWidth(max(1, lw * 0.6)); ctx.setLineCap(.round)
-        ctx.beginPath()
-        ctx.move(to: CGPoint(x: source.midX, y: source.midY))
-        ctx.addLine(to: CGPoint(x: dest.midX, y: dest.midY))
-        ctx.strokePath()
+        // The leader runs edge to edge, not centre to centre. Drawn between the centres
+        // it struck straight across the region it is pointing at — a line over the very
+        // detail being called out — and its far half was then painted over by the
+        // callout, so what was left read as a line stopping dead in the middle of the
+        // source box. Meeting each box at the edge that faces the other one touches
+        // neither interior.
+        let sc = CGPoint(x: source.midX, y: source.midY)
+        let dc = CGPoint(x: dest.midX, y: dest.midY)
+        let from = edgePoint(of: source, facing: dc), to = edgePoint(of: dest, facing: sc)
+        // Overlapping boxes have no gap to span: the two edge points cross over each
+        // other and the "leader" would point backwards, so draw none.
+        let span = hypot(dc.x - sc.x, dc.y - sc.y)
+        if span > hypot(from.x - sc.x, from.y - sc.y) + hypot(to.x - dc.x, to.y - dc.y) {
+            ctx.setStrokeColor(style.color.withAlphaComponent(0.6).cgColor)
+            ctx.setLineWidth(max(1, lw * 0.6)); ctx.setLineCap(.round)
+            ctx.beginPath()
+            ctx.move(to: from)
+            ctx.addLine(to: to)
+            ctx.strokePath()
+        }
         ctx.setStrokeColor(style.color.cgColor); ctx.setLineWidth(lw * 0.8)
         ctx.stroke(source)
         let radius = min(dest.width, dest.height) * 0.08
         let path = CGPath(roundedRect: dest, cornerWidth: radius, cornerHeight: radius, transform: nil)
         ctx.saveGState(); ctx.addPath(path); ctx.clip()
-        if let patch {
+        if let renderScene, source.width > 0, source.height > 0 {
+            // Map the source region onto the callout, then draw the whole scene through
+            // that transform and let the clip keep only the magnified part. Nearest
+            // neighbour for the same reason the canvas uses it when magnifying: an
+            // enlarged capture stays as crisp as the pixels it was cut from.
             ctx.interpolationQuality = .none
-            ctx.draw(patch, in: dest)
+            ctx.translateBy(x: dest.minX, y: dest.minY)
+            ctx.scaleBy(x: dest.width / source.width, y: dest.height / source.height)
+            ctx.translateBy(x: -source.minX, y: -source.minY)
+            renderScene(ctx)
         } else {
             ctx.setFillColor(NSColor(white: 0.5, alpha: 1).cgColor); ctx.fill(dest)
         }

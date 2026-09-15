@@ -200,7 +200,7 @@ enum L10n {
         "Screen": "Bildschirm",
         "Press %@ to switch mode": "%@ wechselt den Modus",
         "Space": "Leertaste",
-        "Return": "Return",
+        "Return / Enter": "Return / Enter",
         "Press %@ for last region": "%@ zum letzten Bereich",
 
         // ── Settings window ──────────────────────────────────────────────
@@ -208,6 +208,10 @@ enum L10n {
         "Shortcuts": "Kurzbefehle",
         "Capture": "Aufnahme",
         "While recording": "Während der Aufnahme",
+        "While selecting": "Während der Auswahl",
+        "Last Region": "Letzter Bereich",
+        "Re-captures the region of your previous capture, without dragging a new one. Press it on the selection overlay, in Region mode.":
+            "Nimmt den Bereich der vorherigen Aufnahme erneut auf, ohne neu aufzuziehen. Auf der Auswahloberfläche im Modus „Bereich“ drücken.",
         "App": "App",
         "Draw": "Zeichnen",
         "Zoom": "Zoomen",
@@ -293,6 +297,11 @@ enum L10n {
         "Type shortcut…": "Kurzbefehl eingeben…",
         "Help": "Hilfe",
         "Press a key…": "Taste drücken…",
+        "That key can't be used": "Diese Taste ist nicht verwendbar",
+        "Esc closes the selection overlay, so it can't be used here.": "Esc schließt die Auswahloberfläche und ist hier nicht verwendbar.",
+        "Space switches capture mode on the selection overlay, so it can't be used here.": "Leertaste wechselt den Aufnahmemodus und ist hier nicht verwendbar.",
+        "Choose a letter, a digit, a punctuation key, or Return.": "Wählen Sie einen Buchstaben, eine Ziffer, ein Satzzeichen oder Return.",
+        "Choose a letter or a digit.": "Wählen Sie einen Buchstaben oder eine Ziffer.",
         "Key already in use": "Taste bereits belegt",
         "%@ is already used by “%@”. Choose a different key.":
             "%@ wird bereits von «%@» verwendet. Bitte eine andere Taste wählen.",
@@ -385,6 +394,7 @@ enum L10n {
         "Move — drag an object to reposition, drag its corner to resize, ⌫ to delete  (V)":
             "Verschieben — Objekt ziehen, an der Ecke skalieren, ⌫ löscht  (V)",
         "Crop — drag a region, then ↵ or ✓": "Zuschneiden — Bereich aufziehen, dann ↵ oder ✓",
+        "Crop  (↵)": "Zuschneiden  (↵)",
         "Drag to move this panel": "Ziehen, um dieses Feld zu verschieben",
         "Rotate right 90°": "90° nach rechts drehen",
         "Flip horizontal": "Horizontal spiegeln",
@@ -568,7 +578,7 @@ enum L10n {
         "Screen": "Màn hình",
         "Press %@ to switch mode": "Nhấn %@ để đổi chế độ",
         "Space": "Space",
-        "Return": "Return",
+        "Return / Enter": "Return / Enter",
         "Press %@ for last region": "Nhấn %@ cho vùng chọn trước",
 
         // ── Settings window ──────────────────────────────────────────────
@@ -576,6 +586,10 @@ enum L10n {
         "Shortcuts": "Phím tắt",
         "Capture": "Chụp",
         "While recording": "Khi đang ghi hình",
+        "While selecting": "Khi đang chọn vùng",
+        "Last Region": "Vùng gần nhất",
+        "Re-captures the region of your previous capture, without dragging a new one. Press it on the selection overlay, in Region mode.":
+            "Chụp lại đúng vùng của lần trước, không cần kéo chọn mới. Bấm trên lớp phủ chọn vùng, ở chế độ Vùng.",
         "App": "Ứng dụng",
         "Draw": "Vẽ",
         "Zoom": "Thu phóng",
@@ -661,6 +675,11 @@ enum L10n {
         "Type shortcut…": "Nhập phím tắt…",
         "Help": "Trợ giúp",
         "Press a key…": "Nhấn một phím…",
+        "That key can't be used": "Không thể dùng phím này",
+        "Esc closes the selection overlay, so it can't be used here.": "Esc đóng lớp phủ chọn vùng, nên không dùng được ở đây.",
+        "Space switches capture mode on the selection overlay, so it can't be used here.": "Space chuyển chế độ chụp trên lớp phủ chọn vùng, nên không dùng được ở đây.",
+        "Choose a letter, a digit, a punctuation key, or Return.": "Hãy chọn một chữ cái, chữ số, phím dấu câu hoặc Return.",
+        "Choose a letter or a digit.": "Hãy chọn một chữ cái hoặc chữ số.",
         "Key already in use": "Phím đã được dùng",
         "%@ is already used by “%@”. Choose a different key.":
             "%@ đã được “%@” sử dụng. Vui lòng chọn phím khác.",
@@ -753,6 +772,7 @@ enum L10n {
         "Move — drag an object to reposition, drag its corner to resize, ⌫ to delete  (V)":
             "Di chuyển — kéo để dời, kéo góc để đổi cỡ, ⌫ để xoá  (V)",
         "Crop — drag a region, then ↵ or ✓": "Cắt — kéo chọn vùng, rồi ↵ hoặc ✓",
+        "Crop  (↵)": "Cắt  (↵)",
         "Drag to move this panel": "Kéo để di chuyển bảng này",
         "Rotate right 90°": "Xoay phải 90°",
         "Flip horizontal": "Lật ngang",

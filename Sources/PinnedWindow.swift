@@ -138,7 +138,14 @@ private final class PinView: NSView {
     private let aspect: CGFloat
     var initialSize: NSSize = .zero
     private var contextMenu: BrandMenu?
-    private let cornerRadius: CGFloat = 0
+    private let cornerRadius: CGFloat = Theme.radiusSmall
+    /// Hairline around the pinned picture. A pin is a borderless window the exact size
+    /// of the image, so a capture of a white dialog dropped on a pale desktop had no
+    /// edge at all — only the window shadow separated the two, and that disappears on a
+    /// light backdrop. Lavender is the one keyline that survives both extremes (the same
+    /// reasoning `BrandCursor` is built on) and it is already the pin's own accent, on
+    /// the resize grip.
+    private let borderWidth: CGFloat = 1
     private let grab: CGFloat = 22
 
     private enum Mode { case move, resize }
@@ -237,6 +244,8 @@ private final class PinView: NSView {
         path.addClip()
         (currentFrame ?? image).draw(in: bounds)
         NSGraphicsContext.restoreGraphicsState()
+        path.lineWidth = borderWidth
+        Theme.lavender.setStroke(); path.stroke()
 
         func gripPath() -> NSBezierPath {
             let p = NSBezierPath()

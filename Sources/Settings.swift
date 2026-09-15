@@ -211,6 +211,68 @@ enum VideoZoomFactor: String, CaseIterable {
     }
 }
 
+/// A plain keystroke owned by an overlay rather than the system: no modifiers, no Carbon
+/// registration, meaningful only while that surface is up. The selection overlay's
+/// "reuse the last region" key is one.
+///
+/// Both the key code *and* the character are kept. The code is what a key press is
+/// matched against — layout-independent, and the only way to name Return at all — while
+/// the character is what the hint and the Settings field show, since deriving a legend
+/// back from a key code needs the current keyboard layout.
+struct OverlayKey: Equatable {
+    var keyCode: UInt16
+    /// Uppercased legend for a character key; empty for Return, which names itself.
+    var character: String
+
+    static let returnKey = OverlayKey(keyCode: 36, character: "")
+
+    /// Return and the keypad's Enter are one key to the reader, so binding either
+    /// accepts both — which is also why the legend names both.
+    var isReturn: Bool { keyCode == 36 || keyCode == 76 }
+
+    /// What the banner hint and the Settings field show.
+    var label: String { isReturn ? L("Return / Enter") : character }
+
+    /// True when `code` should trigger this binding.
+    func matches(_ code: UInt16) -> Bool { isReturn ? (code == 36 || code == 76) : code == keyCode }
+
+    /// Why a key press can't be bound, or nil when it can. A *reason* rather than a bare
+    /// no: a recorder that silently swallows the key it won't take looks broken — the
+    /// field just sits there saying "Press a key…" — so every refusal here is something a
+    /// caller can show.
+    static func refusal(for event: NSEvent) -> String? {
+        switch event.keyCode {
+        case 36, 76: return nil                                   // Return / keypad Enter
+        case 53:     return L("Esc closes the selection overlay, so it can't be used here.")
+        case 49:     return L("Space switches capture mode on the selection overlay, so it can't be used here.")
+        default: break
+        }
+        guard let raw = event.charactersIgnoringModifiers, raw.count == 1,
+              let ch = raw.unicodeScalars.first,
+              !CharacterSet.whitespacesAndNewlines.contains(ch),
+              !CharacterSet.controlCharacters.contains(ch)
+        else { return L("Choose a letter, a digit, a punctuation key, or Return.") }
+        return nil
+    }
+
+    /// The binding a recorded key press means, or nil for one `refusal(for:)` turns down.
+    ///
+    /// Anything that types a visible character is fair game — a letter, a digit, `[` —
+    /// since the overlay reserves only Esc (cancel) and Space (cycle mode), and those two
+    /// have to stay reachable.
+    init?(event: NSEvent) {
+        guard OverlayKey.refusal(for: event) == nil else { return nil }
+        if event.keyCode == 36 || event.keyCode == 76 { self = .returnKey; return }
+        let raw = (event.charactersIgnoringModifiers ?? "").uppercased()
+        self.init(keyCode: UInt16(event.keyCode), character: raw)
+    }
+
+    init(keyCode: UInt16, character: String) {
+        self.keyCode = keyCode
+        self.character = character
+    }
+}
+
 /// A tool for the on-screen drawing overlay (draw mode while recording). Single letters
 /// switch tools *inside* draw mode rather than claiming global hotkeys: the overlay owns
 /// the keyboard while it is up, so five more system-wide combinations would buy nothing.
@@ -297,6 +359,7 @@ final class Settings {
         static let drawFade = "drawFade", drawTool = "drawTool"
         static let videoZoomFactor = "videoZoomFactor"
         static let lastRegion = "lastRegion"
+        static let lastRegionKey = "lastRegionKey"
         static let appLanguage = "appLanguage"
         static let hideDock = "hideDockIcon"
     }
@@ -490,6 +553,17 @@ final class Settings {
     var drawTool: DrawTool {
         get { d.string(forKey: Key.drawTool).flatMap(DrawTool.init) ?? .pencil }
         set { d.set(newValue.rawValue, forKey: Key.drawTool) }
+    }
+
+    /// The key that re-captures the previous region while the selection overlay is up
+    /// (Settings → Shortcuts → While selecting). Defaults to Return / Enter.
+    var lastRegionKey: OverlayKey {
+        get {
+            guard let a = d.array(forKey: Key.lastRegionKey) as? [Any], a.count == 2,
+                  let code = a[0] as? Int, let ch = a[1] as? String else { return .returnKey }
+            return OverlayKey(keyCode: UInt16(code), character: ch)
+        }
+        set { d.set([Int(newValue.keyCode), newValue.character], forKey: Key.lastRegionKey) }
     }
 
     /// The single letter that selects `tool` while draw mode is active.

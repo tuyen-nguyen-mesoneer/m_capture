@@ -302,21 +302,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Region-selection overlay, then grab + copy. Honors the configured
     /// capture delay, showing a 3→2→1 countdown in the menu-bar icon first.
     @objc func takeScreenshot() {
+        afterCaptureDelay { ScreenshotController.shared.begin() }
+    }
+
+    /// Run `capture` now, or after the configured delay with a 3→2→1 countdown in the
+    /// menu-bar icon.
+    private func afterCaptureDelay(_ capture: @escaping () -> Void) {
         let delay = Settings.shared.captureDelay.rawValue
-        if delay <= 0 { ScreenshotController.shared.begin(); return }
-        countdown(from: delay)
+        if delay <= 0 { capture(); return }
+        countdown(from: delay, then: capture)
     }
 
     /// Counts down in the status-item button, then begins the capture. Guards
     /// against re-entry so a second hotkey press during the countdown is ignored.
-    private func countdown(from seconds: Int) {
+    private func countdown(from seconds: Int, then capture: @escaping () -> Void) {
         if countdownActive { return }
-        guard let button = statusItem.button else {
-            ScreenshotController.shared.begin()
+        guard statusItem.button != nil else {
+            capture()
             return
         }
         countdownActive = true
         func tick(_ remaining: Int) {
+            guard let button = statusItem.button else { countdownActive = false; capture(); return }
             guard remaining > 0 else {
                 // Rebuild the idle look from current state rather than restoring an image
                 // captured a few seconds ago: `refreshStatusIcon` is the single owner of
@@ -324,7 +331,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 // awaiting relaunch) was being painted straight back out again.
                 countdownActive = false
                 refreshStatusIcon()
-                ScreenshotController.shared.begin()
+                capture()
                 return
             }
             button.image = nil

@@ -190,6 +190,15 @@ private final class ResizeHandle: NSView {
             }
         }
     }
+    /// Side of a knob's *view* — its click target, and the spacing the crowding test in
+    /// `placeResizeHandle` is written against.
+    static let size: CGFloat = 18
+    /// Diameter of the dot actually drawn, centred in that target. Deliberately smaller
+    /// than the view: these knobs ring the whole capture, so a fat dot is eight purple
+    /// blobs parked on the very edges being annotated, while the click area they need to
+    /// stay comfortable has nothing to do with how big they look.
+    static let dotDiameter: CGFloat = 10
+
     let edge: Edge
     var onBegin: (() -> Void)?
     var onDrag: ((CGSize) -> Void)?
@@ -201,7 +210,8 @@ private final class ResizeHandle: NSView {
 
     override func draw(_ dirtyRect: NSRect) {
         guard let ctx = NSGraphicsContext.current?.cgContext else { return }
-        let r = bounds.insetBy(dx: 2, dy: 2)
+        let inset = (bounds.width - Self.dotDiameter) / 2
+        let r = bounds.insetBy(dx: inset, dy: inset)
         ctx.setFillColor(Theme.accentPurple.cgColor); ctx.fillEllipse(in: r)
         ctx.setStrokeColor(Theme.lavender.cgColor); ctx.setLineWidth(1); ctx.strokeEllipse(in: r)
     }
@@ -475,8 +485,12 @@ final class EditorWindowController: NSObject {
         // box is started) so the bar jumps straight to whichever box is now current.
         canvas.onTextStyleChange = { [weak self] in
             guard let self, self.canvas.tool == .text else { return }
-            self.syncTextFormatBar(); self.positionTextFormatBar()
+            // A box becoming current re-summons the bar, which is what brings it back
+            // after an Esc took it down.
+            if self.canvas.textFocusToken != nil { self.showTextFormatBar() }
+            else { self.syncTextFormatBar(); self.positionTextFormatBar() }
         }
+        canvas.onTextDismiss = { [weak self] in self?.hideTextFormatBar() }
         canvas.onPaste = { [weak self] in self?.pasteOverlay() }
         pasteMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self else { return event }
@@ -1613,7 +1627,7 @@ final class EditorWindowController: NSObject {
     /// sits on, holding the opposite one fixed — corners both axes, midpoints one (see
     /// `resizeDragged`).
     private func placeResizeHandle(in content: NSView) {
-        let s: CGFloat = 18
+        let s = ResizeHandle.size
         if resizeHandles.isEmpty {
             for edge in ResizeHandle.Edge.allCases {
                 let h = ResizeHandle(edge: edge)
@@ -1638,7 +1652,7 @@ final class EditorWindowController: NSObject {
     }
 
     private func repositionResizeHandles(around f: NSRect) {
-        let s: CGFloat = 18
+        let s = ResizeHandle.size
         for h in resizeHandles {
             let c = resizeHandleCenter(h.edge, in: f)
             h.setFrameOrigin(NSPoint(x: c.x - s / 2, y: c.y - s / 2))
@@ -1744,6 +1758,14 @@ final class EditorWindowController: NSObject {
                                      width: region.width * sx, height: region.height * sy))
     }
 
+    /// A crop region's size for display, in the capture's own pixels — the unit the
+    /// canvas is stored in, so these are the dimensions the cropped file will have.
+    /// Drawn on the region during the drag (`CanvasView.drawSizeReadout`); the confirm
+    /// bar deliberately doesn't repeat it.
+    static func cropSize(_ r: CGRect) -> String {
+        "\(Int(r.width.rounded())) × \(Int(r.height.rounded())) px"
+    }
+
     private func showCropConfirm() {
         guard let pc = canvas.pendingCrop, let content = window.contentView else { return }
         hideCropConfirm()
@@ -1756,11 +1778,21 @@ final class EditorWindowController: NSObject {
         // would otherwise cover it — and the crop bar with it.
         moveClustersClear(of: cr, in: content)
 
-        let r: CGFloat = 16
-        let sz = ToolButton.size(radius: r)
-        let gap: CGFloat = 6, pad: CGFloat = 5
-        let totalW = sz.width * 2 + gap
-        let barW = totalW + pad * 2, barH = sz.height + pad * 2
+        // No size readout here: the drag already shows it on the region itself
+        // (`drawSizeReadout`), and repeating it in the bar only widens the bar.
+        let cancel = BrandPushButton(title: L("Cancel"), target: self, action: #selector(cancelCropPressed))
+        cancel.prominent = false
+        let ok = BrandPushButton(title: L("Crop  (↵)"), target: self, action: #selector(applyCropPressed))
+        // Primary rightmost, the same order `BrandAlert` enforces — the bar used to put a
+        // bare ✓ on the left and a bare ✗ on the right, which is that convention backwards
+        // *and* left the two most consequential glyphs in the editor unlabelled.
+        let buttons = [cancel, ok]
+        buttons.forEach { $0.sizeToFit() }
+        let btnH: CGFloat = 24
+        let gap: CGFloat = 8, pad: CGFloat = 8
+        let btnW = buttons.map(\.intrinsicContentSize.width)
+        let totalW = gap * CGFloat(buttons.count - 1) + btnW.reduce(0, +)
+        let barW = totalW + pad * 2, barH = btnH + pad * 2
         let x = min(max(8, cr.midX - barW / 2), content.bounds.width - barW - 8)
 
         // Place the bar just outside the crop rect (top, then bottom), then tucked inside
@@ -1775,8 +1807,8 @@ final class EditorWindowController: NSObject {
         let y = candidateYs.first(where: fits)
             ?? max(8, min(cr.maxY + gap, content.bounds.height - 8 - barH))
 
-        // A bordered brand bar behind the buttons, so the ✓/✗ read clearly against any
-        // image instead of floating as bare glyphs on the dim backdrop.
+        // A bordered brand bar behind the controls, so the readout and buttons read
+        // clearly against any image instead of floating on the dim backdrop.
         let bar = NSView(frame: NSRect(x: x, y: y, width: barW, height: barH))
         bar.wantsLayer = true
         if let layer = bar.layer {
@@ -1791,13 +1823,12 @@ final class EditorWindowController: NSObject {
         Theme.styleFloatingCard(bar, stroke: Theme.lavender.withAlphaComponent(0.9))
         content.addSubview(bar)
 
-        let ok = ToolButton(style: .tool("checkmark"), radius: r, target: self, action: #selector(applyCropPressed))
-        ok.tip = "Apply crop  (↵)"; wireHover(ok)
-        let cancel = ToolButton(style: .tool("xmark"), radius: r, target: self, action: #selector(cancelCropPressed))
-        cancel.tip = "Cancel crop"; wireHover(cancel)
-        bar.addSubview(ok); bar.addSubview(cancel)
-        ok.frame = NSRect(x: pad, y: pad, width: sz.width, height: sz.height)
-        cancel.frame = NSRect(x: pad + sz.width + gap, y: pad, width: sz.width, height: sz.height)
+        var bx = pad
+        for (b, w) in zip(buttons, btnW) {
+            bar.addSubview(b)
+            b.frame = NSRect(x: bx, y: pad, width: w, height: btnH)
+            bx += w + gap
+        }
         cropButtons = [bar]
     }
 
@@ -1842,6 +1873,9 @@ final class EditorWindowController: NSObject {
 
     private func hideTextFormatBar() {
         textFormatBar?.isHidden = true
+        // The swatch the picker is anchored to just went away; leaving it up would
+        // strand a panel over the capture with nothing to point at.
+        textBgColorPicker?.close()
     }
 
     /// A floating brand bar (same chrome as the crop-confirm bar): a font-size dropdown,
