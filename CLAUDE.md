@@ -149,8 +149,10 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
   role — `modeSize` (19) for a cursor that names a mode, `toolSize` (16) for one that is a tool
   tip and must stay clear of the pixel it is about to touch.
   **"Drag out a region" is one glyph, `plus`**, from the capture overlay's Region mode through
-  the editor's Crop to every shape / blur / spotlight drag. Region kept a hand-drawn crosshair
-  for a long time (`makeCrosshair`, removed) whose arms left a **gap at the centre** so the
+  the editor's Crop to every shape / blur / spotlight drag — and to **Zoom**, which drags out a
+  region like the rest of them and had been carrying a dense filled `plus.magnifyingglass`
+  parked on the exact corner being aimed at, naming a tool the selected tile already names.
+  Region kept a hand-drawn crosshair for a long time (`makeCrosshair`, removed) whose arms left a **gap at the centre** so the
   hotspot sat on nothing drawn — the one thing no SF Symbol offers, and the reason it survived.
   `plus` has ink where its strokes cross, so the exact start pixel now sits *under* the glyph;
   that was traded deliberately for a single pointer across capture and editing. If aiming
@@ -158,6 +160,12 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
   either way — it is the one shape that reads as "drag out a region", and with no action line in
   the guidance card the cursor is that instruction; a `viewfinder` glyph matched the style but
   said "aim" and lost it.
+  **Text is the one tool that points with a beam, not a crosshair**: `text.cursor`, the bare
+  I-beam every reader already knows as "type here" and the narrowest glyph in the set, so it
+  covers almost none of the corner the new box starts at. It replaced `character.textbox` (a
+  filled box that sat as a slab over that corner and read as "a text box exists here") by way
+  of `character.cursor.ibeam`, which fixed the meaning but carried an "A" alongside the beam
+  and so was wide again.
 - `Theme.swift` — brand palette + fonts; the single styling source. **Every colour is a
   named value from the official mesoneer guidelines** (Frontify → Guidelines → Colors,
   mirrored in `docs/styleguide.md`) — a new shade comes off the published Primary /
@@ -259,6 +267,11 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
   not survive translation, since English wraps the key while German *leads* with it
   ("%@ wechselt" → an empty `before`). A new hint must keep exactly one `%@`, and must read
   correctly alone — either hint can appear without the other.
+  The last-region hint names **whatever key is bound** (`Settings.shared.lastRegionKey.label`,
+  Settings → Shortcuts → While selecting), not a hardcoded glyph, and `keyDown` matches on the
+  same value. The default renders "Return / Enter" because that key is labelled Return on
+  Apple's own keyboards and Enter on most third-party and non-US ones, and it fires on both
+  key codes.
   Pre-drag chrome — the guidance card and the dashed **last-region ghost** — stops drawing
   once `startPoint` is set, because guidance is for *before* the gesture and the size readout
   takes over during it. Both need `clearPreDragChrome()` on mouse-down: `invalidateSelection`
@@ -509,6 +522,19 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
   wanted back it belongs on a modifier (⌥-drag), not on the bare knob.
   `relayout` **centres** a frame too big to fit rather than pinning it into a corner, which now
   matters when a region is grown out to the whole display.
+  The eight knobs themselves (`ResizeHandle`) keep **two independent sizes**: `size` (18) is the
+  click target the crowding test in `placeResizeHandle` is written against, `dotDiameter` (10)
+  is only what is drawn. Shrink the dot freely; changing the target moves the corners-only
+  fallback with it.
+  The **crop confirm bar** is Cancel + Crop (↵) as labelled `BrandPushButton`s — primary
+  rightmost, the order `BrandAlert` enforces — where it used to be a bare ✓ on the left and a
+  bare ✗ on the right: that convention backwards, and the two most consequential glyphs in the
+  editor left unlabelled. It carries **no size readout**; the drag already shows one on the
+  region (`CanvasView.drawSizeReadout`) and repeating it only widens the bar.
+  The text tool's format bar belongs to a *box*, not to the tool: `onTextDismiss` takes it down
+  when Esc ends the text interaction, and a box becoming current (`textFocusToken != nil`)
+  brings it back. Left keyed to the tool alone, Esc committed the text and left the bar floating
+  over nothing.
 - `CanvasView.swift` — the annotation canvas: `Tool` enum, undo/redo, Gaussian blur,
   crop/rotate/flip transforms (`applyTransform` shifts annotations when the region
   changes), and live edit state. Scale is **two `var`s, `scaleX` / `scaleY`** — a leftover of
@@ -524,11 +550,39 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
   own tool, and ⌫ deletes it. `restrokeSelection` applies a stroke width live. Zoom
   callout; overlay image; ruler; `counterFormat`/`currentEmoji`. Coordinates stay in
   full-res image space so exports stay sharp.
+  **Every knob on every mark is one size**: `handleRadius` (drawn), `handleStroke` (its
+  ring) and `handleGrabRadius` (what a click catches), each divided by `displayScale` at
+  the call site since the canvas draws in image space. The grab radius is deliberately
+  **larger than the drawn dot and not tied to it** — the dot is a target you aim a pointer
+  at, so a later visual refinement must not quietly make the handles harder to hit. These
+  replaced the same literal copy-pasted into six draw sites and four hit tests.
+  `drawSizeReadout` puts a `W × H px` chip on a crop/OCR region **only while it is being
+  dragged out** (`sizing:`): once the region is committed the confirm bar takes over, and a
+  chip left behind is a number about a decision already made, printed over the picture it
+  is about. It is sized in screen points, not image space — it is chrome, so it must not
+  grow with a magnified canvas. Its text comes from `EditorWindowController.cropSize`, so
+  the drag and anything else naming a region can't disagree.
 - `Annotations.swift` — annotation model (pencil, marker, line, curved arrow,
   shapes, text, blur, counter, spotlight, emoji, zoom callout, ruler, image
   overlay). Each mark exposes `bounds` / `resizable` / `scale(by:around:)` / `recolor`
   / `restroke` so the Select tool can move, resize, recolor, restyle and delete it
   (path-like marks are move-only). Crop/rotate/flip are transforms, not stored marks.
+  **A zoom callout renders the scene live, and holds no pixels.** `ZoomAnnotation` used to
+  cache a `CGImage` cropped out of the bare capture, which meant it could only ever magnify
+  the untouched screenshot: aimed at a counter, an arrow or a label it showed the pixels
+  *under* the mark with the mark itself missing — the one thing a callout is usually
+  pointing at — and the cache went stale whenever anything under the source region was
+  edited. It now takes a `renderScene` closure (`CanvasView.bindZoomScene`, set where the
+  mark is made — the only place one is made), maps `source` onto `dest` with a transform and
+  draws through it, letting its existing clip keep the magnified part. `drawZoomScene` skips
+  *other* callouts, which is what stops it recursing. Marks therefore come out sharp at the
+  callout's scale while the capture keeps `.none` interpolation, and exports get this for
+  free since `flatten()` walks the same `draw(in:)`.
+  Its leader line runs **edge to edge** (`edgePoint(of:facing:)`), not centre to centre:
+  drawn between the centres it struck across the detail being called out and had its far
+  half painted over by the callout, so what survived read as a line stopping dead inside the
+  source box. Overlapping boxes get no line at all — the two edge points cross over and it
+  would point backwards.
 - `ToolButton.swift` — the rounded tool tile (custom-drawn glyphs / SF Symbols);
   swatches draw a colour chip; `.lineWeight` draws the stroke-width glyph.
 - `ColorPicker.swift` — brand custom-color picker (hue strip + S/B square), shown
@@ -537,7 +591,12 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
 - `CounterFormatPicker.swift` — popover for counter numbering (Numbers / Letters / Roman).
 - `PinnedWindow.swift` — Pin to screen: a floating, always-on-top window across
   Spaces; drag / corner-drag to scale / right-click `BrandMenu`. Self-retained via
-  a static array. **An animated GIF pins as an animation** (`pinGIF(url:)`, used by
+  a static array. The picture carries a **1 pt lavender hairline**: a pin is a borderless
+  window the exact size of the image, so a capture of a white dialog on a pale desktop had no
+  edge at all — only the window shadow separated the two, and that disappears on a light
+  backdrop. Lavender is the keyline that survives both extremes (the reasoning `BrandCursor`
+  is built on) and is already the pin's own accent, on the resize grip.
+  **An animated GIF pins as an animation** (`pinGIF(url:)`, used by
   History): `PinView` keeps the `CGImageSource` and decodes **one frame at a time** on a
   rescheduled one-shot timer — not every frame up front, because a GIF exported from a
   recording is 960 px at 10 fps, so a 30-second take is ~300 frames and hundreds of MB
@@ -575,6 +634,15 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
   `AVAssetWriter` refuses a URL that already exists, so touching the recording's `.mp4` would
   break recording. A name that is only being *shown* (a save panel's prefill) must use
   `suggestedFileName()`, which claims nothing.
+  **Not every rebindable key is a hotkey.** `OverlayKey` models a plain keystroke an *overlay*
+  owns while it is up — no modifiers, no Carbon registration, nothing claimed system-wide —
+  which is what the selection overlay's `lastRegionKey` is (default Return / Enter). It keeps
+  the **key code** (what a press is matched against: layout-independent, and the only way to
+  name Return) *and* the character (what the banner hint and the Settings field show, since
+  deriving a legend back from a code needs the current layout). `refusal(for:)` returns a
+  *reason* rather than a bare no, because a recorder that silently swallows the key it won't
+  take stays armed, changes nothing, and reads as a broken control. Esc and Space stay
+  reserved — the overlay needs them for cancel and cycle-mode — and say so.
 - `SettingsWindow.swift` — the dark Settings panel (`SettingsWindowController.shared`):
   an icon sidebar (macOS System Settings shape) with General / Shortcuts / Capture /
   Output / Video / About sections, per-row info-dot tips, and a fixed window size
@@ -594,7 +662,10 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
   control, not the row.
   Sections group their rows with `groupHeading(_:firstInSection:)`,
   a quieter small-caps sibling of the section eyebrow: Shortcuts splits into
-  Capture / While recording / App; inside Video's Drawing sub-tab, Drawing keys.
+  Capture / While selecting / While recording / App; inside Video's Drawing sub-tab, Drawing
+  keys. **While selecting** holds a key that is not a global hotkey at all (the overlay's
+  last-region key, see `OverlayKey`) — it still belongs on the Shortcuts tab, since it is a
+  shortcut the user can rebind and hiding it would be the wrong kind of tidiness.
   The heading is what carries a row's context, which is what lets a label be one word —
   spelled out, "Zoom While Recording" was clipped in all three languages. Drawing lives
   under Video (it used to be its own "Live Drawing" tab) because it does nothing outside
@@ -606,7 +677,11 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
   anything live (the "Last checked" stamp) must be filled in `refresh()`, not at build
   time. Checkbox labels must fit `Layout.rowWidth` minus `controlX` — ~248 pt at
   `Theme.font(12)` — **in all three languages**, or they wrap; measure before wording.
-- `ShortcutRecorder.swift` — click-to-record shortcut field + `Shortcut` glyph helpers.
+- `ShortcutRecorder.swift` — click-to-record shortcut field + `Shortcut` glyph helpers, plus
+  `KeyRecorders` (exactly one field armed at a time). Its sibling for overlay-owned keys is
+  `KeyField` in `SettingsWindow.swift`, which knows nothing about what it binds — `current`
+  renders the value, `apply` decides what a keystroke means — so a new overlay key is a call
+  site, not a subclass; the drawing keys and the last-region key share it.
 - `BrandPopUpButton.swift` — brand `NSPopUpButton` + `BrandControl` shared inset
   geometry aligning the Settings form controls.
 - `HotKey.swift` — global hotkey registration via Carbon.
@@ -776,7 +851,11 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
   is a brand rule, not a local judgement, so it overrides the square default (`Logo.swift`,
   `tools/makeicon.swift`, and `.logo` in `docs/index.html`). Push buttons
   can't take a radius at all — a native `bezelStyle = .rounded` is rounded by AppKit — so
-  Settings' Choose… and the About card's actions are a custom-drawn `BrandPushButton`.
+  Settings' Choose…, the About card's actions and the editor's crop-confirm bar are a
+  custom-drawn `BrandPushButton` — one button, one look, wherever a push button appears.
+  Its `prominent` flag is the only variation: filled `accentPurple` for the action a surface
+  is *for*, and off for the quiet companion (the `controlFill` / `controlStroke` veil the form
+  controls use), so a Cancel / Crop pair says which one is the point without spelling it out.
   It is deliberately **not** a `PointerButton` subclass: `PointerButton` also backs the
   panel's `NSButton(checkboxWithTitle:)` checkboxes, and a fill painted in its `draw`
   lands behind the checkbox label as a purple slab. Those checkboxes are the one control
