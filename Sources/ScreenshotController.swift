@@ -112,6 +112,7 @@ final class ScreenshotController {
         // The pointer is part of the frozen state the user is trying to keep (it's what
         // is producing the tooltip), so the setting applies to every mode here — unlike
         // a live grab, nothing of ours can bake in.
+        let pointer = Settings.shared.captureCursor ? FrozenPointer.current() : nil
         let showsCursor = Settings.shared.captureCursor
         let displays: [(id: CGDirectDisplayID, size: CGSize)] = NSScreen.screens.compactMap {
             guard let id = $0.displayID else { return nil }
@@ -120,11 +121,9 @@ final class ScreenshotController {
         Task {
             var stills: [CGDirectDisplayID: (cg: CGImage, scale: CGFloat)] = [:]
             for display in displays {
-                if let r = await ScreenshotController.captureRegion(
-                    displayID: display.id,
-                    sourceRect: CGRect(origin: .zero, size: display.size),
-                    showsCursor: showsCursor,
-                    prefetched: ScreenshotController.warmContent) {
+                if let r = await ScreenshotController.freeze(
+                    displayID: display.id, size: display.size,
+                    showsCursor: showsCursor, pointer: pointer) {
                     stills[display.id] = r
                 }
             }
@@ -428,6 +427,36 @@ final class ScreenshotController {
         }
     }
 
+    /// Freeze one whole display for `begin()`: exactly what the window server is showing,
+    /// window framing included.
+    ///
+    /// The content-filter grab (`captureRegion`) re-renders the display's windows rather
+    /// than reading back the composited screen, and it drops the framing the server adds
+    /// around a borderless window — the rounded corner mask, the hairline rim and the drop
+    /// shadow. Outlook's contact card is exactly such a window, so it came out as a white
+    /// slab bleeding into the white message behind it, with no edge at all. A browser's
+    /// card is drawn *inside* the browser window, which is why the same card captured fine
+    /// on the web. `captureImage(in:)` (macOS 15.2+) is the screenshot of the screen as
+    /// seen — but it never draws the pointer, so when the user asked for the cursor it is
+    /// put back from the system cursor at hotkey time (`FrozenPointer`). Anything that
+    /// fails here falls back to the content-filter grab, so the worst case is the old shot.
+    private static func freeze(displayID: CGDirectDisplayID, size: CGSize,
+                               showsCursor: Bool, pointer: FrozenPointer?)
+        async -> (cg: CGImage, scale: CGFloat)? {
+        if #available(macOS 15.2, *), !showsCursor || pointer != nil {
+            let bounds = CGDisplayBounds(displayID)
+            if let cg = await withTimeout(seconds: 10, {
+                try? await SCScreenshotManager.captureImage(in: bounds)
+            }), bounds.width > 0 {
+                let scale = CGFloat(cg.width) / bounds.width
+                return (pointer?.draw(onto: cg, displayBounds: bounds, scale: scale) ?? cg, scale)
+            }
+        }
+        return await captureRegion(displayID: displayID,
+                                   sourceRect: CGRect(origin: .zero, size: size),
+                                   showsCursor: showsCursor, prefetched: warmContent)
+    }
+
     private static func captureRegion(displayID: CGDirectDisplayID, sourceRect: CGRect,
                                       showsCursor: Bool,
                                       excluding windowIDs: [CGWindowID] = [],
@@ -712,5 +741,57 @@ extension ScreenshotController {
     /// `image(from:)`, exposed for the selection overlay's frozen backdrop.
     static func nsImage(from cg: CGImage) -> NSImage {
         NSImage(cgImage: cg, size: NSSize(width: cg.width, height: cg.height))
+    }
+}
+
+/// The system pointer as it stood when the screenshot hotkey fired, for drawing into a
+/// still that `SCScreenshotManager.captureImage(in:)` returned without one.
+///
+/// Read on the main thread at the hotkey, before the overlay can change the cursor; the
+/// image is flattened to a `CGImage` there too, so compositing can run off the main
+/// thread without touching AppKit.
+struct FrozenPointer: Sendable {
+    let image: CGImage
+    /// Size of the cursor in points, which `hotSpot` is measured in.
+    let size: CGSize
+    let hotSpot: CGPoint
+    /// Global CoreGraphics position (top-left origin).
+    let location: CGPoint
+
+    static func current() -> FrozenPointer? {
+        guard let cursor = NSCursor.currentSystem else { return nil }
+        let size = cursor.image.size
+        let density = NSScreen.screens.map(\.backingScaleFactor).max() ?? 2
+        var proposed = CGRect(origin: .zero,
+                              size: CGSize(width: size.width * density, height: size.height * density))
+        guard size.width > 0, size.height > 0,
+              let cg = cursor.image.cgImage(forProposedRect: &proposed, context: nil, hints: nil)
+        else { return nil }
+        return FrozenPointer(image: cg, size: size, hotSpot: cursor.hotSpot,
+                             location: WindowList.cgPoint(fromAppKitMouse: NSEvent.mouseLocation))
+    }
+
+    /// `still` with the pointer drawn where it was, or nil if this display doesn't hold
+    /// the pointer (or the context can't be made) — the caller then keeps the bare still.
+    func draw(onto still: CGImage, displayBounds: CGRect, scale: CGFloat) -> CGImage? {
+        let origin = CGPoint(x: location.x - displayBounds.minX - hotSpot.x,
+                             y: location.y - displayBounds.minY - hotSpot.y)
+        let width = CGFloat(still.width), height = CGFloat(still.height)
+        // CGContext is bottom-left origin; `origin` is the cursor's top-left in points.
+        let rect = CGRect(x: origin.x * scale,
+                          y: height - (origin.y + size.height) * scale,
+                          width: size.width * scale, height: size.height * scale)
+        let canvas = CGRect(x: 0, y: 0, width: width, height: height)
+        guard canvas.intersects(rect),
+              let ctx = CGContext(data: nil, width: still.width, height: still.height,
+                                  bitsPerComponent: 8, bytesPerRow: 0,
+                                  space: still.colorSpace ?? CGColorSpace(name: CGColorSpace.sRGB)!,
+                                  bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue
+                                      | CGBitmapInfo.byteOrder32Little.rawValue)
+        else { return nil }
+        ctx.draw(still, in: canvas)
+        ctx.interpolationQuality = .high
+        ctx.draw(image, in: rect)
+        return ctx.makeImage()
     }
 }

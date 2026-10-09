@@ -234,6 +234,12 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
   `SCScreenshotManager` grab each, before `NSApp.activate`), then `presentOverlays`
   puts the overlay up over those stills; `finish` just crops the still (`crop(_:to:scale:)`)
   — no second grab. A display whose freeze failed falls back to the old live grab.
+  The freeze itself is `SCScreenshotManager.captureImage(in:)` (macOS 15.2+, the screen
+  as composited), **not** the content-filter grab: a filter grab drops the window server's
+  framing — corner mask, rim, shadow — so a borderless pop-up such as Outlook's contact
+  card came out as an edgeless white slab. `captureImage(in:)` never draws the pointer, so
+  `FrozenPointer` draws the system cursor back in when Settings asks for it; any failure
+  falls back to the filter grab.
   `warmUp()` keeps a background `SCShareableContent` snapshot ready (launch, display
   change, after each capture) since that enumeration now sits on the hotkey's critical
   path. Window mode deliberately stays on the live grab (unoccluded pixels).
