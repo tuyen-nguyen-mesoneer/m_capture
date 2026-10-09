@@ -3,7 +3,9 @@
 ## Prerequisites
 
 - macOS **14.0** (Sonoma) or later
-- **Xcode Command Line Tools** (`xcode-select --install`) — full Xcode not needed
+- **Xcode Command Line Tools** (`xcode-select --install`) — full Xcode not needed — with the
+  **macOS 15.2 SDK or newer** (Command Line Tools 16.2+). The app still runs on macOS 14, but
+  the screenshot freeze calls an API the older SDK doesn't declare, so it won't compile there.
 
 ## Build & run
 

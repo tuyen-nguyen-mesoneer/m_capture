@@ -25,7 +25,11 @@ permissions:
 
 jobs:
   release:
-    runs-on: macos-14   # Apple Silicon, matches the arm64 build produced by build.sh
+    # Apple Silicon, matches the arm64 build produced by build.sh. macos-15, not 14: the
+    # screenshot freeze calls SCScreenshotManager.captureImage(in:), which only exists in the
+    # macOS 15.2+ SDK — #available guards it at runtime, not at compile time. build.sh still
+    # pins the deployment target to macOS 14.
+    runs-on: macos-15
     env:
       TAG: ${{ github.event.inputs.tag || github.ref_name }}
     steps:
