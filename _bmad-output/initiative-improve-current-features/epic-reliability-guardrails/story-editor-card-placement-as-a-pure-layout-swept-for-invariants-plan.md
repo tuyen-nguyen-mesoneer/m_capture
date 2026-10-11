@@ -3,7 +3,7 @@ title: 'Editor card placement as a pure layout, swept for invariants'
 type: 'refactor'
 ticket: '3'
 created: '2026-10-11'
-status: 'built'
+status: done
 baseline_revision: 'c44ea0dfcf4090f051c1e356d4984f07d21759ab'
 route: 'full'
 route_source: 'auto'
