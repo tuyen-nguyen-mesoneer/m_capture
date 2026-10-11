@@ -821,6 +821,11 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
 
 - **No external dependencies** — system frameworks only (AppKit / CoreImage / Carbon
   / Vision / ImageIO / ScreenCaptureKit). Write original code; match the surrounding Swift.
+- **The BMad Method skills are vendored dev tooling, not app code** — `.claude/skills/bmad-*`
+  / `bmod-*`, `_bmad/scripts/`, `_bmad/*/scripts/` and `skills-lock.json` are upstream copies
+  that `npx skills update` + `bmad setup` overwrite, so never edit them in place; customize
+  through `_bmad/custom/` instead (see CONTRIBUTING.md → AI workflow). They don't touch the
+  app's no-dependency rule — nothing under them is compiled into the bundle.
 - **Form controls are a translucent white veil over the panel, not a coloured slab.**
   Popups, text fields and shortcut fields all draw `Theme.controlFill` (white 0.06) inside
   a `Theme.controlStroke` hairline (white 0.16). Both scale with whatever is behind them,

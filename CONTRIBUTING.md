@@ -175,6 +175,25 @@ your macOS version, steps to reproduce, and expected vs. actual result (the app'
 note whether **Screen Recording** is granted and whether the file/clipboard came out
 empty — that usually points at the signing/grant reset above.
 
+## AI workflow (BMad Method)
+
+The repo ships the [BMad Method](https://github.com/bmad-code-org/BMAD-METHOD) as
+project-level Claude Code skills, so its planning workflows and agent personas are there in any
+Claude Code session opened here. The only extra prerequisite is
+**[uv](https://docs.astral.sh/uv/)** (`brew install uv`), which runs the skills' Python scripts.
+
+- **Start by asking for `bmad`** — it recommends the next skill; `bmad status` checks the install.
+- **What lives where:** `.claude/skills/bmad-*` and `bmod-*` are the skills, pinned in
+  `skills-lock.json`; `_bmad/` holds the shared config and the scripts the skills call; the
+  documents and tickets BMad writes land in `_bmad-output/` — commit them like any other doc.
+- **Don't edit the vendored skills or `_bmad/scripts/`** — the next update overwrites them.
+  Team overrides go in `_bmad/custom/<skill>.toml` (the `bmad-customize` skill writes them).
+  Personal ones go in `*.user.toml`, which is gitignored — as is `_bmad/custom/config.user.toml`
+  (your name, language and active initiative).
+- **Updating:** run `npx skills update -p -y`, then ask for `bmad setup`, and land the result as
+  its own PR. If npm fails on root-owned files in `~/.npm`, prefix the command with
+  `npm_config_cache=$TMPDIR/npm-cache`.
+
 ## Pull requests
 
 1. Branch off `trunk`.
