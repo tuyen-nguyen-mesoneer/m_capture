@@ -3,7 +3,7 @@ title: 'Capture geometry as a pure type, checked across display layouts'
 type: 'refactor'
 ticket: '2'
 created: '2026-10-11'
-status: 'built'
+status: done
 baseline_revision: '40d87640a5b8b2fe1de93c1ddf0bc45a8c1a2c44'
 route: 'full'
 route_source: 'auto'
