@@ -82,12 +82,12 @@ enum WindowList {
     /// Convert a CoreGraphics global rect (top-left origin) to an AppKit global rect
     /// (bottom-left origin) by flipping Y within the primary display's height.
     static func appKitRect(fromCG r: CGRect) -> CGRect {
-        CGRect(x: r.minX, y: primaryHeight - r.maxY, width: r.width, height: r.height)
+        CaptureGeometry.appKitRect(fromCG: r, primaryHeight: primaryHeight)
     }
 
     /// Convert an AppKit global mouse location (bottom-left origin) to a CoreGraphics
     /// global point (top-left origin) for hit-testing against `PickableWindow.frame`.
     static func cgPoint(fromAppKitMouse p: CGPoint) -> CGPoint {
-        CGPoint(x: p.x, y: primaryHeight - p.y)
+        CaptureGeometry.cgPoint(fromAppKit: p, primaryHeight: primaryHeight)
     }
 }

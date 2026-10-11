@@ -448,7 +448,7 @@ final class ScreenshotController {
             if let cg = await withTimeout(seconds: 10, {
                 try? await SCScreenshotManager.captureImage(in: bounds)
             }), bounds.width > 0 {
-                let scale = CGFloat(cg.width) / bounds.width
+                let scale = CaptureGeometry.scale(pixelWidth: cg.width, pointWidth: bounds.width)
                 return (pointer?.draw(onto: cg, displayBounds: bounds, scale: scale) ?? cg, scale)
             }
         }
@@ -521,12 +521,8 @@ final class ScreenshotController {
     /// `EditorWindowController.CaptureSource`).
     private static func crop(_ cg: CGImage, to sourceRect: CGRect,
                              scale: CGFloat) -> (cg: CGImage, pixelRect: CGRect)? {
-        let px = CGRect(x: (sourceRect.minX * scale).rounded(),
-                        y: (sourceRect.minY * scale).rounded(),
-                        width: (sourceRect.width * scale).rounded(),
-                        height: (sourceRect.height * scale).rounded())
-        let clamped = px.intersection(CGRect(x: 0, y: 0, width: cg.width, height: cg.height))
-        guard !clamped.isNull, clamped.width >= 1, clamped.height >= 1,
+        guard let clamped = CaptureGeometry.pixelRect(sourceRect: sourceRect, scale: scale,
+                                                      imageSize: CGSize(width: cg.width, height: cg.height)),
               let cropped = cg.cropping(to: clamped) else { return nil }
         return (cropped, clamped)
     }
@@ -619,9 +615,7 @@ final class ScreenshotController {
         if viewRect.size != screen.frame.size, let id = screen.displayID {
             Settings.shared.lastRegion = (viewRect, id)
         }
-        let global = CGRect(x: screen.frame.minX + viewRect.minX,
-                            y: screen.frame.minY + viewRect.minY,
-                            width: viewRect.width, height: viewRect.height)
+        let global = CaptureGeometry.globalRect(viewRect: viewRect, screenOrigin: screen.frame.origin)
         let prefetch = contentPrefetch
         contentPrefetch = nil
         // Snapshot the overlay window IDs before dismiss() drops them — only the live
