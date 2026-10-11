@@ -29,7 +29,7 @@ spec's success signal.
 2. On the fixture capture, all four kinds are proposed, none is applied unconfirmed, and ordinary prose yields none. The fixture is built by this epic's first redaction story, stored beside `tools/sample.png` as `tools/redaction-fixture.png`, and reused by CAP-11's check.
 3. Sending the fixture through every editor-free exit warns before clipboard or disk, or before a thumbnail or pin window appears. That covers one-key, ⇧-release, quick access, and the Save-to-file and Copy-to-clipboard behaviours. "Open in editor" works, and a clean capture leaves without a warning.
 4. OCR runs once per capture, and its measured cost doesn't noticeably slow a one-key copy (the number is recorded in the CAP-11 plan).
-5. Smoke-tested on two displays; shipped in a tagged release (closing hitl release step).
+5. Smoke-tested on two displays; shipped in a tagged release. Each user-facing story's PR bumps `VERSION` and adds its release note, and is tagged after merge.
 
 ## Boundaries
 

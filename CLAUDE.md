@@ -231,7 +231,8 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
 - `ScreenshotController.swift` — selection-overlay windows; grabs the rect
   *in-process* via ScreenCaptureKit (`SCScreenshotManager`, macOS 14+);
   `deliver(_:)` routes the result per `CaptureBehavior` (editor / save / clipboard).
-  Multi-monitor coordinate math lives in `finish`. Gated on
+  Multi-monitor coordinate math lives in `Sources/Core/CaptureGeometry.swift`, called from
+  `finish`. Gated on
   `ScreenRecordingPermission` so a denied grant guides the user instead of
   silently producing nothing. `begin()` freezes every display first (one
   `SCScreenshotManager` grab each, before `NSApp.activate`), then `presentOverlays`
@@ -764,7 +765,11 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
 - **Multi-monitor coordinates.** `finish` maps the overlay's per-screen (bottom-left)
   `viewRect` into ScreenCaptureKit's `sourceRect` (points, top-left origin, relative
   to the display) by flipping Y within *that screen's* height (`screen.frame.height -
-  viewRect.maxY`); pixel size is `viewRect × backingScaleFactor`. Change there, carefully.
+  viewRect.maxY`); the pixel rect is `sourceRect ×` the **still's own pixels per point**
+  (`cg.width / CGDisplayBounds.width`, or `filter.pointPixelScale` on the live grab) — not
+  `backingScaleFactor` — rounded per edge and clamped to the image. The math lives in
+  `Sources/Core/CaptureGeometry.swift` (called from `finish`, `crop` and `WindowList`'s
+  CG↔AppKit flips) and is checked across display layouts by `tests/run.sh`. Change there, carefully.
 - **Capture latency / overlay.** The screenshot path pays its ScreenCaptureKit cost
   *up front* (the freeze in `begin()`), so mouse-up only crops — no grab, no
   wait-for-the-overlay-to-clear delay, nothing of ours that could bake into the shot.
