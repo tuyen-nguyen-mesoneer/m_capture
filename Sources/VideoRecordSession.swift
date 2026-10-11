@@ -219,14 +219,14 @@ final class VideoRecordSession: NSObject, @unchecked Sendable {
 
         guard writer.startWriting() else {
             let err = writer.error ?? RecordError.writerFailed
-            print("[VRS] startWriting FAILED: \(err)")
+            AppLog.recording.error("startWriting failed: \(String(describing: err), privacy: .public)")
             throw err
         }
         // Session maps movie-timeline zero to source-media zero. All sample buffers
         // are normalised to zero-based time in append() before being handed to the
         // writer, so no empty preamble is inserted in the edit list.
         writer.startSession(atSourceTime: .zero)
-        print("[VRS] startWriting OK — startSession(.zero) called — writer.status=\(writer.status.rawValue)")
+        AppLog.recording.notice("startWriting OK, session started at .zero — writer.status=\(writer.status.rawValue, privacy: .public)")
 
         self.assetWriter  = writer
         self.videoInput   = videoInput
@@ -256,6 +256,7 @@ final class VideoRecordSession: NSObject, @unchecked Sendable {
         } catch {
             // startCapture failed (e.g. Screen Recording permission reset after rebuild).
             // Cancel the writer so the empty output file is deleted rather than left on disk.
+            AppLog.recording.error("startCapture failed: \(String(describing: error), privacy: .public)")
             writer.cancelWriting()
             throw error
         }
@@ -274,6 +275,7 @@ final class VideoRecordSession: NSObject, @unchecked Sendable {
             // Snapshot the last SCStream PTS so append() can measure the exact PTS
             // gap on the first post-resume frame — same timescale, no CMTime overflow.
             pauseStartRawPTS = lastRawPTS
+            AppLog.recording.notice("pause — frame writes suspended")
         }
     }
 
@@ -285,7 +287,7 @@ final class VideoRecordSession: NSObject, @unchecked Sendable {
             guard isPaused else { return }
             isPaused = false
             pausedWallDuration += CACurrentMediaTime() - pauseWallStart  // UI timer only
-            print("[VRS] RESUME — waiting for first post-resume frame to measure PTS gap")
+            AppLog.recording.notice("resume — waiting for the first post-resume frame to measure the PTS gap")
         }
     }
 
@@ -303,7 +305,7 @@ final class VideoRecordSession: NSObject, @unchecked Sendable {
         // Finish writing on the write queue (synchronous hand-off via continuation).
         await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
             writeQueue.async { [self] in
-                print("[VRS] stop — appendCount=\(appendCount)  writerStatus=\(assetWriter?.status.rawValue ?? -1)  isFinishing=\(isFinishing)  error=\(String(describing: assetWriter?.error))")
+                AppLog.recording.notice("stop — appendCount=\(self.appendCount, privacy: .public) writerStatus=\(self.assetWriter?.status.rawValue ?? -1, privacy: .public) isFinishing=\(self.isFinishing, privacy: .public) error=\(String(describing: self.assetWriter?.error), privacy: .public)")
                 // isFinishing guards against a race where didStopWithError fires during
                 // stopCapture() on some macOS versions and calls markAsFinished() first;
                 // calling markAsFinished() twice crashes ("already marked as finished").
@@ -315,7 +317,11 @@ final class VideoRecordSession: NSObject, @unchecked Sendable {
                 videoInput?.markAsFinished()
                 audioInput?.markAsFinished()
                 writer.finishWriting {
-                    print("[VRS] finishWriting done — status=\(writer.status.rawValue)  error=\(String(describing: writer.error))")
+                    if writer.status == .failed {
+                        AppLog.recording.error("finishWriting failed — status=\(writer.status.rawValue, privacy: .public) error=\(String(describing: writer.error), privacy: .public)")
+                    } else {
+                        AppLog.recording.notice("finishWriting done — status=\(writer.status.rawValue, privacy: .public)")
+                    }
                     cont.resume()
                 }
             }
@@ -413,12 +419,12 @@ final class VideoRecordSession: NSObject, @unchecked Sendable {
 
     private func append(_ buffer: CMSampleBuffer, to input: AVAssetWriterInput) {
         guard let writer = assetWriter else {
-            if appendCount == 0 { print("[VRS] append: assetWriter is nil — dropped") }
+            if appendCount == 0 { AppLog.recording.debug("append: assetWriter is nil — dropped") }
             return
         }
         guard writer.status == .writing else { return }
         guard input.isReadyForMoreMediaData else {
-            if appendCount < 5 { print("[VRS] append: input NOT ready (backpressure), dropped") }
+            if appendCount < 5 { AppLog.recording.debug("append: input not ready (backpressure) — dropped") }
             return
         }
 
@@ -431,12 +437,12 @@ final class VideoRecordSession: NSObject, @unchecked Sendable {
             // Log pixel format of the first video buffer so we can confirm YUV delivery.
             if let imageBuffer = CMSampleBufferGetImageBuffer(buffer) {
                 let fmt = CVPixelBufferGetPixelFormatType(imageBuffer)
-                print("[VRS] FIRST VIDEO BUFFER — rawPTS=\(rawPTS.seconds)s  pixelFormat=0x\(String(fmt, radix: 16))")
+                AppLog.recording.debug("first video buffer — rawPTS=\(rawPTS.seconds, privacy: .public)s pixelFormat=0x\(String(fmt, radix: 16), privacy: .public)")
                 // 0x3420 = '420v' = kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange  ✓
                 // 0x42475241 = 'BGRA' = kCVPixelFormatType_32BGRA  ✗ (HEVC can't encode)
             } else {
                 // Audio buffer — no image buffer is expected.
-                print("[VRS] FIRST AUDIO BUFFER — rawPTS=\(rawPTS.seconds)s")
+                AppLog.recording.debug("first audio buffer — rawPTS=\(rawPTS.seconds, privacy: .public)s")
             }
         }
 
@@ -455,7 +461,7 @@ final class VideoRecordSession: NSObject, @unchecked Sendable {
                 skippedPTSDuration = CMTimeAdd(skippedPTSDuration, gap)
             }
             pauseStartRawPTS = .invalid
-            print("[VRS] PTS gap measured — gap=\(gap.seconds)s  skippedTotal=\(skippedPTSDuration.seconds)s")
+            AppLog.recording.debug("PTS gap measured — gap=\(gap.seconds, privacy: .public)s skippedTotal=\(self.skippedPTSDuration.seconds, privacy: .public)s")
         }
 
         // Compute the normalised PTS directly — no CMSampleBuffer copy needed for video.
@@ -475,7 +481,7 @@ final class VideoRecordSession: NSObject, @unchecked Sendable {
         // slightly earlier). A negative PTS permanently transitions the writer to .failed,
         // leaving the output file without a moov atom and unplayable in QuickTime Player.
         guard normPTS.isValid, CMTimeCompare(normPTS, .zero) >= 0 else {
-            print("[VRS] DROP invalid/pre-session \(isVideo ? "video" : "audio") — normPTS=\(normPTS.seconds)s  rawPTS=\(rawPTS.seconds)s  sessionStart=\(sessionStartPTS.seconds)s")
+            AppLog.recording.debug("drop invalid/pre-session \(isVideo ? "video" : "audio", privacy: .public) — normPTS=\(normPTS.seconds, privacy: .public)s rawPTS=\(rawPTS.seconds, privacy: .public)s sessionStart=\(self.sessionStartPTS.seconds, privacy: .public)s")
             return
         }
 
@@ -487,7 +493,7 @@ final class VideoRecordSession: NSObject, @unchecked Sendable {
         // Use CMTimeCompare explicitly — avoids any ambiguity in CMTime's Comparable
         // conformance across macOS SDK versions.
         if lastNorm.isValid, CMTimeCompare(normPTS, lastNorm) <= 0 {
-            print("[VRS] DROP stale \(isVideo ? "video" : "audio") — normPTS=\(normPTS.seconds)s ≤ lastNorm=\(lastNorm.seconds)s  rawPTS=\(rawPTS.seconds)s")
+            AppLog.recording.debug("drop stale \(isVideo ? "video" : "audio", privacy: .public) — normPTS=\(normPTS.seconds, privacy: .public)s ≤ lastNorm=\(lastNorm.seconds, privacy: .public)s rawPTS=\(rawPTS.seconds, privacy: .public)s")
             return
         }
 
@@ -514,20 +520,20 @@ final class VideoRecordSession: NSObject, @unchecked Sendable {
             ok = adaptor.append(outBuffer, withPresentationTime: normPTS)
         } else {
             guard let normalised = buffer.subtractingPresentationTimeStamp(totalSkip) else {
-                print("[VRS] subtractingPresentationTimeStamp returned nil — buffer dropped")
+                AppLog.recording.debug("subtractingPresentationTimeStamp returned nil — buffer dropped")
                 return
             }
             ok = input.append(normalised)
         }
 
         if isFirst {
-            print("[VRS] FIRST APPEND — rawPTS=\(rawPTS.seconds)s  totalSkip=\(totalSkip.seconds)s  normPTS=\(normPTS.seconds)s  appended=\(ok)")
-            if !ok { print("[VRS]   writer error after first append: \(String(describing: writer.error))") }
+            AppLog.recording.debug("first append — rawPTS=\(rawPTS.seconds, privacy: .public)s totalSkip=\(totalSkip.seconds, privacy: .public)s normPTS=\(normPTS.seconds, privacy: .public)s appended=\(ok, privacy: .public)")
+            if !ok { AppLog.recording.error("writer error after first append: \(String(describing: writer.error), privacy: .public)") }
         } else if appendCount < 10 || appendCount % 30 == 0 {
-            print("[VRS] append #\(appendCount) — normPTS=\(normPTS.seconds)s  appended=\(ok)")
+            AppLog.recording.debug("append #\(self.appendCount, privacy: .public) — normPTS=\(normPTS.seconds, privacy: .public)s appended=\(ok, privacy: .public)")
         }
         if !ok {
-            print("[VRS] APPEND FAILED #\(appendCount) \(isVideo ? "video" : "audio") — normPTS=\(normPTS.seconds)s  writerStatus=\(writer.status.rawValue)  error=\(String(describing: writer.error))")
+            AppLog.recording.error("append failed #\(self.appendCount, privacy: .public) \(isVideo ? "video" : "audio", privacy: .public) — normPTS=\(normPTS.seconds, privacy: .public)s writerStatus=\(writer.status.rawValue, privacy: .public) error=\(String(describing: writer.error), privacy: .public)")
         }
 
         if ok {
@@ -557,13 +563,13 @@ extension VideoRecordSession: SCStreamOutput {
         // writeQueue before touching any writer state.
         let n = scCallbackCount
         scCallbackCount += 1
-        if n < 3 { print("[VRS] SCStream callback #\(n) type=\(type.rawValue)") }
+        if n < 3 { AppLog.recording.debug("SCStream callback #\(n, privacy: .public) type=\(type.rawValue, privacy: .public)") }
 
         writeQueue.async { [self] in
             switch type {
             case .screen:
                 guard let input = videoInput else {
-                    if n < 3 { print("[VRS] SCStream #\(n): videoInput is nil") }
+                    if n < 3 { AppLog.recording.debug("SCStream #\(n, privacy: .public): videoInput is nil") }
                     return
                 }
                 append(buffer, to: input)
@@ -593,7 +599,11 @@ extension VideoRecordSession: SCStreamDelegate {
         // If the stream stops unexpectedly (permission revoked etc.) without stop()
         // being called, the file will be left unfinalized — acceptable for an error
         // path. The user can still trigger stop() via the recording bar.
-        print("[VRS] didStopWithError: \(error) — finalization deferred to stop()")
+        if isStopping {
+            AppLog.recording.notice("didStopWithError during our own stop: \(String(describing: error), privacy: .public)")
+        } else {
+            AppLog.recording.error("didStopWithError: \(String(describing: error), privacy: .public) — finalization deferred to stop()")
+        }
 
         // If this wasn't a stop() we initiated, the stream died on us (permission
         // revoked, display unplugged, …). Tell the controller once so it can tear down

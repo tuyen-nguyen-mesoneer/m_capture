@@ -315,7 +315,9 @@ final class RecordZoomEngine {
 extension RecordZoomEngine {
     /// Measure the per-frame cost of the zoom transform against the real frame budget, and
     /// print a table. Run with `./build.sh --run` then `open build/m_capture.app --args
-    /// --zoom-benchmark`, or see CONTRIBUTING.
+    /// --zoom-benchmark`, or see CONTRIBUTING. The table is command-line output, not
+    /// diagnostics, so it goes to stdout through `out` rather than `AppLog` — and not through
+    /// `print(`, which `tests/run.sh` rejects anywhere in `Sources/`.
     ///
     /// Deliberately synthetic — it builds its own 420v frames instead of capturing, so it
     /// needs **no Screen Recording permission** and can be run before the pipeline is wired
@@ -330,9 +332,10 @@ extension RecordZoomEngine {
             ("4K",    CGSize(width: 3840, height: 2160)),
         ]
         let factors: [CGFloat] = [1.5, 2, 3]
+        func out(_ line: String) { try? FileHandle.standardOutput.write(contentsOf: Data((line + "\n").utf8)) }
 
-        print("zoom transform benchmark — \(iterations) frames per case")
-        print("budget: 33.3 ms at 30 fps, 16.7 ms at 60 fps\n")
+        out("zoom transform benchmark — \(iterations) frames per case")
+        out("budget: 33.3 ms at 30 fps, 16.7 ms at 60 fps\n")
         // Manual padding rather than String(format:) — %s there expects a C string, not a
         // Swift String, and silently prints garbage.
         func col(_ text: String, _ width: Int) -> String {
@@ -341,12 +344,12 @@ extension RecordZoomEngine {
         func rcol(_ text: String, _ width: Int) -> String {
             text.count >= width ? text : String(repeating: " ", count: width - text.count) + text
         }
-        print(col("size", 8) + col("factor", 8) + col("scaler", 9)
+        out(col("size", 8) + col("factor", 8) + col("scaler", 9)
               + rcol("avg ms", 9) + rcol("max fps", 9) + rcol("verdict", 10))
 
         for (label, size) in sizes {
             guard let source = makeSourceFrame(size: size) else {
-                print("  \(label): could not build a source frame — skipped")
+                out("  \(label): could not build a source frame — skipped")
                 continue
             }
             for factor in factors {
@@ -370,7 +373,7 @@ extension RecordZoomEngine {
                     let ms = (CACurrentMediaTime() - started) / Double(iterations) * 1000
                     let fps = ms > 0 ? 1000 / ms : 0
                     let verdict = ms < 16.7 ? "60 fps" : (ms < 33.3 ? "30 fps" : "TOO SLOW")
-                    print(col(label, 8)
+                    out(col(label, 8)
                           + col(String(format: "%.1f×", Double(factor)), 8)
                           + col(scaler.rawValue, 9)
                           + rcol(String(format: "%.2f", ms), 9)
@@ -379,7 +382,7 @@ extension RecordZoomEngine {
                 }
             }
         }
-        print("\ndone")
+        out("\ndone")
     }
 
     /// A checkerboard rendered into a 420v buffer — busy enough that the scaler can't take a
