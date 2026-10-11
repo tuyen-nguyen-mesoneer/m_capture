@@ -28,7 +28,7 @@ success signal.
 2. A ⇧-release capture copies without the editor; the next capture opens it.
 3. Quick access can be selected in Settings; drag-out, Copy, Annotate and Pin work; it dismisses after about 6 s and stays while hovered.
 4. Re-edit reopens the last capture with each mark selectable, movable and deletable.
-5. Epic 1's checks stay green in CI; smoke-tested on two displays; shipped in a tagged release (closing hitl release step).
+5. Epic 1's checks stay green in CI; smoke-tested on two displays; shipped in a tagged release. Each user-facing story's PR bumps `VERSION`, adds the `docs/index.html` release-note pair (en and de) and is tagged after merge, the repo's convention. The first release also carries epic 1's guardrail code.
 
 ## Boundaries
 

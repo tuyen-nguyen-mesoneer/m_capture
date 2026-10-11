@@ -31,7 +31,7 @@ The spec's CAP-1 to CAP-4 are the requirement source (referenced numbered source
 2. Breaking the Y-flip, and making `gutterBand` return `(m, cs.height - m)`, each make that command fail.
 3. A PR that fails to compile or fails a check shows a red required check, built without the release signing secrets.
 4. `Sources/` has no `print(`; a recording's events appear in `log show --predicate 'subsystem == "io.mesoneer.mcapture"'`.
-5. Shipped in a tagged release with no user-visible behaviour change; the CONTRIBUTING smoke test passes on two displays.
+5. Every entry is merged to `trunk` with "Build and check" green and no user-visible behaviour change; the CONTRIBUTING smoke test passes on two displays. The code ships in epic 2's first release.
 
 ## Boundaries
 
@@ -55,5 +55,7 @@ It also owns setup that later epics reuse:
 - Sequencing: entries 2, 3 and 4 run in parallel after entry 1. They touch disjoint Sources files (ScreenshotController + WindowList / EditorWindow / VideoRecordSession + RecordZoomEngine), and entry 1's discovery convention means none edits a shared list.
 - Decision (2026-10-11): `CLAUDE.md` source-map and CONTRIBUTING edits for entries 2–4 go to entry 5, so parallel branches don't conflict. Entry 1 makes only the edits its own work makes false.
 - Decision (2026-10-11): `--zoom-benchmark`'s results table keeps going to stdout through a small output helper. It is command-line output, not diagnostics, so CAP-4's "no `print(`" holds and the documented workflow is unchanged (user approved).
-- Decision (2026-10-11): entry 6 cuts the epic's release. It's a hitl step: the user pushes the tag.
+- Decision (2026-10-11): entry 6 cuts the epic's release. It's a hitl step: the user pushes the tag. (Superseded below.)
+- Decision (2026-10-11): no release for this epic. Nothing in it is user-visible, and the repo bumps `VERSION` only with user-facing changes (#64, #67, #68 didn't), so the guardrail code ships in epic 2's first release (user agreed after PR #69).
+- Dropped: entry 6 (Cut the guardrails release), per the decision above. Nothing waits on it.
 - Source conflict: CLAUDE.md, Gotchas › Multi-monitor coordinates — says pixel size is `viewRect × backingScaleFactor` vs the code, which scales by the frozen still's pixels per point (`cg.width / CGDisplayBounds.width`) or `filter.pointPixelScale`. brownfield.md is corrected; entry 2 fixes CLAUDE.md.

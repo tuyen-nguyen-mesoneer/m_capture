@@ -3,7 +3,7 @@ title: 'Test runner and PR CI, proven on the capture Y-flip'
 type: 'chore'
 ticket: '1'
 created: '2026-10-11'
-status: 'built'
+status: done
 baseline_revision: 'fee7981dfb7b545c8d888fe5f0c68bd82944c254'
 route: 'full'
 route_source: 'auto'
