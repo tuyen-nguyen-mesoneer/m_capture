@@ -1,0 +1,8 @@
+# BMad Method — vendored from upstream and rewritten by `npx skills update` + `bmad setup`.
+# Marked generated so PR diffs collapse them and GitHub's language stats skip them.
+# `-text` keeps them byte-identical to upstream (one ships CRLF), so they match skills-lock.json.
+.claude/skills/bmad*/** -text linguist-generated=true linguist-vendored=true
+.claude/skills/bmod-*/** -text linguist-generated=true linguist-vendored=true
+_bmad/scripts/** linguist-generated=true linguist-vendored=true
+_bmad/*/scripts/** linguist-generated=true linguist-vendored=true
+skills-lock.json linguist-generated=true
