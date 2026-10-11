@@ -5,7 +5,7 @@
 //
 // Build & run (from repo root):
 //   swiftc -O -o /tmp/shots tools/shots.swift $(ls Sources/*.swift | grep -v main.swift) \
-//       -framework AppKit -framework Carbon
+//       Sources/Core/*.swift -framework AppKit -framework Carbon
 //   /tmp/shots assets
 import AppKit
 

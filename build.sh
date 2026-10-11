@@ -18,14 +18,24 @@ VERSION="1.8.5"
 # alert's "Simulate Instead" button sets it. So a plain `--run` inherits whatever was last
 # saved: it does not mean "record for real". The relaunch below reports the effective state
 # every time, and `--no-simulate` clears the saved flag.
+#
+# `./build.sh --ci` is the PR check's build: it proves the app compiles and bundles, signed
+# ad-hoc, with no signing secrets, keychain or GUI session — CI cannot hold the release cert,
+# and a PR build must never be mistaken for a release. No DMG, no relaunch, no MCAutoInstall.
 RUN=0
 SIMULATE=0
 NO_SIMULATE=0
+CI_BUILD=0
 for arg in "$@"; do
     [ "$arg" = "--run" ] && RUN=1
     [ "$arg" = "--simulate" ] && SIMULATE=1
     [ "$arg" = "--no-simulate" ] && NO_SIMULATE=1
+    [ "$arg" = "--ci" ] && CI_BUILD=1
 done
+if [ "$CI_BUILD" = "1" ] && { [ "$RUN" = "1" ] || [ "$SIMULATE" = "1" ] || [ "$NO_SIMULATE" = "1" ]; }; then
+    echo "!!! --ci builds only (no relaunch); it can't be combined with --run/--simulate/--no-simulate. Aborting." >&2
+    exit 1
+fi
 if [ "$SIMULATE" = "1" ] && [ "$NO_SIMULATE" = "1" ]; then
     echo "!!! --simulate and --no-simulate are contradictory. Aborting." >&2
     exit 1
@@ -47,16 +57,17 @@ echo "==> Compiling Swift sources"
 # SCScreenshotManager (the capture path) needs macOS 14. Without an explicit -target,
 # swiftc bakes in the build host's OS as the minimum and the app refuses to launch on
 # 14. (swiftc ignores MACOSX_DEPLOYMENT_TARGET, so this must be -target.)
+# Sources/Core/ holds the UI-free code tests/run.sh also compiles and checks.
 swiftc -swift-version 5 -O -target "$(uname -m)-apple-macos14.0" \
     -o "$APP/Contents/MacOS/m_capture" \
-    "$DIR"/Sources/*.swift \
+    "$DIR"/Sources/*.swift "$DIR"/Sources/Core/*.swift \
     -framework AppKit -framework Carbon -framework ScreenCaptureKit
 
 # Distributed (DMG) builds self-install into ~/Applications on first launch (see
 # Relocator.swift); the dev --run fast loop must not move out of build/, so flag only
-# non-run builds.
+# DMG builds (not --run, not --ci).
 AUTO_INSTALL_PLIST=""
-if [ "$RUN" != "1" ]; then
+if [ "$RUN" != "1" ] && [ "$CI_BUILD" != "1" ]; then
     AUTO_INSTALL_PLIST=$'\n    <key>MCAutoInstall</key><true/>'
 fi
 
@@ -128,7 +139,9 @@ find_identity() {
 }
 
 SIGN_ID="-"
-if [ "$RUN" = "1" ]; then
+if [ "$CI_BUILD" = "1" ]; then
+    echo "    ad-hoc (--ci: PR check build, never shipped)"
+elif [ "$RUN" = "1" ]; then
     # Dev rebuild — the shared identity (if imported locally), so the Screen Recording
     # grant survives rebuilds and matches the shipped app too; else ad-hoc.
     if [ -n "$(find_identity 'm_capture-release')" ]; then
@@ -160,6 +173,11 @@ else
     fi
 fi
 codesign --force --deep -s "$SIGN_ID" "$APP"
+
+if [ "$CI_BUILD" = "1" ]; then
+    echo "==> Done: $APP (--ci: ad-hoc, DMG skipped)"
+    exit 0
+fi
 
 if [ "$RUN" = "1" ]; then
     echo "==> Relaunching"

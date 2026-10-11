@@ -1,0 +1,21 @@
+# tickets.toml — the initiative's epics. Table order is the build order; `id` names an epic for good.
+
+[[epic]]
+id = 1
+slug = "epic-reliability-guardrails"
+title = "Capture-geometry and editor-layout regressions are caught before merge"
+covers = ["CAP-1", "CAP-2", "CAP-3", "CAP-4"]
+
+[[epic]]
+id = 2
+slug = "epic-capture-to-share"
+title = "Captures reach the clipboard, disk or a pin without the editor"
+covers = ["CAP-5", "CAP-6", "CAP-7", "CAP-8"]
+after = [{ epic = 1, needs = "geometry + layout checks green in PR CI before SelectionOverlay/ScreenshotController/EditorWindow change (spec constraint)" }]
+
+[[epic]]
+id = 3
+slug = "epic-safer-redaction"
+title = "No secret leaves a capture unredacted without a warning"
+covers = ["CAP-9", "CAP-10", "CAP-11"]
+after = [{ epic = 1, needs = "guardrails before EditorWindow/CanvasView change" }, { epic = 2, needs = "the editor-free exits (one-key actions, ⇧-release, quick access) that CAP-11 checks" }]

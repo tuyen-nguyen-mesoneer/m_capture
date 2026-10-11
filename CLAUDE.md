@@ -10,16 +10,19 @@ MIT-licensed. Targets macOS 14+; bundle id `io.mesoneer.mcapture`.
 ```sh
 ./build.sh          # → build/m_capture.app + m_capture.dmg
 ./build.sh --run    # rebuild + quit-and-relaunch in place (skips the DMG)
+./build.sh --ci     # PR-check build: ad-hoc signed, no DMG, no relaunch, no identity needed
+./tests/run.sh      # compile + run the automated checks (Command Line Tools only)
 ```
 
-`build.sh` compiles `Sources/*.swift`, assembles the `.app` (+ `Info.plist`, icon
+`build.sh` compiles `Sources/*.swift` and `Sources/Core/*.swift`, assembles the `.app` (+ `Info.plist`, icon
 via `tools/makeicon.swift`), code-signs, and builds the DMG; the version is set
 here. It pins the deployment target with `-target …-macos14.0` to match
 `LSMinimumSystemVersion` (ScreenCaptureKit's capture API needs macOS 14). The app
 shows both a Dock icon and the menu-bar **m.** icon (activation policy `.regular`);
 the menu-bar item stays the primary entry point, the Dock icon is a fallback for
 when the menu bar is hidden — Settings → General can hide it (`.accessory`).
-No automated tests; smoke-test by hand.
+Automated checks cover only the pure code in `Sources/Core/` (`./tests/run.sh`), and every PR
+runs them plus `./build.sh --ci` in the *Checks* workflow; everything else is smoke-tested by hand.
 
 Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
 **[`CONTRIBUTING.md`](CONTRIBUTING.md)**.
@@ -698,6 +701,20 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
 - `PanelChrome.swift` — borderless square-cornered panel for Settings / History / Trim
   + `AppPanels.closeAll(except:)`, the one-panel-at-a-time policy (macOS
   rounds `.titled` corners) with its own close button, Esc / ⌘W, and a draggable background.
+- `Core/` — UI-free code (Foundation / CoreGraphics only) that `build.sh` compiles into the app
+  **and** `tests/run.sh` compiles on its own and checks. Code opts in by living here, not by its
+  imports: `L10n.swift` and `HomebrewReceipt.swift` import only Foundation yet need
+  `Settings.shared` / `Bundle.main`, so they can't build standalone. Anything here that imports
+  AppKit fails the runner. Move only the pure math in and leave the caller where it is.
+  - `CaptureGeometry.swift` — `sourceRect(viewRect:displayHeight:)`, the overlay → ScreenCaptureKit
+    Y-flip that `ScreenshotController.finish` calls (see the multi-monitor gotcha).
+- `tests/` (repo root) — the check runner. `Harness.swift` finds every direct `CheckSuite`
+  subclass through the ObjC runtime and runs each `@objc func check…()` on a fresh instance, so
+  **a new suite is a new file** — no list to edit, which keeps parallel branches from colliding.
+  Failures are counted by `expect(_:_:)` and turned into the exit code, never trapped:
+  `assert`/`precondition` are compiled out under `-O`, and the runner builds with `-Onone`
+  anyway. `run.sh` is the one command; `.github/workflows/checks.yml` runs it on every PR (job
+  name "Build and check" — branch protection keys on it).
 - `tools/makeicon.swift` — generates the app `.icns` at build time.
 - `tools/shots.swift` — dev-only; regenerates the menu/about/settings screenshots in
   `docs/assets/` (see CONTRIBUTING.md). Its editor preview (from `tools/sample.png`) renders
