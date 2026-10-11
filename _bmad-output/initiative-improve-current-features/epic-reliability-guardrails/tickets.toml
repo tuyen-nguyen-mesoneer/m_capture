@@ -1,0 +1,67 @@
+# tickets.toml — epic-reliability-guardrails. Table order is the build order; `id` names an entry for good.
+
+[[entry]]
+id = 1
+type = "story"
+title = "Test runner and PR CI, proven on the capture Y-flip"
+description = 'Adds a build.sh CI mode (compile, bundle, ad-hoc sign; no relaunch, no DMG, no release-identity check, while plain ./build.sh keeps its guard), a swiftc check runner (one local command, Command Line Tools only) that counts failures and exits non-zero instead of relying on assert, whose discovery convention is fixed once (it compiles tests/*.swift plus every Sources/*.swift importing only Foundation/CoreGraphics, so later stories add files rather than edit a list), the overlay→sourceRect Y-flip extracted from ScreenshotController.finish into a pure function with one check, a PR workflow on macos-15 with no secrets running both, and rewrites the docs that become false (CONTRIBUTING Testing/PR rules, CLAUDE.md "No automated tests") — the thinnest path through app code, runner and CI (CAP-3, first slice of CAP-1).'
+verify = "The local command passes; flipping the sign in the extracted function fails it locally and on a test PR; a PR with a compile error goes red; the check is marked required on trunk."
+covers = ["CAP-1", "CAP-3"]
+after = []
+hitl = true                 # a repo admin marks the PR check required in trunk's branch protection
+risk = "medium"
+
+[[entry]]
+id = 2
+type = "story"
+title = "Capture geometry as a pure type, checked across display layouts"
+description = "Following entry 1's discovery convention, moves the rest of finish's mapping (sourceRect, pixel size from the capture's own scale — the still's pixels per point — crop-rect rounding, and the global rect) plus WindowList's appKitRect/cgPoint (primary display height passed in) into the pure type entry 1 started, with the controllers calling it, checks it against mixed 1x/2x, negative-origin and vertically stacked layouts, and corrects CLAUDE.md's multi-monitor gotcha, which names backingScaleFactor (CAP-1)."
+verify = "The runner covers all three layouts and passes; a broken Y-flip or scale fails it; a two-display smoke capture is pixel-identical to before."
+covers = ["CAP-1"]
+after = [1]
+hitl = false
+risk = "medium"
+
+[[entry]]
+id = 3
+type = "story"
+title = "Editor card placement as a pure layout, swept for invariants"
+description = "Following entry 1's discovery convention, extracts the whole placement pipeline from EditorWindowController into a view-free layout over sizes and rects — measureGaps, gutterBand, rowSplit, overCaptureOrigin, gatherOffsets, the compute half of stackVertically/rowOutside, the preference table and assignment loop in buildClusters, onScreenScale, init's centring, the capturePad/bgPad inset, magnification and insetScale, with the screen frame and card sizes (localized header widths included) as inputs — the controller applying its result, and adds a runner sweep asserting no overlap, nothing over the capture except gathered leftovers, and nothing off-screen, on a matrix fine enough (≤4 pt steps or targeted shapes) to hit the ~110–118 pt canvas band where the gutterBand mutation bites (CAP-2)."
+verify = "The sweep passes on trunk and fails when gutterBand returns (m, cs.height - m); editor cards land identically before and after in a smoke pass at three capture sizes."
+covers = ["CAP-2"]
+after = [1]
+hitl = false
+risk = "high"
+
+[[entry]]
+id = 4
+type = "story"
+title = "Diagnostics to the unified log"
+description = "Adds the one shared app logger later epics use, replaces every print( in Sources with os.Logger under subsystem io.mesoneer.mcapture in per-area categories (session start/stop/failure at notice level with privacy: .public on non-sensitive values, per-buffer traces at debug), keeps --zoom-benchmark's results table on stdout through a small output helper, and adds a runner check that Sources contains no print( (CAP-4)."
+verify = "The runner's no-print check passes; after a recording, log show --predicate 'subsystem == \"io.mesoneer.mcapture\"' --last 5m shows its session events; --zoom-benchmark still prints its table."
+covers = ["CAP-4"]
+after = [1]
+hitl = false
+risk = "low"
+
+[[entry]]
+id = 5
+type = "story"
+title = "Refactor sweep"
+description = "Cleanup only, scoped when it starts from the epic's plans and deferred review findings, plus the CLAUDE.md source-map and CONTRIBUTING updates entries 2–4 left for it."
+verify = "Runner and PR CI green; CLAUDE.md names every new file; the CONTRIBUTING baseline smoke test passes on two displays."
+covers = []
+after = [1, 2, 3, 4]
+hitl = false
+risk = "low"
+
+[[entry]]
+id = 6
+type = "story"
+title = "Cut the guardrails release"
+description = "Bumps VERSION in build.sh, adds the rel.N.date/rel.N.note pair to both en and de dicts in docs/index.html with the matching release block (notes exactly two lines), and the user pushes the version tag so release.yml publishes it."
+verify = "The GitHub Release for the new tag has a signed m_capture.dmg and the Homebrew cask bump step is green."
+covers = []
+after = [5]
+hitl = true                 # the user pushes the tag
+risk = "low"

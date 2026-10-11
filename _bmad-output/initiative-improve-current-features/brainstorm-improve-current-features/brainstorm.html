@@ -1,0 +1,1013 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Frozen Frame Brainstorm</title>
+<meta name="description" content="A keepsake of the m_capture brainstorm on improving its existing features: six divergent techniques, 105 ideas, and the 3-epic initiative they converged on.">
+<style>
+:root{
+  --deep:#191528; --night:#302355; --signal:#422982; --p12:#2b2049; --p11:#32245b;
+  --lav-ease:#c39cff; --lilac:#d5baff; --coral:#ff6d6a; --amber:#ffb34d;
+
+  --bg:#f6f3fb;
+  --bg-2:#efe9f8;
+  --surface:#ffffff;
+  --surface-2:#f3eefb;
+  --ink:#191528;
+  --muted:rgba(25,21,40,.66);
+  --faint:rgba(25,21,40,.42);
+  --hair:rgba(25,21,40,.14);
+  --hair-2:rgba(25,21,40,.24);
+  --accent:#422982;
+  --accent-ink:#ffffff;
+  --mark:#7a52d6;
+  --ants-a:#422982; --ants-b:#ffffff;
+  --handle:#ffffff; --handle-ring:#422982;
+  --code:#2b2049;
+  --dimmed:rgba(25,21,40,.07);
+  --shadow:0 18px 40px -22px rgba(25,21,40,.45);
+  --coral-ink:#c2302d;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#120f1d;
+    --bg-2:#191528;
+    --surface:#1f1934;
+    --surface-2:#271f45;
+    --ink:#ffffff;
+    --muted:rgba(255,255,255,.68);
+    --faint:rgba(255,255,255,.44);
+    --hair:rgba(255,255,255,.14);
+    --hair-2:rgba(255,255,255,.24);
+    --accent:#d5baff;
+    --accent-ink:#191528;
+    --mark:#c39cff;
+    --ants-a:#d5baff; --ants-b:#191528;
+    --handle:#ffffff; --handle-ring:#c39cff;
+    --code:#d5baff;
+    --dimmed:rgba(0,0,0,.28);
+    --shadow:0 18px 40px -18px rgba(0,0,0,.8);
+    --coral-ink:#ff8a87;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#120f1d;
+  --bg-2:#191528;
+  --surface:#1f1934;
+  --surface-2:#271f45;
+  --ink:#ffffff;
+  --muted:rgba(255,255,255,.68);
+  --faint:rgba(255,255,255,.44);
+  --hair:rgba(255,255,255,.14);
+  --hair-2:rgba(255,255,255,.24);
+  --accent:#d5baff;
+  --accent-ink:#191528;
+  --mark:#c39cff;
+  --ants-a:#d5baff; --ants-b:#191528;
+  --handle:#ffffff; --handle-ring:#c39cff;
+  --code:#d5baff;
+  --dimmed:rgba(0,0,0,.28);
+  --shadow:0 18px 40px -18px rgba(0,0,0,.8);
+  --coral-ink:#ff8a87;
+}
+
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;-webkit-text-size-adjust:100%}
+body{
+  margin:0; background:var(--bg); color:var(--ink);
+  font-family:"Open Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+  font-size:16px; line-height:1.55;
+  overflow-x:hidden;
+}
+.mono{font-family:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace}
+a{color:inherit}
+p{margin:0 0 .8em}
+h1,h2,h3,h4{margin:0;line-height:1.2;font-weight:700}
+ul{margin:0;padding:0;list-style:none}
+.wrap{max-width:1120px;margin:0 auto;padding:0 16px}
+@media (min-width:720px){.wrap{padding:0 28px}}
+
+/* ---------- menu bar ---------- */
+.menubar{
+  position:sticky; top:0; z-index:50;
+  display:flex; align-items:center; gap:14px;
+  height:34px; padding:0 14px;
+  background:rgba(25,21,40,.86); color:#fff;
+  -webkit-backdrop-filter:blur(14px) saturate(1.4); backdrop-filter:blur(14px) saturate(1.4);
+  font-size:13px; border-bottom:1px solid rgba(255,255,255,.08);
+}
+.logo{
+  width:22px;height:22px;border-radius:50%;flex:none;
+  background:linear-gradient(45deg,#191528,#422982);
+  display:grid;place-items:center;color:#fff;font-weight:700;font-size:12px;letter-spacing:-.04em;
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.18);
+}
+.menubar .crumb{opacity:.8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.menubar .sp{flex:1}
+.recind{display:flex;align-items:center;gap:7px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--coral);flex:none;box-shadow:0 0 0 3px rgba(255,109,106,.22)}
+.dot.pulse{animation:pulse 1.6s ease-in-out infinite}
+@keyframes pulse{50%{box-shadow:0 0 0 6px rgba(255,109,106,0)}}
+.themebtn{
+  background:transparent;border:1px solid rgba(255,255,255,.22);color:#fff;
+  font:inherit;font-size:11px;padding:2px 8px;cursor:pointer;letter-spacing:.06em;text-transform:uppercase;
+}
+.themebtn:focus-visible{outline:2px solid var(--lilac);outline-offset:2px}
+@media (max-width:560px){.menubar .crumb{display:none}}
+
+/* ---------- selection marquee + handles ---------- */
+.sel{position:relative}
+.sel::before{
+  content:"";position:absolute;inset:0;pointer-events:none;
+  background:
+    repeating-linear-gradient(90deg,var(--ants-a) 0 6px,var(--ants-b) 6px 12px) top left/100% 1.5px no-repeat,
+    repeating-linear-gradient(90deg,var(--ants-a) 0 6px,var(--ants-b) 6px 12px) bottom left/100% 1.5px no-repeat,
+    repeating-linear-gradient(0deg,var(--ants-a) 0 6px,var(--ants-b) 6px 12px) top left/1.5px 100% no-repeat,
+    repeating-linear-gradient(0deg,var(--ants-a) 0 6px,var(--ants-b) 6px 12px) top right/1.5px 100% no-repeat;
+}
+.sel.ants::before{animation:ants 1s linear infinite}
+@keyframes ants{to{background-position:12px 0,-12px 100%,0 -12px,100% 12px}}
+.knobs::after{
+  --k:9px;
+  content:"";position:absolute;inset:calc(var(--k) / -2);pointer-events:none;
+  background:
+    radial-gradient(circle,var(--handle) 0 3px,var(--handle-ring) 3px 4.5px,transparent 5px) top left/var(--k) var(--k) no-repeat,
+    radial-gradient(circle,var(--handle) 0 3px,var(--handle-ring) 3px 4.5px,transparent 5px) top center/var(--k) var(--k) no-repeat,
+    radial-gradient(circle,var(--handle) 0 3px,var(--handle-ring) 3px 4.5px,transparent 5px) top right/var(--k) var(--k) no-repeat,
+    radial-gradient(circle,var(--handle) 0 3px,var(--handle-ring) 3px 4.5px,transparent 5px) center left/var(--k) var(--k) no-repeat,
+    radial-gradient(circle,var(--handle) 0 3px,var(--handle-ring) 3px 4.5px,transparent 5px) center right/var(--k) var(--k) no-repeat,
+    radial-gradient(circle,var(--handle) 0 3px,var(--handle-ring) 3px 4.5px,transparent 5px) bottom left/var(--k) var(--k) no-repeat,
+    radial-gradient(circle,var(--handle) 0 3px,var(--handle-ring) 3px 4.5px,transparent 5px) bottom center/var(--k) var(--k) no-repeat,
+    radial-gradient(circle,var(--handle) 0 3px,var(--handle-ring) 3px 4.5px,transparent 5px) bottom right/var(--k) var(--k) no-repeat;
+}
+.readout{
+  display:inline-flex;align-items:center;gap:8px;
+  font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:12px;
+  background:var(--deep);color:#fff;padding:3px 8px;letter-spacing:.02em;
+}
+.keycap{
+  display:inline-block;font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:.82em;
+  padding:0 6px;border:1px solid currentColor;border-bottom-width:2px;opacity:.9;line-height:1.5;
+}
+.eyebrow{font-size:11px;letter-spacing:.16em;text-transform:uppercase;font-weight:700;color:var(--accent)}
+.counter{
+  width:26px;height:26px;border-radius:50%;flex:none;display:inline-grid;place-items:center;
+  background:var(--coral);color:#191528;font-weight:700;font-size:13px;
+  box-shadow:0 0 0 2px var(--bg);
+}
+
+/* ---------- hero: the frozen screen ---------- */
+.hero{
+  position:relative;overflow:hidden;
+  background:#0d0a17;
+  color:#fff;
+  padding:56px 0 40px;
+}
+.desk{position:absolute;inset:0;pointer-events:none}
+.desk .w{position:absolute;background:#e9e4f3;opacity:.9;box-shadow:0 20px 40px rgba(0,0,0,.4)}
+.desk .w::before{content:"";position:absolute;left:0;right:0;top:0;height:18px;background:#d1c8e4}
+.desk .w i{position:absolute;left:12%;right:12%;height:6px;background:#c7bddb}
+.desk .w1{left:-4%;top:12%;width:42%;height:60%}
+.desk .w2{left:54%;top:4%;width:50%;height:46%;background:#f4f1f9}
+.desk .w3{left:30%;top:58%;width:44%;height:52%;background:#ddd5ec}
+.desk .tip{position:absolute;left:62%;top:38%;background:#fff;color:#191528;font-size:11px;padding:4px 8px;box-shadow:0 6px 16px rgba(0,0,0,.3)}
+.desk::after{content:"";position:absolute;inset:0;background:rgba(18,13,32,.74)}
+.hero-inner{position:relative;z-index:2}
+.capture{
+  position:relative;margin:26px auto 0;max-width:820px;
+  background:linear-gradient(45deg,#191528 10%,#2b2049 55%,#32245b);
+  padding:34px 28px 30px;
+}
+.capture .readout{position:absolute;left:0;top:-30px;background:#422982}
+.capture h1{font-size:clamp(30px,6vw,56px);letter-spacing:-.02em;margin:10px 0 14px}
+.capture h1 em{font-style:normal;color:var(--lilac)}
+.capture .goal{color:rgba(255,255,255,.8);max-width:62ch;font-size:16px}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:18px}
+.chip{font-size:12px;padding:3px 9px;border:1px solid rgba(255,255,255,.22);background:rgba(255,255,255,.06);color:rgba(255,255,255,.88)}
+.chip b{color:#fff}
+.chip.rec{border-color:rgba(255,109,106,.5);display:inline-flex;align-items:center;gap:6px}
+.hero .sel{--ants-a:#d5baff;--ants-b:#191528;--handle-ring:#c39cff}
+
+/* guidance card / technique picker */
+.guide{
+  margin:34px auto 0;max-width:820px;
+  background:rgba(25,21,40,.92);border:1px solid rgba(255,255,255,.14);
+  padding:14px;box-shadow:0 20px 50px -20px rgba(0,0,0,.8);
+}
+.seg{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));border:1px solid rgba(255,255,255,.16)}
+.seg a{
+  display:flex;flex-direction:column;gap:2px;align-items:center;justify-content:center;text-align:center;
+  padding:9px 4px;text-decoration:none;color:rgba(255,255,255,.78);font-size:11px;line-height:1.25;
+  border-right:1px solid rgba(255,255,255,.12);min-height:58px;
+}
+.seg a:last-child{border-right:0;background:#422982;color:#fff}
+.seg a b{font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:12px;color:#fff}
+.seg a:hover,.seg a:focus-visible{background:rgba(195,156,255,.18);color:#fff;outline:none}
+.hints{display:flex;flex-wrap:wrap;gap:6px 18px;justify-content:center;margin-top:12px;font-size:12px;color:rgba(255,255,255,.62)}
+@media (max-width:720px){
+  .seg{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .seg a{border-bottom:1px solid rgba(255,255,255,.12)}
+  .seg a:nth-child(2n){border-right:0}
+  .seg a:last-child{grid-column:1/-1}
+}
+.tally{display:flex;flex-wrap:wrap;gap:0;margin:34px auto 0;max-width:820px;border:1px solid rgba(255,255,255,.14)}
+.tally div{flex:1 1 0;min-width:0;padding:10px 6px;text-align:center;border-right:1px solid rgba(255,255,255,.1)}
+.tally div:last-child{border-right:0}
+.tally b{display:block;font-size:22px;font-variant-numeric:tabular-nums}
+.tally span{font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,.6)}
+.tally .bar{height:4px;background:var(--lav-ease);margin:6px auto 0;opacity:.85}
+
+/* ---------- sections ---------- */
+section.tech{padding:72px 0 24px;scroll-margin-top:34px}
+.thead{display:grid;gap:14px;margin-bottom:28px}
+.thead .num{font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:13px;color:var(--muted)}
+.thead h2{font-size:clamp(26px,4.4vw,40px);letter-spacing:-.015em}
+.thead .frame{color:var(--muted);max-width:70ch;font-size:15px}
+.thead .frame q{quotes:none;color:var(--ink)}
+.idx{font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:11px;color:var(--faint);margin-right:6px;font-variant-numeric:tabular-nums}
+.badge{display:inline-block;font-size:10px;letter-spacing:.1em;text-transform:uppercase;font-weight:700;padding:1px 6px;border:1px solid var(--hair-2);color:var(--muted);vertical-align:2px}
+.badge.spec{border-color:var(--amber);color:var(--amber)}
+
+/* 01 — fix log + drills + console */
+.fixlog{display:grid;gap:0;border:1px solid var(--hair);background:var(--surface)}
+.fixrow{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr) auto;gap:12px;align-items:center;padding:11px 14px;border-bottom:1px solid var(--hair)}
+.fixrow:last-child{border-bottom:0}
+.fixrow .what{font-weight:600}
+.prs{display:flex;flex-wrap:wrap;gap:5px}
+.pr{font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:12px;padding:1px 6px;background:var(--surface-2);border:1px solid var(--hair-2);color:var(--code)}
+.stamp{font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:11px;letter-spacing:.06em;text-transform:uppercase;padding:2px 8px;border:1.5px solid var(--coral);color:var(--coral-ink);transform:rotate(-3deg);white-space:nowrap}
+.stamp.big{font-size:15px;font-weight:700}
+.fixrow.none .stamp{border-style:dashed}
+@media (max-width:620px){.fixrow{grid-template-columns:1fr auto}.fixrow .prs{grid-column:1/-1;order:3}}
+
+.drills{display:grid;gap:16px;grid-template-columns:repeat(3,minmax(0,1fr));margin:30px 0}
+@media (max-width:900px){.drills{grid-template-columns:1fr}}
+.drill{background:var(--surface);border:1px solid var(--hair);padding:14px}
+.drill .lvl{padding:10px 12px;margin-top:10px;background:var(--dimmed)}
+.drill .lvl.l1{margin-top:12px}
+.drill .lvl .lvl{background:var(--surface)}
+.drill .lvl .lvl .lvl{background:var(--surface-2)}
+.drill small{display:block;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--faint);font-weight:700;margin-bottom:2px}
+.drill .fix{font-weight:600;color:var(--ink)}
+.drill .lvl.sel{margin-left:6px;margin-right:6px}
+
+.console{background:#120e1f;color:#e9e3f7;border:1px solid rgba(255,255,255,.1);font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:13px;line-height:1.6;box-shadow:var(--shadow)}
+.console .bar{display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid rgba(255,255,255,.1);font-size:12px;color:rgba(255,255,255,.6)}
+.console .bar .sq{width:10px;height:10px;background:rgba(255,255,255,.18)}
+.console pre{margin:0;padding:14px 14px 16px;white-space:pre-wrap;word-break:break-word}
+.console .c{color:#9d8cc4}
+.console .k{color:#d5baff}
+.console .o{color:#ffb34d}
+.console .ln{display:grid;grid-template-columns:auto auto minmax(0,1fr);gap:0 10px;padding:3px 0}
+.console .ln .t{color:#ff6d6a}
+.console .ln .d{color:#c39cff}
+
+/* 02 — jobs as counter board */
+.board{position:relative;background:var(--surface);border:1px solid var(--hair);padding:22px;box-shadow:var(--shadow)}
+.board::before{content:"";position:absolute;inset:0;background-image:linear-gradient(var(--hair) 1px,transparent 1px),linear-gradient(90deg,var(--hair) 1px,transparent 1px);background-size:28px 28px;opacity:.35;pointer-events:none}
+.jobs{position:relative;display:grid;gap:22px 26px;grid-template-columns:repeat(3,minmax(0,1fr))}
+@media (max-width:900px){.jobs{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:600px){.jobs{grid-template-columns:1fr}.board{padding:16px}}
+.job h3{display:flex;align-items:center;gap:10px;font-size:17px;margin-bottom:10px}
+.job li{position:relative;padding:8px 10px 8px 30px;margin-top:6px;background:var(--bg);border-left:2px solid var(--mark);font-size:14.5px}
+.job li::before{content:"";position:absolute;left:9px;top:17px;width:12px;height:1.5px;background:var(--coral)}
+.job li::after{content:"";position:absolute;left:18px;top:13.5px;border:4px solid transparent;border-left:6px solid var(--coral)}
+.note{font-size:12.5px;color:var(--faint);margin-top:14px}
+
+/* 03 — SCAMPER around a capture */
+.scamper{display:grid;gap:14px;grid-template-columns:repeat(3,minmax(0,1fr));grid-template-areas:"s c a" "m1 core m2" "p e r"}
+.card{background:linear-gradient(45deg,#191528 0%,#2b2049 70%,#32245b 100%);background-color:#191528;color:#fff;border:1px solid rgba(255,255,255,.22);box-shadow:0 14px 30px -18px rgba(0,0,0,.7);padding:0 0 12px}
+.card .ch{display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid rgba(255,255,255,.14)}
+.grip{width:10px;height:14px;flex:none;background:radial-gradient(circle,rgba(255,255,255,.55) 1.1px,transparent 1.6px) 0 0/5px 5px}
+.card .ch .lab{font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:#d5baff;font-weight:700}
+.tile{margin-left:auto;width:30px;height:30px;display:grid;place-items:center;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.2);font-weight:700;font-size:15px}
+.card ul{padding:4px 12px 0}
+.card li{font-size:14px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,.08);color:rgba(255,255,255,.9)}
+.card li:last-child{border-bottom:0}
+.s-s{grid-area:s}.s-c{grid-area:c}.s-a{grid-area:a}.s-m1{grid-area:m1}.s-m2{grid-area:m2}.s-p{grid-area:p}.s-e{grid-area:e}.s-r{grid-area:r}
+.core{grid-area:core;display:grid;place-items:center;min-height:220px;background:var(--dimmed);padding:18px}
+.core .shot{width:100%;max-width:300px;aspect-ratio:4/3;background:var(--surface);display:grid;place-items:center;text-align:center;padding:16px}
+.core .shot b{font-size:15px}
+.core .shot span{display:block;font-size:12px;color:var(--muted);margin-top:4px}
+@media (max-width:900px){.scamper{grid-template-columns:repeat(2,minmax(0,1fr));grid-template-areas:"core core" "s c" "a m1" "m2 p" "e r"}}
+@media (max-width:600px){.scamper{grid-template-columns:1fr;grid-template-areas:"core" "s" "c" "a" "m1" "m2" "p" "e" "r"}}
+
+/* 04 — personas as windows, window-pick mode */
+.desktop{columns:3 280px;column-gap:16px;padding:18px;background:var(--dimmed);border:1px solid var(--hair)}
+.win{break-inside:avoid;margin:0 0 16px;background:var(--surface);border:1px solid var(--hair-2);box-shadow:var(--shadow);position:relative;transition:transform .15s ease}
+.win .tb{display:flex;align-items:center;gap:6px;padding:7px 10px;background:var(--surface-2);border-bottom:1px solid var(--hair)}
+.win .tb i{width:9px;height:9px;border:1px solid var(--hair-2)}
+.win .tb .tt{margin-left:6px;font-size:12.5px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.win .ctx{font-size:12px;color:var(--muted);padding:9px 12px 0}
+.win ul{padding:4px 12px 12px}
+.win li{font-size:14px;padding:6px 0;border-bottom:1px dashed var(--hair)}
+.win li:last-child{border-bottom:0}
+.win::after{content:"";position:absolute;inset:0;background:rgba(195,156,255,.0);pointer-events:none;transition:background .15s}
+.win:hover::after,.win:focus-within::after{background:rgba(195,156,255,.16);outline:2px solid var(--lav-ease)}
+.win:hover{transform:translateY(-2px)}
+.wintag{font-size:10px;color:var(--amber);font-weight:700;letter-spacing:.08em;text-transform:uppercase;margin-left:auto;white-space:nowrap}
+
+/* 05 — dial + crown */
+.dialgrid{display:grid;gap:20px;grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+@media (max-width:860px){.dialgrid{grid-template-columns:1fr}}
+.panel{background:var(--surface);border:1px solid var(--hair);padding:18px}
+.panel h3{font-size:18px;margin-bottom:4px}
+.panel .sub{color:var(--muted);font-size:13.5px;margin-bottom:12px}
+.dial{width:100%;max-width:360px;display:block;margin:6px auto 4px}
+.dial .arc{fill:none;stroke:var(--hair-2);stroke-width:10}
+.dial .arc11{fill:none;stroke:var(--coral);stroke-width:10}
+.dial line.tk{stroke:var(--muted);stroke-width:2}
+.dial text{fill:var(--muted);font-size:12px;font-family:ui-monospace,"SF Mono",Menlo,monospace;text-anchor:middle;dominant-baseline:middle}
+.dial text.eleven{fill:var(--coral-ink);font-weight:700;font-size:15px}
+.dial .needle{stroke:var(--ink);stroke-width:3;stroke-linecap:round}
+.dial .hub{fill:var(--coral)}
+.laps li{display:grid;grid-template-columns:auto minmax(0,1fr);gap:10px;align-items:start;padding:8px 0;border-top:1px solid var(--hair);font-size:14.5px}
+.laps .lap{font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:11px;color:var(--coral-ink);padding-top:3px;white-space:nowrap}
+.crown{display:flex;align-items:center;gap:14px;margin:4px 0 14px;flex-wrap:wrap}
+.crown svg{width:56px;height:44px;flex:none}
+.struck{font-weight:800;letter-spacing:.12em;font-size:15px;padding:0 4px;background:linear-gradient(transparent 40%,rgba(255,109,106,.8) 40% 62%,transparent 62%)}
+.kgroup{margin-top:14px}
+.kgroup h4{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);margin-bottom:4px}
+.kgroup li{font-size:14.5px;padding:6px 0 6px 18px;position:relative;border-top:1px solid var(--hair)}
+.kgroup li::before{content:"";position:absolute;left:2px;top:14px;width:8px;height:8px;border:1.5px solid var(--mark)}
+
+/* 06 — worst ideas, onion skin */
+.onion{background:var(--surface);border:1px solid var(--hair);padding:18px;--mix:1}
+.onionctl{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px;font-size:13px;color:var(--muted)}
+.onionctl input{flex:1 1 200px;accent-color:#7a52d6}
+.pairs{display:grid;gap:12px}
+.pair{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1.4fr);gap:14px;align-items:center;padding:14px;background:var(--bg);border:1px solid var(--hair)}
+.pair .worst{opacity:calc(1 - var(--mix) * .62);font-size:14.5px}
+.pair .worst span{text-decoration:line-through;text-decoration-color:var(--coral);text-decoration-thickness:2px}
+.pair .worst small,.pair .flip small{display:block;font-size:10px;letter-spacing:.14em;text-transform:uppercase;font-weight:700;color:var(--faint);text-decoration:none;margin-bottom:3px}
+.pair .arrow{font-size:20px;color:var(--coral-ink)}
+.pair .flip{opacity:calc(.38 + var(--mix) * .62);font-size:15px;font-weight:600}
+@media (max-width:640px){.pair{grid-template-columns:1fr}.pair .arrow{transform:rotate(90deg);justify-self:start}}
+
+/* ---------- convergence: the climax ---------- */
+.climax{background:linear-gradient(180deg,var(--bg) 0,var(--bg-2) 240px,var(--bg-2) 100%);padding-bottom:40px;margin-top:40px}
+.clusters{display:grid;gap:12px;grid-template-columns:repeat(5,minmax(0,1fr))}
+@media (max-width:980px){.clusters{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:520px){.clusters{grid-template-columns:1fr}}
+.cl{position:relative;padding:28px 12px 12px;background:var(--surface);border:1px dashed var(--hair-2);font-size:13.5px;color:var(--muted)}
+.cl b{display:block;color:var(--ink);font-size:14.5px;margin-bottom:4px}
+.cl .L{position:absolute;left:-1px;top:-1px;width:24px;height:22px;display:grid;place-items:center;background:var(--deep);color:#fff;font-weight:700;font-size:12px}
+.cl .became{position:absolute;right:8px;top:6px;font-size:10px;font-weight:700;letter-spacing:.1em;color:var(--coral-ink)}
+.cl.must{border:1.5px solid var(--coral);color:var(--ink)}
+
+.scope{margin:44px 0 0;background:#0d0a17;color:#fff;padding:28px 16px 22px;position:relative;overflow:hidden}
+@media (min-width:720px){.scope{padding:36px 30px 28px}}
+.scope .eyebrow{color:#d5baff}
+.scope h3{font-size:clamp(22px,3.4vw,30px);margin:6px 0 18px}
+.cropbox{position:relative;background:linear-gradient(45deg,#191528 10%,#2b2049 55%,#32245b);padding:22px 16px 16px;--ants-a:#ff6d6a;--ants-b:#191528;--handle-ring:#ff6d6a}
+.cropbox .readout{position:absolute;left:0;top:-26px;background:#ff6d6a;color:#191528;font-weight:700}
+.musts{display:grid;gap:14px;grid-template-columns:repeat(3,minmax(0,1fr))}
+@media (max-width:900px){.musts{grid-template-columns:1fr}}
+.must{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.16);padding:14px}
+.must .mh{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.must .mh h4{font-size:17px}
+.must ul li{font-size:14px;padding:5px 0 5px 16px;position:relative;color:rgba(255,255,255,.9)}
+.must ul li::before{content:"";position:absolute;left:0;top:13px;width:8px;height:2px;background:#ff6d6a}
+.must .why{margin-top:10px;font-size:13px;color:rgba(255,255,255,.66);border-top:1px solid rgba(255,255,255,.12);padding-top:8px}
+.confirm{display:flex;justify-content:flex-end;gap:8px;margin-top:14px;flex-wrap:wrap}
+.btn{font-size:13px;padding:5px 14px;border:1px solid rgba(255,255,255,.22);background:rgba(255,255,255,.06);color:#fff}
+.btn.pri{background:#422982;border-color:#422982;font-weight:600}
+.outside{display:grid;gap:14px;grid-template-columns:repeat(3,minmax(0,1fr));margin-top:26px}
+@media (max-width:900px){.outside{grid-template-columns:1fr}}
+.band{padding:14px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.1)}
+.band h4{font-size:12px;letter-spacing:.14em;text-transform:uppercase;margin-bottom:8px}
+.band.should h4{color:#d5baff}
+.band.could h4{color:#c39cff;opacity:.85}
+.band.wont h4{color:rgba(255,255,255,.6)}
+.band li{font-size:13.5px;padding:5px 0;border-top:1px solid rgba(255,255,255,.08);color:rgba(255,255,255,.84)}
+.band.could li{color:rgba(255,255,255,.72)}
+.band.wont li{color:rgba(255,255,255,.58);text-decoration:line-through;text-decoration-color:rgba(255,109,106,.7)}
+.band .rule{font-size:12.5px;color:rgba(255,255,255,.6);margin-bottom:6px}
+
+/* trim-style initiative timeline */
+.initiative{margin-top:48px}
+.initiative h3{font-size:clamp(22px,3.4vw,30px);margin:6px 0 6px}
+.trim{margin:26px 0 8px;position:relative}
+.track{display:grid;grid-template-columns:1fr 1fr 1fr .8fr;height:46px;border:1px solid var(--hair-2);background:var(--surface)}
+.seg2{position:relative;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;border-right:1px solid var(--hair);padding:0 6px;text-align:center;line-height:1.15}
+.seg2.e1{background:rgba(255,109,106,.16)}
+.seg2.e2{background:rgba(255,109,106,.26)}
+.seg2.e3{background:rgba(255,109,106,.36)}
+.seg2.fu{background:repeating-linear-gradient(135deg,transparent 0 6px,var(--hair) 6px 7px);color:var(--muted);border-right:0;font-weight:600}
+.seg2::before{content:"";position:absolute;left:-6px;top:-9px;width:10px;height:10px;background:var(--coral);transform:rotate(45deg)}
+.seg2.e1::before{display:none}
+.trim .inh,.trim .outh{position:absolute;top:-6px;bottom:-6px;width:10px;background:var(--accent)}
+.trim .inh{left:-5px}
+.trim .outh{left:calc(100% / 3.8 * 3 - 5px)}
+.ticks{display:grid;grid-template-columns:1fr 1fr 1fr .8fr;font-size:11px;font-family:ui-monospace,"SF Mono",Menlo,monospace;color:var(--faint);margin-top:8px}
+.ticks span:last-child{text-align:right}
+@media (max-width:560px){.seg2{font-size:11px}}
+
+.epics{display:grid;gap:14px;grid-template-columns:repeat(3,minmax(0,1fr));margin-top:20px}
+@media (max-width:900px){.epics{grid-template-columns:1fr}}
+.epic{background:var(--surface);border:1px solid var(--hair);padding:16px;position:relative}
+.epic .en{font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:12px;color:var(--coral-ink);font-weight:700}
+.epic h4{font-size:19px;margin:4px 0 8px}
+.epic p{font-size:14px;color:var(--muted);margin:0}
+.followup{margin-top:14px;padding:14px 16px;border:1.5px dashed var(--hair-2);font-size:14px;color:var(--muted)}
+.followup b{color:var(--ink)}
+
+/* insights */
+.insights{margin-top:56px;display:grid;gap:18px}
+.ins{background:var(--surface);border:1px solid var(--hair);padding:20px}
+.ins h4{font-size:20px;margin:6px 0 14px;letter-spacing:-.01em}
+.ins .src{font-size:13.5px;color:var(--muted);margin-top:14px}
+.platform{display:grid;gap:10px;grid-template-columns:repeat(3,minmax(0,1fr));grid-template-areas:"a b c" "d still e"}
+.platform .sat{padding:10px 12px;border:1px solid var(--hair-2);background:var(--bg);font-size:14px;font-weight:600;display:flex;align-items:center;gap:8px}
+.platform .sat::before{content:"";width:8px;height:8px;background:var(--mark);flex:none}
+.platform .still{grid-area:still;background:#0d0a17;color:#fff;padding:16px;text-align:center;position:relative;--ants-a:#d5baff;--ants-b:#0d0a17;--handle-ring:#c39cff}
+.platform .still b{display:block;font-size:15px}
+.platform .still span{font-size:12px;color:rgba(255,255,255,.7)}
+.pa{grid-area:a}.pb{grid-area:b}.pc{grid-area:c}.pd{grid-area:d}.pe{grid-area:e}
+@media (max-width:640px){.platform{grid-template-columns:1fr;grid-template-areas:"still" "a" "b" "c" "d" "e"}}
+
+.ocr{display:grid;grid-template-columns:auto auto minmax(0,1fr);gap:12px;align-items:center}
+.ocr .node{padding:12px 14px;border:1px solid var(--hair-2);background:var(--bg);font-weight:600;font-size:14px;text-align:center}
+.ocr .node.once{background:var(--deep);color:#fff;border-color:var(--deep)}
+.ocr .node.once small{display:block;font-weight:400;font-size:11px;color:#d5baff;letter-spacing:.08em;text-transform:uppercase}
+.ocr .fan{display:grid;gap:8px;border-left:2px solid var(--coral);padding-left:12px}
+.ocr .fan .node{text-align:left}
+.ocr .ar{color:var(--coral-ink);font-size:20px}
+@media (max-width:640px){.ocr{grid-template-columns:1fr}.ocr .ar{transform:rotate(90deg);justify-self:center}}
+
+.churn{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.file{font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:13px;padding:8px 10px;background:var(--bg);border:1px solid var(--hair-2);position:relative}
+.file .heat{display:block;height:4px;margin-top:6px;background:linear-gradient(90deg,var(--coral),rgba(255,109,106,.25))}
+.route{display:grid;grid-template-columns:auto minmax(0,1fr);gap:14px;align-items:center}
+.route .hub2{padding:14px;background:var(--deep);color:#fff;font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:14px}
+.route ul li{padding:6px 10px;margin:4px 0;border-left:2px solid var(--mark);background:var(--bg);font-size:14px}
+.route ul li.new{border-left-color:var(--coral);border-left-style:dashed}
+.route ul li.new::after{content:"extends";float:right;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--coral-ink);font-weight:700;margin-left:8px}
+@media (max-width:560px){.route{grid-template-columns:1fr}}
+
+.twocol{display:grid;gap:18px;grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+@media (max-width:860px){.twocol{grid-template-columns:1fr}}
+
+footer{padding:40px 0 70px;color:var(--muted);font-size:13px}
+.toast{display:inline-flex;align-items:center;gap:10px;background:var(--deep);color:#fff;padding:10px 16px;box-shadow:var(--shadow)}
+.toast .logo{width:20px;height:20px;font-size:11px}
+footer code{font-size:12px;word-break:break-all}
+
+@media (prefers-reduced-motion: reduce){
+  *{animation:none!important;transition:none!important;scroll-behavior:auto!important}
+}
+</style>
+</head>
+<body>
+
+<header class="menubar" aria-label="Session status">
+  <span class="logo" aria-hidden="true">m.</span>
+  <span class="crumb">brainstorm-improve-current-features</span>
+  <span class="sp"></span>
+  <span class="recind"><span class="dot pulse" aria-hidden="true"></span><span id="now">Session complete</span></span>
+  <button class="themebtn" id="themebtn" type="button" aria-label="Switch colour theme">Auto</button>
+</header>
+
+<!-- ============ HERO: the frozen screen ============ -->
+<div class="hero">
+  <div class="desk" aria-hidden="true">
+    <div class="w w1"><i style="top:40px"></i><i style="top:58px;right:30%"></i><i style="top:76px"></i></div>
+    <div class="w w2"><i style="top:44px"></i><i style="top:62px;right:40%"></i></div>
+    <div class="w w3"><i style="top:46px;right:20%"></i><i style="top:64px"></i></div>
+    <div class="tip">a tooltip that only a frozen frame can keep</div>
+  </div>
+  <div class="wrap hero-inner">
+    <div class="capture sel ants knobs">
+      <span class="readout">brainstorm.png &nbsp;·&nbsp; frozen 2026-10-11 11:34</span>
+      <div class="eyebrow" style="color:#d5baff">m_capture · a brainstorm keepsake</div>
+      <h1>Improve m_capture's <em>existing</em> features</h1>
+      <p class="goal">Find the improvements to current features most worth a multi-session BMad initiative, grounded in fix churn, recurring regressions and flagged trade-offs, for mesoneer's internal users.</p>
+      <div class="chips">
+        <span class="chip">mode <b>autonomous</b></span>
+        <span class="chip rec"><span class="dot" aria-hidden="true"></span>status <b>complete</b></span>
+        <span class="chip">6 techniques <b>+ convergence</b></span>
+        <span class="chip"><b>105</b> ideas</span>
+      </div>
+    </div>
+
+    <nav class="guide" aria-label="Techniques">
+      <div class="seg">
+        <a href="#t1"><b>01</b>Failure Analysis + Five Whys</a>
+        <a href="#t2"><b>02</b>Job to Be Done</a>
+        <a href="#t3"><b>03</b>SCAMPER</a>
+        <a href="#t4"><b>04</b>Persona Journey</a>
+        <a href="#t5"><b>05</b>Dial to 11 + Crown Jewel</a>
+        <a href="#t6"><b>06</b>Worst Possible Idea</a>
+        <a href="#t7"><b>07</b>Convergence</a>
+      </div>
+      <div class="hints">
+        <span>Pick a technique, or scroll to develop the frame</span>
+        <span><span class="keycap">↵</span> jumps to the decision</span>
+      </div>
+    </nav>
+
+    <div class="tally" aria-label="Ideas per technique">
+      <div><b>18</b><span>Five Whys</span><div class="bar" style="width:72%"></div></div>
+      <div><b>22</b><span>JTBD</span><div class="bar" style="width:88%"></div></div>
+      <div><b>23</b><span>SCAMPER</span><div class="bar" style="width:92%"></div></div>
+      <div><b>19</b><span>Personas</span><div class="bar" style="width:76%"></div></div>
+      <div><b>18</b><span>Dial 11</span><div class="bar" style="width:72%"></div></div>
+      <div><b>5</b><span>Worst</span><div class="bar" style="width:20%"></div></div>
+    </div>
+  </div>
+</div>
+
+<main>
+<!-- ============ 01 FAILURE ANALYSIS + FIVE WHYS ============ -->
+<section class="tech wrap" id="t1" data-name="01 Failure Analysis">
+  <div class="thead">
+    <div class="num">01 / technique · 18 ideas</div>
+    <h2>Failure Analysis + Five Whys</h2>
+    <p class="frame">Run on the fix log. The scar tissue said it plainly: <q>multi-monitor fixed 4x, focus/cursor glitches recur, label clipping recurs, updater edge cases recur; no automated tests.</q></p>
+  </div>
+
+  <div class="fixlog" role="table" aria-label="Regressions in the fix log">
+    <div class="fixrow" role="row"><span class="what">Multi-monitor geometry</span><span class="prs"><span class="pr">#22</span><span class="pr">#38</span><span class="pr">#53</span><span class="pr">#54</span></span><span class="stamp big">fixed 4×</span></div>
+    <div class="fixrow" role="row"><span class="what">Focus / cursor glitches</span><span class="prs"></span><span class="stamp">recur</span></div>
+    <div class="fixrow" role="row"><span class="what">Label clipping</span><span class="prs"><span class="pr">#49</span><span class="pr">#60</span></span><span class="stamp">recurs</span></div>
+    <div class="fixrow" role="row"><span class="what">Updater edge cases (proxy / busy / relaunch)</span><span class="prs"><span class="pr">#35</span><span class="pr">#44</span></span><span class="stamp">recur</span></div>
+    <div class="fixrow" role="row"><span class="what">Shortcut recorder armed state</span><span class="prs"><span class="pr">#39</span><span class="pr">#41</span></span><span class="stamp">recurrences</span></div>
+    <div class="fixrow" role="row"><span class="what">macOS 15 SDK break delayed 1.8.5</span><span class="prs"><span class="pr">#67</span></span><span class="stamp">tags-only CI</span></div>
+    <div class="fixrow none" role="row"><span class="what">Automated tests</span><span class="prs"></span><span class="stamp">none</span></div>
+  </div>
+
+  <div class="drills">
+    <div class="drill">
+      <div class="eyebrow">Drill · focus bugs</div>
+      <div class="lvl l1"><small>symptom</small>Focus bugs keep coming back
+        <div class="lvl"><small>root</small>Activating the app to get the keyboard
+          <div class="lvl sel knobs"><small>idea</small><span class="fix">Explore a non-activating key panel so popovers and focus stop being disturbed</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="drill">
+      <div class="eyebrow">Drill · cursor bugs</div>
+      <div class="lvl l1"><small>symptom</small>Cursor bugs keep coming back
+        <div class="lvl"><small>root</small>Per-view cursor rects fighting each other
+          <div class="lvl sel knobs"><small>idea</small><span class="fix">Centralize cursor ownership in one CursorCoordinator</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="drill">
+      <div class="eyebrow">Drill · shortcut recorder</div>
+      <div class="lvl l1"><small>symptom</small>Shortcut recorder recurrences, #39 and #41
+        <div class="lvl sel knobs"><small>idea</small><span class="fix">Single explicit state machine for the shortcut recorder armed/disarmed state</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="console" aria-label="Guardrail and diagnostic ideas, shown as a test runner">
+    <div class="bar"><span class="sq"></span><span class="sq"></span><span class="sq"></span><span>tests/run · swiftc, no Xcode, no dependency</span></div>
+    <pre><span class="c"># guardrails: pending, the suite this session wished existed</span>
+<span class="ln"><span class="t">○</span><span class="d">selftest</span><span>Multi-monitor geometry self-test: a <span class="k">--geometry-selftest</span> flag that feeds simulated layouts (mixed scale, negative origins, stacked displays) through finish's overlay → sourceRect → pixel math and asserts round-trips</span></span><span class="ln"><span class="t">○</span><span class="d">refactor</span><span>Extract capture coordinate math into a pure UI-free type so it can be tested without a display</span></span><span class="ln"><span class="t">○</span><span class="d">runner</span><span>Minimal swiftc-compiled test runner in <span class="k">tests/</span> (assert-based, built like tools/shots.swift): no Xcode project, no dependency</span></span><span class="ln"><span class="t">○</span><span class="d">layout</span><span>Commit the editor gap-model simulation (1764 shapes × 9 screens, today run ad hoc) as a rerunnable check: no overlap, nothing off-screen, nothing over the capture</span></span><span class="ln"><span class="t">○</span><span class="d">ci</span><span>Build on every PR in CI, not only on tags: would have caught the macOS 15 SDK break that delayed 1.8.5 (#67)</span></span><span class="ln"><span class="t">○</span><span class="d">l10n</span><span>Pseudo-localization layout check: render every panel in EN/DE/VI via the shots tool and flag clipped labels (clipping fixed in #49, #60)</span></span><span class="ln"><span class="t">○</span><span class="d">updater</span><span><span class="k">--update-simulate</span> mode reading a local fake releases feed to exercise proxy/busy/relaunch paths (#35, #44)</span></span><span class="ln"><span class="t">○</span><span class="d">release</span><span>Post-release check that the Homebrew cask version matches the release</span></span><span class="ln"><span class="t">○</span><span class="d">manual</span><span>Display hot-plug torture checklist: connect/disconnect during overlay, editor and recording</span></span><span class="ln"><span class="t">○</span><span class="d">manual</span><span>Turn the CONTRIBUTING smoke checklist into a guided in-app self-test mode that walks a tester through each capture mode on each display</span></span>
+<span class="c"># diagnostics: so the next bug arrives with evidence</span>
+<span class="ln"><span class="t">○</span><span class="o">debug</span><span>Window-level ladder audit: a debug command dumping kCGWindowLayer of every app window to catch the runModal-drops-the-level class of bug</span></span><span class="ln"><span class="t">○</span><span class="o">debug</span><span>Dev-only cursor HUD showing claimed vs drawn cursor to diagnose cursor-rect bugs</span></span><span class="ln"><span class="t">○</span><span class="o">report</span><span>Report a Bug pre-fills recent diagnostics (display layout, scale factors, last actions), not just the version</span></span><span class="ln"><span class="t">○</span><span class="o">logging</span><span>Replace <span class="k">print("[VRS] ...")</span> debug prints with os.Logger categories so bug reports can include <span class="k">log show</span> excerpts</span></span><span class="ln"><span class="t">○</span><span class="o">report</span><span>Local counter of freeze-failed → live-fallback events surfaced in Report a Bug</span></span>
+<span class="c"># 15 pending · 3 root-cause drills above · 0 tests today</span></pre>
+  </div>
+</section>
+
+<!-- ============ 02 JOB TO BE DONE ============ -->
+<section class="tech wrap" id="t2" data-name="02 Job to Be Done">
+  <div class="thead">
+    <div class="num">02 / technique · 22 ideas</div>
+    <h2>Job to Be Done</h2>
+    <p class="frame">Nobody wants a screenshot; they want the thing the screenshot does. Six jobs were named, each pinned here with a counter mark the way you would number steps on a capture.</p>
+  </div>
+  <div class="board">
+    <div class="jobs">
+      <div class="job">
+        <h3><span class="counter">1</span>Report a bug with evidence</h3>
+        <ul>
+          <li>Bug-report bundle: capture plus an auto-attached context block (app, window title, display, macOS) copied alongside</li>
+          <li>Copy as Markdown (image + caption) for GitHub/Jira paste</li>
+          <li>Auto-redact: detect emails, tokens, IBANs, phone numbers via Vision text + patterns, one click to blur. Matters for a fintech/regtech company</li>
+          <li>Copy as file vs copy as image choice for apps that drop pasted images</li>
+          <li>GIF size target ("under 10 MB for Jira") on Stop-as-GIF</li>
+        </ul>
+      </div>
+      <div class="job">
+        <h3><span class="counter">2</span>Explain how to do X</h3>
+        <ul>
+          <li>Numbered-steps text generated from counter marks ("1. Click X"), editable, copied with the image</li>
+          <li>Multi-capture storyboard: take 3-5 shots in a row and combine into one strip for how-to explanations</li>
+          <li>Keystroke overlay in recordings so how-to videos show the shortcuts pressed</li>
+          <li>Recording auto-dims everything but the active window</li>
+          <li>Post-record annotation: add arrows/text to segments in the Trim panel</li>
+          <li>Recording markers: a key drops a chapter marker; Trim snaps to markers</li>
+          <li>Scrolling capture of long pages/lists</li>
+          <li>Visible self-timer countdown for delayed captures</li>
+        </ul>
+      </div>
+      <div class="job">
+        <h3><span class="counter">3</span>Get design feedback</h3>
+        <ul>
+          <li>Eyedropper in the editor with hex copy (ruler exists; add colour)</li>
+          <li>Editable sidecar: saved PNG reopens with its marks still editable</li>
+        </ul>
+        <h3 style="margin-top:22px"><span class="counter">4</span>Show progress</h3>
+        <ul>
+          <li>Onion-skin compare: overlay two captures with an opacity slider for before/after</li>
+          <li>Recording presets by purpose: Jira bug (720p/15fps small) vs Demo (1080p60)</li>
+        </ul>
+      </div>
+      <div class="job">
+        <h3><span class="counter">5</span>Keep a reference visible</h3>
+        <ul>
+          <li>Pin click-through mode: translucent pin you can trace/align UI against</li>
+          <li>Pin opacity slider and lock</li>
+        </ul>
+      </div>
+      <div class="job">
+        <h3><span class="counter">6</span>Grab text</h3>
+        <ul>
+          <li>Copy-text capture mode straight from the selection overlay, no editor (OCR exists)</li>
+          <li>History search by the text inside captures (OCR index)</li>
+          <li>History search by app/window title recorded at capture time (xattr metadata)</li>
+        </ul>
+      </div>
+    </div>
+    <p class="note">The six jobs come from the session; which job each idea is pinned to is this keepsake's own filing.</p>
+  </div>
+</section>
+
+<!-- ============ 03 SCAMPER ============ -->
+<section class="tech wrap" id="t3" data-name="03 SCAMPER">
+  <div class="thead">
+    <div class="num">03 / technique · 23 ideas</div>
+    <h2>SCAMPER</h2>
+    <p class="frame">Aimed at the editor and the capture flow. Each lens is laid out the way the editor lays out its tool cards around a capture: grip, eyebrow, tile.</p>
+  </div>
+  <div class="scamper">
+    <div class="card s-s"><div class="ch"><span class="grip"></span><span class="lab">Substitute</span><span class="tile">S</span></div><ul>
+      <li>Quick-annotate strip directly on the frozen overlay, no separate editor step for simple marks</li>
+      <li>Optional single compact toolbar instead of five floating cards, for small screens</li></ul></div>
+    <div class="card s-c"><div class="ch"><span class="grip"></span><span class="lab">Combine</span><span class="tile">C</span></div><ul>
+      <li>One hotkey for still and video: pick S or R after selecting the region</li>
+      <li>Pin from History remembering the last pin position</li>
+      <li>OCR + Apple Translation (macOS 15) to translate text in a capture. The team works in EN/DE/VI</li></ul></div>
+    <div class="card s-a"><div class="ch"><span class="grip"></span><span class="lab">Adapt</span><span class="tile">A</span></div><ul>
+      <li>CleanShot-style quick-access thumbnail after capture (drag, copy, annotate, pin) instead of always opening the editor</li>
+      <li>Figma-style hold-option to show distances between marks</li>
+      <li>Arrows that snap to detected UI rectangles (Vision)</li></ul></div>
+    <div class="card s-m1"><div class="ch"><span class="grip"></span><span class="lab">Magnify</span><span class="tile">M</span></div><ul>
+      <li>Hand zoom on option-drag/pinch in the editor (CLAUDE.md says it belongs on a modifier)</li>
+      <li>Draw the source-display boundary while dragging resize knobs out (flagged trade in CLAUDE.md)</li></ul></div>
+    <div class="core"><div class="shot sel ants knobs"><div><b>the editor + capture flow</b><span>8 lenses · 23 ideas</span></div></div></div>
+    <div class="card s-m2"><div class="ch"><span class="grip"></span><span class="lab">Modify</span><span class="tile">M</span></div><ul>
+      <li>Redaction choice: pixelate, blur, or solid bar (solid is the only safe one for secrets)</li>
+      <li>Annotation style presets (colour + width + font)</li>
+      <li>Text tool highlight backgrounds and auto-contrast text</li></ul></div>
+    <div class="card s-p"><div class="ch"><span class="grip"></span><span class="lab">Put to other use</span><span class="tile">P</span></div><ul>
+      <li>Screen ruler/measure on the frozen still without capturing</li>
+      <li>Screen colour picker mode on the frozen still</li>
+      <li>Drawing overlay outside recording as a presenter mode for calls</li></ul></div>
+    <div class="card s-e"><div class="ch"><span class="grip"></span><span class="lab">Eliminate</span><span class="tile">E</span></div><ul>
+      <li>Save-folder auto-cleanup policy (trash after N days, pinned/starred kept)</li>
+      <li>Strip debug prints from release builds</li>
+      <li>Hold shift on release to skip the editor for this one capture</li></ul></div>
+    <div class="card s-r"><div class="ch"><span class="grip"></span><span class="lab">Reverse</span><span class="tile">R</span></div><ul>
+      <li>Annotate the live screen first, then snapshot it</li>
+      <li>Recent captures in a menu-bar submenu with drag-out</li>
+      <li>Rolling replay buffer: a hotkey saves the last 30 seconds, catching a bug that just happened</li>
+      <li>Re-edit last capture hotkey: editor state survives close</li></ul></div>
+  </div>
+</section>
+
+<!-- ============ 04 PERSONA JOURNEY ============ -->
+<section class="tech wrap" id="t4" data-name="04 Persona Journey">
+  <div class="thead">
+    <div class="num">04 / technique · 19 ideas</div>
+    <h2>Persona Journey</h2>
+    <p class="frame">Window mode, but the windows are people. Hover one and it lights up lavender, ready to be picked. A QA engineer filing 20 bugs a day, a PM writing German release notes, a backend dev, a designer, a new hire, a manager on a Teams call, VI/DE colleagues, and accessibility.</p>
+  </div>
+  <div class="desktop">
+    <div class="win" tabindex="0"><div class="tb"><i></i><i></i><i></i><span class="tt">QA engineer</span></div><div class="ctx">filing 20 bugs/day</div><ul>
+      <li>Batch mode: capture many, annotate all, export to one folder named after the ticket</li>
+      <li>Optional ticket-key prompt that prefixes the filename (DCP-42_...)</li>
+      <li>Upload a capture straight to a Jira issue</li>
+      <li>Repro recording with click ripples, keystrokes and a timestamp watermark</li></ul></div>
+    <div class="win" tabindex="0"><div class="tb"><i></i><i></i><i></i><span class="tt">PM</span></div><div class="ctx">writing German release notes</div><ul>
+      <li>Brand background preset (mesoneer gradient) and a macOS window frame for release-note shots</li>
+      <li>Export at a fixed width (e.g. 1200 px) for docs</li>
+      <li>Batch-apply a background to several captures from History</li></ul></div>
+    <div class="win" tabindex="0"><div class="tb"><i></i><i></i><i></i><span class="tt">Backend dev</span></div><ul>
+      <li>Terminal capture → OCR → copy as a code block with spacing preserved</li>
+      <li>Window capture with/without shadow toggle</li></ul></div>
+    <div class="win" tabindex="0"><div class="tb"><i></i><i></i><i></i><span class="tt">Designer</span></div><ul>
+      <li>Eyedropper + WCAG contrast check on captured pixels</li>
+      <li>Grid/guides overlay in the editor</li>
+      <li>Exact-size region: type WxH or pick 1280x720 in the selection overlay</li></ul></div>
+    <div class="win" tabindex="0"><div class="tb"><i></i><i></i><i></i><span class="tt">New hire</span></div><ul>
+      <li>Interactive first-run practice capture (welcome exists)</li>
+      <li>Hold the modifier keys to show a hotkey cheat sheet</li></ul></div>
+    <div class="win" tabindex="0"><div class="tb"><i></i><i></i><i></i><span class="tt">Manager</span><span class="wintag">on a Teams call</span></div><ul>
+      <li>Presenter mode with cursor spotlight + on-screen drawing, no recording (spotlight was removed in #42; revisit as presenter feature)</li>
+      <li>Webcam bubble in recordings for async updates</li></ul></div>
+    <div class="win" tabindex="0"><div class="tb"><i></i><i></i><i></i><span class="tt">VI/DE colleague</span></div><ul>
+      <li>OCR recognition languages follow the app language (Vietnamese diacritics)</li></ul></div>
+    <div class="win" tabindex="0"><div class="tb"><i></i><i></i><i></i><span class="tt">Accessibility</span></div><ul>
+      <li>VoiceOver labels on editor tool tiles and overlay</li>
+      <li>Keyboard-only editing: tab between marks, arrows nudge</li></ul></div>
+  </div>
+</section>
+
+<!-- ============ 05 DIAL TO 11 + CROWN JEWEL ============ -->
+<section class="tech wrap" id="t5" data-name="05 Dial to 11">
+  <div class="thead">
+    <div class="num">05 / technique · 18 ideas</div>
+    <h2>Crank the Dial to 11 + Kill the Crown Jewel</h2>
+    <p class="frame">Two provocations in one round. Turn speed up until capture-to-shared takes under 1 s, then kill the crown jewels: imagine m_capture with no editor and no hotkeys.</p>
+  </div>
+  <div class="dialgrid">
+    <div class="panel">
+      <h3>The dial: speed</h3>
+      <p class="sub">Goal: capture-to-shared under 1 s</p>
+      <svg class="dial" viewBox="0 0 320 180" role="img" aria-label="A dial turned all the way to 11">
+        <path class="arc" d="M42,160 A118,118 0 0 1 273.2,126.8"/>
+        <path class="arc11" d="M273.2,126.8 A118,118 0 0 1 278,160"/>
+        <line class="tk" x1="42" y1="160" x2="56" y2="160"/>
+        <line class="tk" x1="46.8" y1="126.8" x2="60.2" y2="130.7"/>
+        <line class="tk" x1="60.7" y1="96.2" x2="72.5" y2="103.8"/>
+        <line class="tk" x1="82.7" y1="70.8" x2="91.9" y2="81.4"/>
+        <line class="tk" x1="111" y1="52.7" x2="116.8" y2="65.4"/>
+        <line class="tk" x1="143.2" y1="43.2" x2="145.2" y2="57.1"/>
+        <line class="tk" x1="176.8" y1="43.2" x2="174.8" y2="57.1"/>
+        <line class="tk" x1="209" y1="52.7" x2="203.2" y2="65.4"/>
+        <line class="tk" x1="237.3" y1="70.8" x2="228.1" y2="81.4"/>
+        <line class="tk" x1="259.3" y1="96.2" x2="247.5" y2="103.8"/>
+        <line class="tk" x1="273.2" y1="126.8" x2="259.8" y2="130.7"/>
+        <line class="tk" x1="278" y1="160" x2="264" y2="160" style="stroke:var(--coral)"/>
+        <text x="26" y="160">0</text><text x="31.4" y="122.2">1</text><text x="47.3" y="87.6">2</text><text x="72.2" y="58.7">3</text><text x="104.3" y="38.1">4</text><text x="140.9" y="27.4">5</text><text x="179.1" y="27.4">6</text><text x="215.7" y="38.1">7</text><text x="247.8" y="58.7">8</text><text x="272.7" y="87.6">9</text><text x="288.6" y="122.2">10</text><text class="eleven" x="298" y="160">11</text>
+        <line class="needle" x1="160" y1="160" x2="258" y2="160"/>
+        <circle class="hub" cx="160" cy="160" r="7"/>
+      </svg>
+      <ul class="laps">
+        <li><span class="lap">hotkey</span><span>Measure hotkey-to-overlay latency and hold a &lt;100 ms budget (warm-up exists, unmeasured)</span></li>
+        <li><span class="lap">editor</span><span>Pre-create the editor window off-screen to cut open latency</span></li>
+        <li><span class="lap">overlay</span><span>One-key actions from the overlay: C copy+close, S save, P pin. No editor</span></li>
+        <li><span class="lap">repeat</span><span>Repeat last window capture, not just last region</span></li>
+        <li><span class="lap">record</span><span>Instant-record modifier that skips the countdown</span></li>
+        <li><span class="lap">gif</span><span>GIF export progress + cancel, faster frame generation</span></li>
+        <li><span class="lap">history</span><span>On-disk thumbnail cache so History opens instantly with thousands of files</span></li>
+      </ul>
+    </div>
+    <div class="panel">
+      <h3>Kill the crown jewel</h3>
+      <div class="crown">
+        <svg viewBox="0 0 56 44" aria-hidden="true"><path d="M4 36 L8 10 L20 24 L28 6 L36 24 L48 10 L52 36 Z" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linejoin="miter"/><rect x="4" y="38" width="48" height="4" fill="currentColor"/><line x1="2" y1="42" x2="54" y2="2" stroke="#ff6d6a" stroke-width="4"/></svg>
+        <span>No <span class="struck">EDITOR</span> &nbsp;·&nbsp; no <span class="struck">HOTKEYS</span></span>
+      </div>
+      <div class="kgroup"><h4>With no editor</h4><ul>
+        <li>Auto-box the UI element under the cursor at capture time</li>
+        <li>Region edges snap to UI element boundaries (magnetic edges)</li>
+        <li>Auto zoom callout around the cursor</li></ul></div>
+      <div class="kgroup"><h4>With no hotkeys: bring images in</h4><ul>
+        <li>Drop an image on the menu-bar icon to annotate it</li>
+        <li>Open any existing image in the editor (Open..., Services "Annotate with m_capture")</li>
+        <li>Shortcuts.app / App Intents actions: capture region, annotate image</li>
+        <li>URL scheme <span class="mono">mcapture://capture?mode=window</span> for Raycast/Alfred/scripts</li>
+        <li>Annotate-clipboard hotkey</li>
+        <li>CLI: <span class="mono">m_capture --capture region --out path</span> for automation</li></ul></div>
+      <div class="kgroup"><h4>Shaken loose on the way</h4><ul>
+        <li>Privacy guard: warn or auto-blur when capturing password managers or banking apps</li>
+        <li>On-device Apple Foundation Models to draft step descriptions / alt text, no network <span class="badge spec">speculative · macOS 26</span></li></ul></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 06 WORST POSSIBLE IDEA ============ -->
+<section class="tech wrap" id="t6" data-name="06 Worst Possible Idea">
+  <div class="thead">
+    <div class="num">06 / technique · 5 ideas</div>
+    <h2>Worst Possible Idea</h2>
+    <p class="frame">Invent terrible ideas, then invert them into lessons. Shown as an onion-skin compare (itself an idea from round 02): drag to fade between the bad idea and its flip.</p>
+  </div>
+  <div class="onion" id="onion">
+    <label class="onionctl"><span>worst</span><input type="range" min="0" max="100" value="100" id="onionrange" aria-label="Onion-skin blend between worst idea and its flip"><span>flipped</span></label>
+    <div class="pairs">
+      <div class="pair"><div class="worst"><small>worst</small><span>Always open the full editor for every capture</span></div><div class="arrow" aria-hidden="true">↻</div><div class="flip"><small>flipped</small>Post-capture behaviour chosen per frontmost app (Jira/Teams → copy, Figma → editor)</div></div>
+      <div class="pair"><div class="worst"><small>worst</small><span>Dump every capture on the Desktop forever</span></div><div class="arrow" aria-hidden="true">↻</div><div class="flip"><small>flipped</small>Per-project save folders picked at capture time, remembered per app</div></div>
+      <div class="pair"><div class="worst"><small>worst</small><span>Every update is a surprise</span></div><div class="arrow" aria-hidden="true">↻</div><div class="flip"><small>flipped</small>A What's-new card after an update, limited to features this user actually uses</div></div>
+      <div class="pair"><div class="worst"><small>worst</small><span>Hide everything behind hotkeys nobody knows</span></div><div class="arrow" aria-hidden="true">↻</div><div class="flip"><small>flipped</small>Contextual tips: after the third manual drag of the same region, mention the last-region key</div></div>
+      <div class="pair"><div class="worst"><small>worst</small><span>Recordings silently fill the disk</span></div><div class="arrow" aria-hidden="true">↻</div><div class="flip"><small>flipped</small>Live free-space guard that warns before a long take runs out of room</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 07 CONVERGENCE ============ -->
+<div class="climax">
+<section class="tech wrap" id="t7" data-name="07 Convergence">
+  <div class="thead">
+    <div class="num">07 / convergence · affinity clustering, then MoSCoW</div>
+    <h2>The crop: 105 ideas → 10 clusters → 3 epics</h2>
+    <p class="frame">Everything above was the selection overlay. This is the moment the drag ends and the crop is committed.</p>
+  </div>
+
+  <div class="eyebrow">Decision · affinity clusters (10)</div>
+  <div class="clusters" style="margin-top:14px">
+    <div class="cl must"><span class="L">A</span><span class="became">→ MUST 1</span><b>Reliability guardrails</b>tests, CI on PRs, logging, diagnostics</div>
+    <div class="cl must"><span class="L">B</span><span class="became">→ MUST 2</span><b>Capture-to-share speed</b>overlay one-key actions, quick-access thumbnail, re-edit last, skip-editor modifier</div>
+    <div class="cl must"><span class="L">C</span><span class="became">→ MUST 3</span><b>Safe sharing / redaction</b></div>
+    <div class="cl"><span class="L">D</span><b>Editor power</b>hand zoom, boundary, presets, eyedropper, storyboard, snapping</div>
+    <div class="cl"><span class="L">E</span><b>Recording for explaining</b>markers, keystrokes, presets, replay buffer, webcam</div>
+    <div class="cl"><span class="L">F</span><b>History as a library</b>OCR search, metadata, cleanup, thumbnail cache</div>
+    <div class="cl"><span class="L">G</span><b>Bring images in / automation</b>open image, clipboard, Services, URL scheme, CLI</div>
+    <div class="cl"><span class="L">H</span><b>Presenter mode</b></div>
+    <div class="cl"><span class="L">I</span><b>Language</b>translate, OCR langs</div>
+    <div class="cl"><span class="L">J</span><b>Integrations</b>Jira, Markdown, ticket prefix</div>
+  </div>
+
+  <div class="scope">
+    <div class="eyebrow">Decision · MoSCoW</div>
+    <h3>Crop to what must ship</h3>
+    <div class="cropbox sel ants knobs">
+      <span class="readout">MUST · 3 of 10 clusters</span>
+      <div class="musts">
+        <div class="must">
+          <div class="mh"><span class="counter">1</span><h4>Reliability guardrails</h4></div>
+          <ul>
+            <li>swiftc test runner</li>
+            <li>Coordinate math extracted + multi-monitor geometry self-test</li>
+            <li>Gap-model layout check</li>
+            <li>CI build on every PR</li>
+            <li>os.Logger instead of print</li>
+          </ul>
+          <p class="why">Most recent fixes are regressions in overlay/editor/multi-monitor, and Musts 2-3 edit exactly those files.</p>
+        </div>
+        <div class="must">
+          <div class="mh"><span class="counter">2</span><h4>Capture-to-share speed</h4></div>
+          <ul>
+            <li>One-key C/S/P actions from the overlay</li>
+            <li>Quick-access thumbnail after capture</li>
+            <li>Re-edit last capture</li>
+            <li>Hold-shift to skip the editor once</li>
+          </ul>
+          <p class="why">The daily path; extends CaptureBehavior rather than adding architecture.</p>
+        </div>
+        <div class="must">
+          <div class="mh"><span class="counter">3</span><h4>Safer redaction</h4></div>
+          <ul>
+            <li>Solid redact bar alongside blur/pixelate</li>
+            <li>One-click auto-detect of emails/tokens/IBANs/phones via the existing TextRecognizer</li>
+          </ul>
+          <p class="why">Captures land in Jira/Teams at a fintech.</p>
+        </div>
+      </div>
+      <div class="confirm" aria-hidden="true"><span class="btn">Cancel</span><span class="btn pri">Crop ↵</span></div>
+    </div>
+
+    <div class="outside">
+      <div class="band should"><h4>Should</h4><ul>
+        <li>Editor polish from CLAUDE.md's flagged trades: display boundary while dragging knobs, option-drag hand zoom, style presets</li>
+        <li>Open any image/clipboard in the editor</li>
+        <li>Recording markers + keystroke overlay + purpose presets/GIF size target</li></ul></div>
+      <div class="band could"><h4>Could</h4><ul>
+        <li>History OCR search + thumbnail cache</li>
+        <li>Presenter mode</li>
+        <li>Eyedropper/contrast</li>
+        <li>Translate</li>
+        <li>Pin opacity/click-through</li>
+        <li>Pseudo-localization layout check</li>
+        <li>Per-app post-capture behaviour</li></ul></div>
+      <div class="band wont"><h4>Won't this time</h4>
+        <p class="rule">Scope rule: the initiative improves existing features; net-new capabilities wait.</p><ul>
+        <li>Jira upload</li>
+        <li>Webcam</li>
+        <li>Scrolling capture</li>
+        <li>Cloud share</li>
+        <li>On-device AI</li>
+        <li>CLI/URL scheme</li></ul></div>
+    </div>
+  </div>
+
+  <div class="initiative">
+    <div class="eyebrow">Insight · recommended initiative</div>
+    <h3>Three epics, in this order</h3>
+    <p class="frame" style="color:var(--muted);font-size:15px">Laid out on a Trim slider: three chapters inside the in/out handles, with the Shoulds waiting past the out point as a follow-up epic.</p>
+    <div class="trim" aria-hidden="true">
+      <span class="inh"></span>
+      <div class="track">
+        <div class="seg2 e1">Guardrails</div>
+        <div class="seg2 e2">Capture-to-share</div>
+        <div class="seg2 e3">Safer redaction</div>
+        <div class="seg2 fu">Shoulds · follow-up</div>
+      </div>
+      <span class="outh"></span>
+      <div class="ticks"><span>epic 1</span><span>epic 2</span><span>epic 3</span><span>next</span></div>
+    </div>
+    <div class="epics">
+      <div class="epic"><div class="en">EPIC 1 · first</div><h4>Guardrails</h4><p>Reliability first is not overhead: Musts 2 and 3 modify SelectionOverlay / EditorWindow / CanvasView, the highest-churn files.</p></div>
+      <div class="epic"><div class="en">EPIC 2</div><h4>Capture-to-share</h4><p>CaptureBehavior already routes editor/save/clipboard, so one-key actions and per-app behaviour extend it.</p></div>
+      <div class="epic"><div class="en">EPIC 3</div><h4>Safer redaction</h4><p>A solid redact bar alongside blur/pixelate, and one-click auto-detect through the existing TextRecognizer, because captures land in Jira/Teams at a fintech.</p></div>
+    </div>
+    <div class="followup"><b>Then:</b> the Shoulds become a follow-up epic.</div>
+  </div>
+
+  <div class="insights">
+    <div class="ins">
+      <div class="eyebrow">Insight</div>
+      <h4>The frozen still is the platform</h4>
+      <div class="platform">
+        <div class="sat pa">One-key actions</div>
+        <div class="sat pb">Quick-annotate</div>
+        <div class="sat pc">Screen ruler</div>
+        <div class="sat pd">Colour picker</div>
+        <div class="still sel ants knobs"><b>the freeze begin() already takes</b><span>no new capture path</span></div>
+        <div class="sat pe">Auto-redact</div>
+      </div>
+      <p class="src">All five run on the freeze <span class="mono">begin()</span> already takes.</p>
+    </div>
+
+    <div class="twocol">
+      <div class="ins">
+        <div class="eyebrow">Insight</div>
+        <h4>One OCR pass, three clusters</h4>
+        <div class="ocr">
+          <div class="node">capture</div>
+          <div class="ar" aria-hidden="true">→</div>
+          <div class="ocr">
+            <div class="node once"><small>build once, store, reuse</small>one OCR pass</div>
+            <div class="ar" aria-hidden="true">→</div>
+            <div class="fan"><div class="node">Redaction</div><div class="node">Copy-text mode</div><div class="node">History search</div></div>
+          </div>
+        </div>
+      </div>
+      <div class="ins">
+        <div class="eyebrow">Insight</div>
+        <h4>Reliability first is not overhead</h4>
+        <div class="churn">
+          <span class="file">SelectionOverlay<span class="heat"></span></span>
+          <span class="file">EditorWindow<span class="heat"></span></span>
+          <span class="file">CanvasView<span class="heat"></span></span>
+        </div>
+        <p class="src">Musts 2 and 3 modify exactly these, the highest-churn files. Guardrails go in before the edits do.</p>
+      </div>
+    </div>
+
+    <div class="ins">
+      <div class="eyebrow">Insight</div>
+      <h4>Extend the router, don't add architecture</h4>
+      <div class="route">
+        <div class="hub2">CaptureBehavior</div>
+        <ul>
+          <li>editor</li>
+          <li>save</li>
+          <li>clipboard</li>
+          <li class="new">one-key actions</li>
+          <li class="new">per-app behaviour</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+</div>
+</main>
+
+<footer class="wrap">
+  <div class="toast"><span class="logo" aria-hidden="true">m.</span>Saved · 105 ideas, 10 clusters, 3 epics</div>
+  <p style="margin-top:16px">Kept from the session memlog, <code>_bmad-output/initiative-improve-current-features/brainstorm-improve-current-features/.memlog.md</code>, last updated 2026-10-11 11:34. Every idea, decision and number on this page comes from that log.</p>
+</footer>
+
+<script>
+(function(){
+  var root=document.documentElement, btn=document.getElementById('themebtn');
+  var modes=['auto','light','dark'], cur='auto';
+  try{cur=localStorage.getItem('mc-brainstorm-theme')||'auto'}catch(e){}
+  function apply(m){
+    cur=m;
+    if(m==='auto') root.removeAttribute('data-theme'); else root.setAttribute('data-theme',m);
+    btn.textContent=m.charAt(0).toUpperCase()+m.slice(1);
+  }
+  apply(modes.indexOf(cur)>-1?cur:'auto');
+  btn.addEventListener('click',function(){
+    var n=modes[(modes.indexOf(cur)+1)%modes.length]; apply(n);
+    try{localStorage.setItem('mc-brainstorm-theme',n)}catch(e){}
+  });
+
+  var r=document.getElementById('onionrange'), o=document.getElementById('onion');
+  if(r&&o){var set=function(){o.style.setProperty('--mix',r.value/100)}; r.addEventListener('input',set); set();}
+
+  var now=document.getElementById('now');
+  if('IntersectionObserver' in window && now){
+    var io=new IntersectionObserver(function(es){
+      es.forEach(function(e){ if(e.isIntersecting) now.textContent=e.target.getAttribute('data-name'); });
+    },{rootMargin:'-40% 0px -55% 0px'});
+    document.querySelectorAll('section[data-name]').forEach(function(s){io.observe(s)});
+  }
+
+  document.addEventListener('keydown',function(e){
+    if(e.key==='Enter' && !/^(INPUT|BUTTON|A|TEXTAREA|SELECT)$/.test(document.activeElement.tagName)){
+      var t=document.getElementById('t7'); if(t){t.scrollIntoView(); e.preventDefault();}
+    }
+  });
+})();
+</script>
+</body>
+</html>
