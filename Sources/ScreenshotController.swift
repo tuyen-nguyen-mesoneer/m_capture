@@ -633,9 +633,7 @@ final class ScreenshotController {
         guard global.width >= 3, global.height >= 3 else { return }
         guard let displayID = screen.displayID else { return }
 
-        let sourceRect = CGRect(x: viewRect.minX,
-                                y: screen.frame.height - viewRect.maxY,
-                                width: viewRect.width, height: viewRect.height)
+        let sourceRect = CaptureGeometry.sourceRect(viewRect: viewRect, displayHeight: screen.frame.height)
 
         // The common path: the pixels are already in hand, so crop and hand off with no
         // grab, no delay and no chance of the overlay's fade-out being caught in the shot.

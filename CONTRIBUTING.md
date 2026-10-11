@@ -14,8 +14,9 @@
 open build/m_capture.app   # menu-bar app — look for the "m." icon
 ```
 
-`build.sh` compiles `Sources/*.swift` with `swiftc`, assembles the bundle, draws the icon, signs, and packages the
-DMG. No Xcode/SPM project.
+`build.sh` compiles `Sources/*.swift` and `Sources/Core/*.swift` with `swiftc`, assembles the bundle, draws the
+icon, signs, and packages the DMG. No Xcode/SPM project. `./build.sh --ci` is the PR check's build: ad-hoc signed,
+no DMG, no relaunch, and no signing identity needed.
 
 - **Faster development loop**
   - `./build.sh --run` — rebuild, quit, and relaunch in place (skips the DMG).
@@ -135,8 +136,34 @@ watchers).
 
 ## Testing
 
-No automated suite — smoke-test by hand after a build. Cover what your change
-touches, plus a baseline pass:
+### Automated checks
+
+```sh
+./tests/run.sh
+```
+
+Command Line Tools only — no Xcode, no XCTest. It compiles the UI-free code in `Sources/Core/`
+together with `tests/*.swift`, runs every check, prints a pass count and exits non-zero on a
+compile error or any failing check. Today it covers the capture Y-flip (`CaptureGeometry`,
+overlay rect → ScreenCaptureKit source rect).
+
+- **Adding a suite is adding a file.** Create `tests/<Name>Checks.swift` with a class that
+  subclasses `CheckSuite` directly, and mark each check `@objc func check…()`; record failures
+  with `expect(condition, "message")`. The harness finds suites through the ObjC runtime, so
+  there is no list to edit. A suite with no `@objc` checks fails rather than passing silently.
+- **Code under test lives in `Sources/Core/`.** It is compiled by both `build.sh` and the runner,
+  so it must not import AppKit (the runner rejects it) or reach for app types such as
+  `Settings.shared` (it won't compile there). Move only the pure math in; the caller stays put.
+- **Every PR runs it.** The *Checks* workflow (`.github/workflows/checks.yml`) runs
+  `./build.sh --ci` then `./tests/run.sh` on every pull request (and after each push to `trunk`),
+  with no secrets.
+- In the Claude Code sandbox, swiftc can't write its default module cache; prefix the command
+  with `CLANG_MODULE_CACHE_PATH="$TMPDIR/swift-mc"`. A normal shell and CI don't need it.
+
+### Manual smoke test
+
+The checks cover geometry, not the UI — smoke-test by hand after a build. Cover what your
+change touches, plus a baseline pass:
 
 - **Hotkeys** `⌃⇧S` / `⌃⇧R` / `⌃⇧Q` (and any you rebound) fire.
 - **Capture** — a region drag shows the overlay + size label; **Space** cycles Region → Window → Screen (window mode hover-highlights the window under the pointer and captures it when the mouse is released over it), for both `⌃⇧S` and `⌃⇧R`. The overlay dims a frozen still of each display, so a tooltip or open menu that was on screen when the hotkey fired is still in the capture — check one.
@@ -150,7 +177,7 @@ touches, plus a baseline pass:
 If the UI changed, regenerate the README screenshots:
 
 ```sh
-swiftc -O -o build/shots tools/shots.swift $(ls Sources/*.swift | grep -v main.swift) \
+swiftc -O -o build/shots tools/shots.swift $(ls Sources/*.swift | grep -v main.swift) Sources/Core/*.swift \
   -framework AppKit -framework Carbon && ./build/shots docs/assets
 ```
 
@@ -197,7 +224,7 @@ Claude Code session opened here. The only extra prerequisite is
 ## Pull requests
 
 1. Branch off `trunk`.
-2. Run `./build.sh` — confirm it builds and launches.
+2. Run `./build.sh` — confirm it builds and launches — and `./tests/run.sh` — confirm the checks pass.
 3. Smoke-test the areas you touched.
 4. Update docs (`README.md` / `CLAUDE.md`) and screenshots when behavior, tools, or shortcuts change.
 5. Open a focused PR with imperative commits and a clear what / why / how-tested.
