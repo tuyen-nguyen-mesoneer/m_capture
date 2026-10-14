@@ -245,6 +245,7 @@ final class VideoRecordController {
         // actually starts, see `appToRestore`.
         let frontmostID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
         appToRestore = frontmostID == Bundle.main.bundleIdentifier ? nil : frontmostID
+        DockPolicy.holdForCapture()
         NSApp.activate(ignoringOtherApps: true)
         let coordinator = OverlayCoordinator()
         let last = Settings.shared.lastRegion
@@ -343,6 +344,7 @@ final class VideoRecordController {
         // `ScreenshotController.forcePointerReset` for why this both `.set()`s and briefly
         // puts up a window with a cursor rect.
         ScreenshotController.forcePointerReset()
+        DockPolicy.captureMayHaveEnded()
     }
 
     /// Resolve the screen a picked window mostly lives on, for placing the record bar.
@@ -421,6 +423,9 @@ final class VideoRecordController {
         // Selection is done — yield activation back to whatever the user was in before
         // the hotkey. Keeping m_capture "active" for the whole recording (bar minimized,
         // nothing else visible) forced an extra activation click on every app switch.
+        // The hold is re-taken first: a click elsewhere during the countdown can have given
+        // the Dock icon back, and the HUD must still reach a full-screen app's Space.
+        DockPolicy.holdForCapture()
         if let bundleID = appToRestore { NSApp.yieldActivation(toApplicationWithBundleIdentifier: bundleID) }
         appToRestore = nil
 
@@ -592,6 +597,7 @@ final class VideoRecordController {
         zoomTargetIsRegion = false
         dismissDim()
         clearRecordingUI()
+        DockPolicy.captureMayHaveEnded()
     }
 
     /// Clear the simulated-recording state. Separate from `teardownRecordingUI` because

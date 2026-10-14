@@ -665,6 +665,18 @@
     <div class="releases collapsed" id="releaseList">
 
       <div class="release">
+        <span class="date" data-i18n="rel.46.date">Oct 14, 2026</span>
+        <span class="ver">v1.8.6</span>
+        <div>
+          <p class="note" data-i18n="rel.46.note">Captures reach a full-screen app on a second display, and the Dock icon is now off by default, with a Settings option to bring it back.</p>
+          <a class="changelog" href="https://github.com/tuyen-nguyen-mesoneer/m_capture/releases/tag/1.8.6">
+            <span data-i18n="rel.changelog">See full changelog</span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+          </a>
+        </div>
+      </div>
+
+      <div class="release">
         <span class="date" data-i18n="rel.45.date">Oct 8, 2026</span>
         <span class="ver">v1.8.5</span>
         <div>
@@ -1231,7 +1243,7 @@
       </details>
       <details>
         <summary><span data-i18n="faq.2.q">Which macOS versions are supported?</span><span class="pm" aria-hidden="true"></span></summary>
-        <p data-i18n="faq.2.a">macOS 14 (Sonoma) and later. It lives in the menu bar, with a Dock icon for quick access.</p>
+        <p data-i18n="faq.2.a">macOS 14 (Sonoma) and later. It lives in the menu bar, with an optional Dock icon for quick access.</p>
       </details>
       <details>
         <summary><span data-i18n="faq.3.q">Why does macOS block it on first launch?</span><span class="pm" aria-hidden="true"></span></summary>
@@ -1417,6 +1429,8 @@
       "rel.27.note": "A second capture hotkey pressed mid-selection no longer strands a dim overlay on screen, and stacked overlays clear cleanly.",
       "rel.40.date": "Sep 1, 2026",
       "rel.40.note": "The whole app now follows the mesoneer brand guidelines, with Open Sans throughout and the official colours and brand icon.",
+      "rel.46.date": "Oct 14, 2026",
+      "rel.46.note": "Captures reach a full-screen app on a second display, and the Dock icon is now off by default, with a Settings option to bring it back.",
       "rel.45.date": "Oct 8, 2026",
       "rel.45.note": "Pop-ups in native apps like Outlook keep their border and shadow in a screenshot, and the captured pointer still lands where it was.",
       "rel.44.date": "Sep 15, 2026",
@@ -1467,7 +1481,7 @@
       "faq.1.q": "Is m_capture free?",
       "faq.1.a": "Yes — m_capture is open source and MIT-licensed, free for anyone to use.",
       "faq.2.q": "Which macOS versions are supported?",
-      "faq.2.a": "macOS 14 (Sonoma) and later. It lives in the menu bar, with a Dock icon for quick access.",
+      "faq.2.a": "macOS 14 (Sonoma) and later. It lives in the menu bar, with an optional Dock icon for quick access.",
       "faq.3.q": "Why does macOS block it on first launch?",
       "faq.3.a": "It isn't notarized by Apple yet. Installing with <strong>Homebrew</strong> handles this for you. By hand, move it into the <code>Applications</code> folder in your home folder (<code>~/Applications</code>, not <code>/Applications</code>) and clear the quarantine flag from <strong>Terminal</strong> — see <a href='#install'>Get started</a> above.",
       "faq.4.q": "Where are my captures saved?",
@@ -1605,6 +1619,8 @@
       "rel.27.note": "Ein zweiter Aufnahme-Kurzbefehl während der Auswahl hinterlässt kein dunkles Overlay mehr, und gestapelte Overlays werden sauber entfernt.",
       "rel.40.date": "1. September 2026",
       "rel.40.note": "Die gesamte App folgt nun den mesoneer Brand Guidelines, mit Open Sans durchgehend sowie den offiziellen Farben und dem Brand Icon.",
+      "rel.46.date": "14. Oktober 2026",
+      "rel.46.note": "Aufnahmen erreichen eine Vollbild-App auf dem zweiten Bildschirm, und das Dock-Symbol ist standardmäßig aus, in den Einstellungen wieder einschaltbar.",
       "rel.45.date": "8. Oktober 2026",
       "rel.45.note": "Pop-ups nativer Apps wie Outlook behalten im Screenshot Rahmen und Schatten, und der aufgenommene Mauszeiger bleibt an seiner Stelle.",
       "rel.44.date": "15. September 2026",
@@ -1655,7 +1671,7 @@
       "faq.1.q": "Ist m_capture kostenlos?",
       "faq.1.a": "Ja — m_capture ist quelloffen und MIT-lizenziert, kostenlos für alle.",
       "faq.2.q": "Welche macOS-Versionen werden unterstützt?",
-      "faq.2.a": "macOS 14 (Sonoma) und neuer. Lebt in der Menüleiste, mit einem Dock-Symbol für den schnellen Zugriff.",
+      "faq.2.a": "macOS 14 (Sonoma) und neuer. Lebt in der Menüleiste, mit einem optionalen Dock-Symbol für den schnellen Zugriff.",
       "faq.3.q": "Warum blockiert macOS die App beim ersten Start?",
       "faq.3.a": "Sie ist noch nicht von Apple notarisiert. Die Installation mit <strong>Homebrew</strong> übernimmt das für Sie. Manuell verschieben Sie sie in den Ordner <code>Applications</code> in Ihrem Benutzerordner (<code>~/Applications</code>, nicht <code>/Applications</code>) und entfernen das Quarantäne-Flag im <strong>Terminal</strong> — siehe <a href='#install'>Erste Schritte</a> oben.",
       "faq.4.q": "Wo werden meine Aufnahmen gespeichert?",

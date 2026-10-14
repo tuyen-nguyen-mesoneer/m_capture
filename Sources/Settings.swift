@@ -669,10 +669,14 @@ final class Settings {
     }
 
     /// Run as a menu-bar-only app, with no Dock icon (activation policy `.accessory`).
-    /// The Dock icon is the fallback entry point for a menu bar that's hidden behind the
-    /// notch or a menu-bar hider, so this is opt-in — see `AppDelegate.applyDockVisibility`.
+    ///
+    /// **On by default.** The Dock icon is a fallback entry point for a menu bar hidden
+    /// behind the notch or a menu-bar hider, but a `.regular` app cannot put a window over
+    /// another app's full-screen Space, so it cost the capture surfaces their reach (see
+    /// `DockPolicy`, which now lends `.accessory` for each capture when the icon is on). A
+    /// stored value — anyone who has ever toggled the box — still wins.
     var hideDockIcon: Bool {
-        get { d.bool(forKey: Key.hideDock) }
+        get { d.object(forKey: Key.hideDock) == nil ? true : d.bool(forKey: Key.hideDock) }
         set { d.set(newValue, forKey: Key.hideDock) }
     }
 

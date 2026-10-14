@@ -494,6 +494,7 @@ final class EditorWindowController: NSObject {
         canvas.style.lineWidth = 6
 
         EditorWindowController.open.append(self)
+        DockPolicy.holdForCapture()
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
         window.makeFirstResponder(canvas)
@@ -1727,6 +1728,7 @@ extension EditorWindowController: NSWindowDelegate {
     func windowWillClose(_ notification: Notification) {
         if let m = pasteMonitor { NSEvent.removeMonitor(m); pasteMonitor = nil }
         EditorWindowController.open.removeAll { $0 === self }
+        DockPolicy.captureMayHaveEnded()
     }
 }
 

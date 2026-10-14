@@ -12,8 +12,8 @@
 Press a hotkey and drag to select a region; an **in-place annotation editor** opens
 immediately, where you can highlight, blur, and add arrows or numbered steps before
 copying the result to the clipboard or saving it to disk. The app lives in the menu
-bar — the current version shows on a badge in its menu — with a Dock icon for quick
-access when the menu bar is hidden, which you can turn off in Settings → General.
+bar — the current version shows on a badge in its menu — and Settings → General can
+add a Dock icon for quick access when the menu bar is hidden.
 
 <p align="center">
   <img src="docs/assets/editor.png" alt="The in-place annotation editor — a captured image surrounded by grouped tool clusters" width="760">
