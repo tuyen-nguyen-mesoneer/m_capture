@@ -147,7 +147,10 @@ final class ScreenshotController {
             ?? NSScreen.main ?? NSScreen.screens[0]
 
         // Bring the app forward so the overlay gets keyboard focus (Esc to cancel,
-        // Space to toggle mode).
+        // Space to toggle mode) — as `.accessory`, or a display showing a full-screen app
+        // gets no overlay at all (see `DockPolicy`). Only now, after the freeze: the Dock
+        // icon leaving must not be in the stills.
+        DockPolicy.holdForCapture()
         NSApp.activate(ignoringOtherApps: true)
         let coordinator = OverlayCoordinator()
         let last = Settings.shared.lastRegion
@@ -216,6 +219,7 @@ final class ScreenshotController {
         overlays.removeAll()
         DispatchQueue.main.async { stale.forEach { $0.close() } }
         ScreenshotController.forcePointerReset()
+        DockPolicy.captureMayHaveEnded()
     }
 
     /// Put the pointer back to the plain arrow immediately: the overlay's capture cursor
@@ -600,7 +604,7 @@ final class ScreenshotController {
                 let result = await ScreenshotController.captureWindow(windowID: windowID, showsCursor: false,
                                                                       prefetched: prefetch)
                 await MainActor.run {
-                    defer { self.capturePending = false; ScreenshotController.warmUp() }
+                    defer { self.capturePending = false; ScreenshotController.warmUp(); DockPolicy.captureMayHaveEnded() }
                     guard let result else { ScreenshotController.handleEmptyCapture(); return }
                     ScreenshotController.deliver(ScreenshotController.image(from: result.cg),
                                                 selectionRect: result.globalRect, screen: result.screen,
@@ -649,7 +653,7 @@ final class ScreenshotController {
                     displayID: displayID, sourceRect: sourceRect, showsCursor: showsCursor,
                     excluding: overlayIDs, prefetched: prefetch)
                 await MainActor.run {
-                    defer { self.capturePending = false; ScreenshotController.warmUp() }
+                    defer { self.capturePending = false; ScreenshotController.warmUp(); DockPolicy.captureMayHaveEnded() }
                     guard let result else { ScreenshotController.handleEmptyCapture(); return }
                     ScreenshotController.deliver(ScreenshotController.image(from: result.cg),
                                                 selectionRect: global, screen: deliverScreen,

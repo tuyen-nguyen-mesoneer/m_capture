@@ -11,18 +11,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Drives the menu-bar "Updating…" state while a user-approved install runs.
     private var installingUpdate = false
 
-    /// Apply the Dock-icon preference. `.accessory` drops the Dock icon (and the app's
-    /// menu bar) leaving the status item as the only entry point; `.regular` restores it.
-    ///
-    /// Switching to `.accessory` at runtime also resigns the app active, so callers
-    /// toggling this from an open panel must re-raise it (see `dockToggled`). Called at
-    /// launch, before the app runs, and whenever the setting is toggled.
-    static func applyDockVisibility() {
-        let hide = Settings.shared.hideDockIcon
-        guard NSApp.activationPolicy() != (hide ? .accessory : .regular) else { return }
-        NSApp.setActivationPolicy(hide ? .accessory : .regular)
-        if NSApp.isRunning { NSApp.activate(ignoringOtherApps: true) }
-    }
+    /// Apply the Dock-icon preference. Called at launch, before the app runs, and whenever
+    /// the setting is toggled; see `DockPolicy.applyPreference`.
+    static func applyDockVisibility() { DockPolicy.applyPreference() }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Dev-only: measure the zoom frame transform and exit. Checked *before*

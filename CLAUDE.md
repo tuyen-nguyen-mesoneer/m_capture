@@ -18,9 +18,10 @@ MIT-licensed. Targets macOS 14+; bundle id `io.mesoneer.mcapture`.
 via `tools/makeicon.swift`), code-signs, and builds the DMG; the version is set
 here. It pins the deployment target with `-target …-macos14.0` to match
 `LSMinimumSystemVersion` (ScreenCaptureKit's capture API needs macOS 14). The app
-shows both a Dock icon and the menu-bar **m.** icon (activation policy `.regular`);
-the menu-bar item stays the primary entry point, the Dock icon is a fallback for
-when the menu bar is hidden — Settings → General can hide it (`.accessory`).
+is menu-bar only by default (activation policy `.accessory`, the **m.** icon);
+Settings → General can add a Dock icon (`.regular`) as a fallback for when the menu
+bar is hidden. Even then every capture surface runs as `.accessory` while it is up —
+see `DockPolicy.swift`.
 Automated checks cover only the pure code in `Sources/Core/` (`./tests/run.sh`), and every PR
 runs them plus `./build.sh --ci` in the *Checks* workflow; everything else is smoke-tested by hand.
 
@@ -73,7 +74,19 @@ Prerequisites, the faster dev loop, the testing checklist, and PR rules live in
 
 - `main.swift` — entry point; applies the activation policy via
   `AppDelegate.applyDockVisibility()` (`.regular` = Dock icon + menu-bar item,
-  `.accessory` = menu-bar only, per Settings → General → Hide the Dock icon).
+  `.accessory` = menu-bar only, per Settings → General → Hide the Dock icon, **on by
+  default**).
+- `DockPolicy.swift` — the activation policy, and its one override: **macOS will not put a
+  `.regular` app's window over another app's full-screen Space**, whatever its
+  `collectionBehavior` says. With the Dock icon on, a screenshot taken while a second display
+  held a full-screen app got no overlay on that display, so every capture came off the first
+  screen. Every capture surface (selection overlays, editor, recording) calls
+  `holdForCapture()` *before* `NSApp.activate`; teardowns call `captureMayHaveEnded()`, which
+  re-derives the policy from the controllers' own state rather than counting releases. The
+  Dock icon only comes back once the app is **inactive** — an active `.regular` app is what
+  pulls the user out of their full-screen Space. The screenshot hold is taken *after* the
+  freeze so the Dock icon leaving never lands in a still. A new capture surface must take the
+  hold, or it will vanish behind full-screen apps for anyone who turned the Dock icon on.
 - `AppDelegate.swift` — status item, menu, global hotkeys, capture actions. The menu is
   a short action list (Screenshot / Record Video / History / Library /
   Settings / Check for Updates / Quit); the meta items (Usage Guide, Report a Bug,
